@@ -67,7 +67,7 @@ python package.py pack maps/example.map-style.json --output /work/send/example-p
 | 面的 `fill` / `stroke` | `CIMPolygonSymbol`：`CIMSolidStroke` + `CIMSolidFill`。线帽 `butt`/`round`/`square` → `Butt`/`Round`/`Square`，拐角 `miter`/`round`/`bevel` → `Miter`/`Round`/`Bevel` |
 | `dash` | 描边上的 `CIMGeometricEffectDashes`，`dashTemplate` 为 pt；奇数个数值按 SVG 规则重复一遍。标记轮廓和标注底框的虚线也照写 |
 | 线的 `stroke` | `CIMLineSymbol` + `CIMSolidStroke` |
-| 点的 `marker` | `CIMPointSymbol` + `CIMVectorMarker`（-2～2 的画框，`size` 为直径）：`circle` 用曲线环（与 Pro 默认圆点相同），`square`、`triangle`、`diamond`、`arrow` 为多边形，`ring` 为只有描边的圆；`cross`、`x` 有 `fill` 时为实心十字（`x` 转 45°），只有 `stroke` 时为线；`chevron` 为折线。只用线画的形状没有 `stroke` 时取 `fill` 的颜色。`rotation`（顺时针）取负写入 CIM（逆时针）。点图层的符号没有 `marker` 时画 6 px 圆并列入 `unsupported` |
+| 点的 `marker` | `CIMPointSymbol` + `CIMVectorMarker`（-2～2 的画框，`size` 为直径）：`circle` 用曲线环（与 Pro 默认圆点相同），`square`、`triangle`、`diamond`、`arrow` 为多边形，`ring` 为只有描边的圆；`cross`、`x` 有 `fill` 时为实心十字（`x` 转 45°），只有 `stroke` 时为线；`chevron` 为折线。只用线画的形状没有 `stroke` 时取 `fill` 的颜色。标记里的线宽是绝对的 pt：不写 `scaleSymbolsProportionally`，否则 Pro 会把线宽再乘以“标记尺寸 / 画框高度”（实测十字粗了一倍）。`rotation`（顺时针）取负写入 CIM（逆时针）。点图层的符号没有 `marker` 时画 6 px 圆并列入 `unsupported` |
 | `size`（比例圆） | 渲染器上的 `CIMSizeVisualVariable`（`Graduated`）：Arcade 取值 `$feature["字段"]`（`sqrt` 时为 `Sqrt(...)`），最小、最大值为 `domain`（`sqrt` 时取平方根），最小、最大尺寸为 `range` 的直径（pt）。这与 map-style 的公式完全相同（`sqrt` 对 √v 线性），并且总是截断；`clamp: false` 列入 `unsupported` |
 | `sortBy` | 图层的 `featureSortInfos`，`asc` → `Ascending`（先画小值） |
 | `opacity` | 图层透明度（`transparency` = (1 − opacity) × 100） |
@@ -85,13 +85,22 @@ python package.py pack maps/example.map-style.json --output /work/send/example-p
 
 - **字体**：与 QGIS 输出相同，主题别名从 `fonts[].names` 取实际字体族（`fontFamilyName`）和样式（`fontStyleName`，如 `Bold`）；没有 `names` 的别名原样写入，列入 `unsupported`。同事电脑上缺字体时 Pro 会换成别的字体，`warnings` 里提示。
 - **文字样式**：字号、颜色、`opacity`，晕边（`haloSize`、`haloSymbol`，含晕边 `opacity`），底框 `box` 写成 `CIMBackgroundCallout`（`padding` 为四边边距，`fill`、`stroke` 为底框填色与边框，虚线照写）。`halo.blur` 没有对应（CIM 晕边是实边），`letterSpacing` 写成按字宽百分比的字距（em × 100，近似），两者都列入 `unsupported`。
-- **图层上的 `labels`** 写成一个 `CIMLabelClass`，表达式为 Arcade：`field` 取字段，`template` 的 `{字段}` 拼成 `DefaultValue($feature["字段"], "") + …`。Maplex 位置：点 `auto` 为环绕点、`point` 为点上居中；线 `auto` 为沿线居中（直），`line` 为沿线弯曲；面为水平放在面内，`polygon-center` 不许放到面外。同时写了标准标注引擎的对应设置。`enabled: false`（gis-composer 导出时都是这样）时标注类保留但不显示，在图层上打开标注即可。
+- **图层上的 `labels`** 写成一个 `CIMLabelClass`，表达式为 Arcade：`field` 取字段，`template` 的 `{字段}` 拼成 `DefaultValue($feature["字段"], "") + …`。Maplex 位置：点 `auto` 为环绕点、`point` 为点上居中；线 `auto` 为沿线居中（直），`line` 为沿线弯曲，但带底框 `box` 时仍沿线直排（Pro 不给弯曲的标注画底框）；面为水平放在面内，`polygon-center` 不许放到面外。同时写了标准标注引擎的对应设置。`enabled: false`（gis-composer 导出时都是这样）时标注类保留但不显示，在图层上打开标注即可。
 - **`labelPlacements`** 写成 `map_labels` 点图层（不画点、只出标注）和 `map_label_leaders` 引线图层，字段与 QGIS 输出相同，另有 `size_pt` 和 `angle`（逆时针度数，即 `rotation` 取负）。每种 (文字样式, 锚点, 是否旋转) 一个标注类，按 `style_id`、`anchor`、`angle` 的 where 子句选中；偏移 0、从不移除、允许压盖，与 PNG 一致：
   - **不旋转的标注**：Maplex 的固定位置，锚点是文字落在点上的那一边，例如 `left` → 点的东侧（`EastOfPoint`），`bottom-right` → 点的西北侧（`NorthWestOfPoint`）。9 个锚点都在 Pro 3.4.3 里出图核对过。
   - **旋转的标注**：按 `angle` 字段旋转（`Arithmetic`）。Maplex 一旦按字段旋转，就不再理会固定位置，标注一律从点出发、沿角度方向排开（相当于 `left` 锚点），`center` 仍以点为中心；文字符号自身的 `angle` 在标注里不起作用（都在 Pro 3.4.3 里实测）。所以旋转的标注只有 `left`、`center` 两种锚点与 PNG 一致，其余锚点近似，每种（文字样式, 锚点）列入一条 `unsupported`（`item: anchor`）。
   - 引线图层按 `stroke_id` 唯一值着色：每种 `leaderStroke` 一类，颜色、线宽、虚线、线帽、拐角照写；没有 `leaderStroke` 时用文字颜色、1 px。
   - 多面板图里两张表按 `panel` 拆成每个面板一个图层（定义查询 `panel = '…'`），放进各自面板组的 `labels` 组。
 - 只针对 Maplex（Pro 新建地图的默认标注引擎）验证过；地图改用标准标注引擎时这些固定位置不生效。
+
+## ArcMap
+
+ArcMap 读不了 ArcGIS Pro 的格式（ArcMap 10.8 实测）：
+
+- `.lyrx`：`arcpy.mapping.Layer` 报“CreateObject Layer 的数据源无效”；在 ArcMap 里添加也同样不认。
+- `.lpkx`：`ExtractPackage` 报 `ERROR 000814: 无效的文件类型`。ArcMap 只认 `.lpk`。
+
+给 ArcMap 的同事时，用 `--lyrx` 打包，把 `<名>.gdb` 和 `rasters/` 发过去：ArcMap 10.8 能直接读 gis-kit 写的文件地理数据库（几何类型、坐标系、要素数、中文字段名都正确，图层不断链）和 GeoTIFF，只是没有样式，要照 `package.json` 的 `layers` 手动配。gis-kit 不写 ArcMap 的 `.lyr`（二进制格式）。
 
 ## 清单
 
@@ -119,4 +128,5 @@ python package.py pack maps/example.map-style.json --output /work/send/example-p
   <pro python> tests/arcgis_open_check.py <包所在文件夹> <名> out.png <EPSG> 西,南,东,北 [经度,纬度 ...]
   ```
 
+- 与 gis-composer 的 PNG 对照：用 composer 测试里的虚构工程（分类填色加比例圆和外置标注、两面板的分级图、阴影线绿地加线上标签框）渲染、发布、`project export-style` 导出 map-style，再分别打 QGIS 包和 Pro 包出图。三者的类别颜色、分级颜色、比例圆、预置标注与引线、标签框一致；不同之处都在预期内：composer 用 Web 墨卡托出图，两个包保持数据原坐标系（这里是经纬度，所以形状偏宽）；标题、图例、比例尺不导出；矢量瓦片底图不打包；阴影线 composer 导出时就记为 `untranslated`；没装主题字体的机器上标注换成别的字体。
 - 本功能开发时在 ArcGIS Pro 3.4.3 上实测（虚构数据）：上面这条测试的断言全部成立（直接的 `.lyrx` 和解开的 `.lpkx` 各 16 个图层，0 个断链，取色与 QGIS 测试相同）；另一张专门的验证图逐项取色核对了分类（含 NULL 与未列出的值）、分级的分界值、带缺口与默认的分级、`!=` 筛选对 NULL、线性和离散伪彩色、调色板、RGB 拉伸，以及比例圆的直径；9 个锚点在旋转与不旋转时的位置也出图核对过。

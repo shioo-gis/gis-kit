@@ -233,7 +233,8 @@ def point_symbol(spec, where, notes):
         notes.append({**where, 'item': 'symbol', 'reason': 'the marker has neither fill nor stroke: nothing draws'})
     vector = {'type': 'CIMVectorMarker', 'enable': True, 'anchorPointUnits': 'Relative', 'dominantSizeAxis3D': 'Z',
               'size': pt(marker['size']), 'billboardMode3D': 'FaceNearPlane', 'frame': {'xmin': -2, 'ymin': -2, 'xmax': 2, 'ymax': 2},
-              'markerGraphics': [graphic], 'respectFrame': True, 'scaleSymbolsProportionally': True}
+              # stroke widths stay in points: with scaleSymbolsProportionally Pro multiplies them by size / frame height
+              'markerGraphics': [graphic], 'respectFrame': True}
     if marker.get('rotation'):
         vector['rotation'] = -float(marker['rotation'])  # map-style turns clockwise, CIM counter-clockwise
     return {'type': 'CIMPointSymbol', 'symbolLayers': [vector], 'haloSize': 1, 'scaleX': 1, 'angleAlignment': 'Display'}
@@ -501,9 +502,11 @@ def layer_labels(spec, geometry, names, fonts, where, notes):
         m = maplex(geometry, pointPlacementMethod='CenteredOnPoint' if placement == 'point' else 'AroundPoint')
         s = standard(geometry, pointPlacementMethod='OnTopPoint' if placement == 'point' else 'AroundPoint')
     elif geometry == 'line':
-        m = maplex(geometry, linePlacementMethod='CenteredCurvedOnLine' if placement == 'line' else 'CenteredStraightOnLine')
-        s = standard(geometry, lineLabelPosition={'type': 'CIMStandardLineLabelPosition', 'inLine': True, 'onTop': True, 'parallel': placement != 'line',
-                                                  'produceCurvedLabels': placement == 'line'})
+        # Pro draws no background box for curved labels, so labels with a box stay straight along the line
+        curved = placement == 'line' and not spec['text'].get('box')
+        m = maplex(geometry, linePlacementMethod='CenteredCurvedOnLine' if curved else 'CenteredStraightOnLine')
+        s = standard(geometry, lineLabelPosition={'type': 'CIMStandardLineLabelPosition', 'inLine': True, 'onTop': True, 'parallel': not curved,
+                                                  'produceCurvedLabels': curved})
     else:
         inside = placement == 'polygon-center'
         m = maplex(geometry, canPlaceLabelOutsidePolygon=not inside)

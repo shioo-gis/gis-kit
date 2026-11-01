@@ -208,6 +208,9 @@ def test_labels_and_placements(pro):
     roads = found['roads']
     assert roads['labelVisibility'] and roads['labelClasses'][0]['expression'] == 'DefaultValue($feature["name"], "") + "（" + DefaultValue($feature["等级"], "") + "）"'
     assert roads['labelClasses'][0]['maplexLabelPlacementProperties']['linePlacementMethod'] == 'CenteredCurvedOnLine'
+    boxed = cim.layer_labels({'field': 'ref', 'placement': 'line', 'text': {'size': 12, 'color': '#FFFFFF', 'box': {'fill': {'color': '#2C7FB8'}}}},
+                             'line', {}, {}, {}, [])
+    assert boxed['maplexLabelPlacementProperties']['linePlacementMethod'] == 'CenteredStraightOnLine'  # Pro boxes straight labels only
     names = found['names']
     assert not names['labelVisibility']  # enabled: false, kept but off
     text = names['labelClasses'][0]['textSymbol']['symbol']
@@ -277,6 +280,7 @@ def test_marker_shapes():
         return cim.point_symbol(spec, {'layer': 'm'}, notes)['symbolLayers'][0]
     arrow = marker({'marker': {'shape': 'arrow', 'size': 8, 'rotation': 90}, 'fill': {'color': '#FF0000'}})
     assert arrow['rotation'] == -90 and arrow['size'] == 6 and 'rings' in arrow['markerGraphics'][0]['geometry']
+    assert 'scaleSymbolsProportionally' not in arrow  # outline widths stay in points, not scaled with the marker
     chevron = marker({'marker': {'shape': 'chevron', 'size': 8}, 'fill': {'color': '#FF0000'}})
     graphic = chevron['markerGraphics'][0]
     assert 'paths' in graphic['geometry'] and graphic['symbol']['type'] == 'CIMLineSymbol'  # line-only shapes take the fill colour
