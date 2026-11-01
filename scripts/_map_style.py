@@ -336,6 +336,11 @@ def fonts_used(document):
     return rows
 
 
+def label_gap(text):
+    """How far (px) an `auto` label on a point stands off, as gis-composer's point labels do: 0.8 em. The contract has no field for it."""
+    return float(text['size']) * 0.8
+
+
 def padding_sides(value):
     """`box.padding` as (top, right, bottom, left): one number for all sides, [vertical, horizontal] or the four in CSS order."""
     if value is None:

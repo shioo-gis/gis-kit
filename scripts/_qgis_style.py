@@ -20,7 +20,7 @@ import uuid
 import xml.etree.ElementTree as ET
 import zipfile
 
-from _map_style import classes_as_rules, line_marker_outline, mm, number, padding_sides, resolve_font
+from _map_style import classes_as_rules, label_gap, line_marker_outline, mm, number, padding_sides, resolve_font
 
 QGIS_VERSION = '3.34.0-Prizren'  # the oldest QGIS whose QML/project format this writer follows (LTR)
 DOCTYPE = "<!DOCTYPE qgis PUBLIC 'http://mrcc.com/qgis.dtd' 'SYSTEM'>"
@@ -521,8 +521,10 @@ def label_settings(parent, spec, geometry, fonts, where, notes):
     mode = {'point': {'auto': 0, 'point': 1}, 'line': {'auto': 2, 'line': 3}, 'polygon': {'auto': 1, 'polygon-center': 1}}[geometry].get(placement)
     if mode is None:
         mode = {'point': 1, 'line': 2, 'polygon': 1}[geometry]
-    sub(settings, 'placement', {'placement': mode, 'placementFlags': 9 if geometry == 'line' else 10, 'quadOffset': 4, 'dist': 0,
-                                'distUnits': 'MM', 'offsetType': 0, 'centroidInside': int(placement == 'polygon-center'), 'centroidWhole': 0,
+    around = geometry == 'point' and mode == 0  # 0 would put the label's corner on the point, over its marker; QGIS measures from the point here
+    sub(settings, 'placement', {'placement': mode, 'placementFlags': 9 if geometry == 'line' else 10, 'quadOffset': 4,
+                                'dist': label_gap(spec['text']) if around else 0, 'distUnits': 'Pixel' if around else 'MM',
+                                'offsetType': 0, 'centroidInside': int(placement == 'polygon-center'), 'centroidWhole': 0,
                                 'fitInPolygonOnly': 0, 'overlapHandling': 'PreventOverlap', 'allowDegraded': 0, 'priority': 5,
                                 'rotationAngle': 0, 'rotationUnit': 'AngleDegrees', 'preserveRotation': 1, 'repeatDistance': 0,
                                 'xOffset': 0, 'yOffset': 0, 'offsetUnits': 'MM', 'maxCurvedCharAngleIn': 25, 'maxCurvedCharAngleOut': -25})

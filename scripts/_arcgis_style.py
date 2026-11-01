@@ -18,7 +18,7 @@ import math
 import re
 import uuid
 
-from _map_style import classes_as_rules, layer_symbols, line_marker_outline, number, padding_sides, resolve_font
+from _map_style import classes_as_rules, label_gap, layer_symbols, line_marker_outline, number, padding_sides, resolve_font
 
 CIM_VERSION, CIM_BUILD = '3.0.0', 36056  # the CIM that Pro 3.x writes into the p30 folder of a .lpkx
 PT_PER_PX = 0.75  # CSS pixel 1/96 inch, point 1/72 inch
@@ -582,7 +582,8 @@ def layer_labels(spec, geometry, names, fonts, where, notes):
     expression = template_arcade(spec['template'], names) if spec.get('template') else arcade_field(spec['field'], names)
     placement = spec.get('placement', 'auto')
     if geometry == 'point':
-        m = maplex(geometry, pointPlacementMethod='CenteredOnPoint' if placement == 'point' else 'AroundPoint')
+        m = maplex(geometry, pointPlacementMethod='CenteredOnPoint') if placement == 'point' else maplex(
+            geometry, pointPlacementMethod='AroundPoint', primaryOffset=label_gap(spec['text']) * PT_PER_PX)
         s = standard(geometry, pointPlacementMethod='OnTopPoint' if placement == 'point' else 'AroundPoint')
     elif geometry == 'line':
         # Pro draws no background box for curved labels, so labels with a box stay straight along the line

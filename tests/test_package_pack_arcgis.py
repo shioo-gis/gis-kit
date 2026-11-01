@@ -204,6 +204,16 @@ def test_rasters(pro):
         (['1'], [166, 206, 227]), (['2'], [178, 223, 138]), (['3'], [251, 154, 153])]
 
 
+def test_auto_labels_on_points_stand_off_the_point():
+    def maplex(**spec):
+        labels = {'field': 'name', 'text': {'size': 20, 'color': '#000000'}, **spec}
+        return cim.layer_labels(labels, 'point', {'name': 'name'}, {}, {}, [])['maplexLabelPlacementProperties']
+    around = maplex(placement='auto')
+    assert (around['pointPlacementMethod'], around['primaryOffset'], around['primaryOffsetUnit']) == ('AroundPoint', 12, 'Point')
+    assert maplex()['primaryOffset'] == 12
+    assert (maplex(placement='point')['pointPlacementMethod'], maplex(placement='point')['primaryOffset']) == ('CenteredOnPoint', 1)
+
+
 def test_labels_and_placements(pro):
     _, out, manifest, document = pro
     found = definitions(document)

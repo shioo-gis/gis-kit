@@ -350,6 +350,18 @@ def test_font_weights_and_substitutions_reach_the_manifest(round_two):
     assert len(notes) == 2 and all(n['kind'] == 'approximated' for n in notes) and any('no weight 900' in n['reason'] for n in notes)
 
 
+def test_auto_labels_on_points_stand_off_the_point():
+    def placement(geometry, **spec):
+        node = qgis.labeling({'field': 'name', 'text': {'size': 20, 'color': '#000000'}, **spec}, geometry, {}, [])
+        return node.find('settings/placement').attrib
+    around = placement('point', placement='auto')
+    assert (around['placement'], float(around['dist']), around['distUnits']) == ('0', 16, 'Pixel')
+    assert placement('point')['dist'] == around['dist']
+    on_point = placement('point', placement='point')
+    assert (on_point['placement'], float(on_point['dist'])) == ('1', 0)
+    assert float(placement('line', placement='auto')['dist']) == 0
+
+
 def test_box_padding_forms():
     assert _map_style.padding_sides(None) == (0, 0, 0, 0) and _map_style.padding_sides(3) == (3, 3, 3, 3)
     assert _map_style.padding_sides([2, 4]) == (2, 4, 2, 4) and _map_style.padding_sides([1, 2, 3, 4]) == (1, 2, 3, 4)
