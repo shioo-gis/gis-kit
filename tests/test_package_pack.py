@@ -1,6 +1,8 @@
 """package.py pack: a map-style map and its data into one GeoPackage styled for QGIS (made-up data only)."""
 from __future__ import annotations
 
+import base64
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -283,12 +285,272 @@ def test_marker_shapes():
         values = {o.get('name'): o.get('value') for o in found.find('Option')}
         return values['name'], values['angle'], values['color']
     notes = []
-    assert marker({'marker': {'shape': 'arrow', 'size': 8}, 'fill': {'color': '#FF0000'}}) == ('filled_arrowhead', '270', '255,0,0,255')
+    assert marker({'marker': {'shape': 'arrow', 'size': 8}, 'fill': {'color': '#FF0000'}}) == ('triangle', '0', '255,0,0,255')
     assert marker({'marker': {'shape': 'chevron', 'size': 8, 'rotation': 90}, 'fill': {'color': '#FF0000'}}) == ('arrowhead', '0', '0,0,0,0')
     assert marker({'marker': {'shape': 'cross', 'size': 8}, 'fill': {'color': '#FF0000'}}) == ('cross_fill', '0', '255,0,0,255')
     assert marker({'marker': {'shape': 'x', 'size': 8}, 'fill': {'color': '#FF0000'}}) == ('cross_fill', '45', '255,0,0,255')
     assert marker({'marker': {'shape': 'cross', 'size': 8}, 'stroke': {'color': '#000000', 'width': 1}}) == ('cross', '0', '0,0,0,0')
+    text, _ = qgis.qml({'id': 'c', 'geometry': 'point', 'renderer': {'type': 'single', 'symbol': {'marker': {'shape': 'chevron', 'size': 8}, 'fill': {'color': '#FF0000'}}}}, notes, {})
+    chevron = {o.get('name'): o.get('value') for o in ET.fromstring(text.split('\n', 1)[1]).find(".//layer[@class='SimpleMarker']").find('Option')}
+    assert float(chevron['outline_width']) == pytest.approx(_map_style.mm(8 * 0.34)) and (chevron['cap_style'], chevron['joinstyle']) == ('round', 'round')
+    assert chevron['outline_color'] == '255,0,0,255' and float(chevron['offset'].split(',')[0]) == pytest.approx(_map_style.mm(2))  # its tip is on the point: moved to centre it
     assert marker({'fill': {'color': '#FF0000'}})[0] == 'circle' and notes[-1]['item'] == 'symbol.marker'
+
+
+@pytest.fixture(scope='module')
+def round_two(tmp_path_factory):
+    root = tmp_path_factory.mktemp('round-two')
+    fixture = pack_fixture.build_round_two(root / 'data')
+    return fixture, root / 'out', run_plain(fixture, root / 'out')
+
+
+def run_plain(fixture, output, *extra, success=True):
+    command = [sys.executable, str(SCRIPTS / 'package.py'), 'pack', str(fixture['style']), '--output', str(output), *map(str, extra)]
+    result = subprocess.run(command, capture_output=True, text=True, env={**os.environ, 'PYTHONDONTWRITEBYTECODE': '1'})
+    assert (result.returncode == 0) == success, result.stdout + result.stderr
+    return json.loads((output / 'package.json').read_text()) if success else result.stderr
+
+
+def layer_options(node):
+    return {o.get('name'): o.get('value') for o in node.find('Option')}
+
+
+def rules_of(style):
+    return {r.get('label'): r.get('symbol') for r in style['qml'].iter('rule') if r.get('symbol') is not None}
+
+
+def symbol_named(style, name):
+    return style['qml'].find(f"renderer-v2/symbols/symbol[@name='{name}']")
+
+
+def test_font_matching_follows_css():
+    table = {'Sans': [{'family': 'Sans', 'weight': w, 'names': {'family': 'Real', 'subfamily': str(w)}} for w in (300, '400', 700)]}
+    def picked(weight):
+        return _map_style.resolve_font({'font': 'Sans', 'weight': weight}, table)[1]
+    assert picked(None) == '400' and picked('400') == '400' and picked(700) == '700'  # missing counts as 400; numeric strings are numbers
+    assert picked(500) == '400' and picked(450) == '400'  # 400 to 500: up to 500, then down
+    assert picked(600) == '700' and picked(900) == '700'  # above 500: up, then down
+    assert picked(200) == '300' and picked(350) == '300'  # below 400: down, then up
+    assert _map_style.closest_weight(400, [300, 500, 700]) == 500 and _map_style.closest_weight(500, [300, 700]) == 300
+    assert _map_style.closest_weight(100, [300, 700]) == 300 and _map_style.closest_weight(800, [300, 700]) == 700
+    # an entry that names no installed font is passed over; a font without any entry takes a style name from its weight
+    mixed = {'Sans': [{'family': 'Sans', 'weight': 700}, {'family': 'Sans', 'weight': 400, 'names': {'family': 'Real'}}]}
+    assert _map_style.resolve_font({'font': 'Sans', 'weight': 700}, mixed) == ('Real', '')
+    assert _map_style.resolve_font({'font': 'Other', 'weight': 700}, {}) == ('Other', 'Bold')
+
+
+def test_font_weights_and_substitutions_reach_the_manifest(round_two):
+    _, _, manifest = round_two
+    rows = {(row['name'], row.get('weight')): row for row in manifest['fonts']}
+    assert rows['Demo Text', None]['style'] == 'Regular' and rows['Demo Text', 700]['style'] == 'Bold'
+    assert rows['Demo Text', 500]['substituted_weight'] == 400 and rows['Demo Text', 900]['substituted_weight'] == 700
+    assert 'substituted_weight' not in rows['One Weight', None]  # a single entry and no weight asked: an alias unique on its own
+    assert rows['No Style', 700]['style'] == 'Bold'
+    notes = [n for n in manifest['unsupported'] if n['item'] == 'font.weight']
+    assert len(notes) == 2 and all(n['kind'] == 'approximated' for n in notes) and any('no weight 900' in n['reason'] for n in notes)
+
+
+def test_auto_labels_on_points_stand_off_the_point():
+    def placement(geometry, **spec):
+        node = qgis.labeling({'field': 'name', 'text': {'size': 20, 'color': '#000000'}, **spec}, geometry, {}, [])
+        return node.find('settings/placement').attrib
+    around = placement('point', placement='auto')
+    assert (around['placement'], around['distUnits']) == ('0', 'MM') and float(around['dist']) == pytest.approx(16 * 25.4 / 96)
+    assert placement('point')['dist'] == around['dist']
+    on_point = placement('point', placement='point')
+    assert (on_point['placement'], float(on_point['dist'])) == ('1', 0)
+    assert float(placement('line', placement='auto')['dist']) == 0
+
+
+def test_box_padding_forms():
+    assert _map_style.padding_sides(None) == (0, 0, 0, 0) and _map_style.padding_sides(3) == (3, 3, 3, 3)
+    assert _map_style.padding_sides([2, 4]) == (2, 4, 2, 4) and _map_style.padding_sides([1, 2, 3, 4]) == (1, 2, 3, 4)
+    with pytest.raises(ValueError):
+        _map_style.padding_sides([1, 2, 3])
+
+
+def test_round_two_box_padding_in_qml(round_two):
+    _, out, manifest = round_two
+    found = styles(out / 'round-two.gpkg')['map_labels']['qml']
+    sizes = [(b.get('shapeSizeX'), b.get('shapeSizeY')) for b in found.iter('background') if b.get('shapeDraw') == '1']
+    assert [(float(x) / _map_style.MM_PER_PX, float(y) / _map_style.MM_PER_PX) for x, y in sizes] == [
+        (pytest.approx(6), pytest.approx(6)), (pytest.approx(12), pytest.approx(2)), (pytest.approx(8), pytest.approx(5))]
+    notes = [n for n in manifest['unsupported'] if n['item'] == 'text.box.padding']
+    assert len(notes) == 1 and notes[0]['kind'] == 'approximated' and '[2, 12, 8, 4]' in notes[0]['reason']
+
+
+def test_round_two_markers_along_lines_in_qml(round_two):
+    _, out, _ = round_two
+    style = styles(out / 'round-two.gpkg')['routes']
+    rules = rules_of(style)
+    node = symbol_named(style, rules['with'])
+    line, along = node.findall('layer')
+    assert (line.get('class'), along.get('class')) == ('SimpleLine', 'MarkerLine')  # the marker on top
+    values = layer_options(along)
+    assert float(values['interval']) == pytest.approx(_map_style.mm(80)) and float(values['offset_along_line']) == pytest.approx(_map_style.mm(40))
+    assert values['interval_unit'] == values['offset_along_line_unit'] == 'MM' and values['rotate'] == '1' and values['placements'] == 'Interval'
+    inner = along.find('symbol')
+    assert inner.get('type') == 'marker'
+    marker = layer_options(inner.find('layer'))
+    assert marker['angle'] == '90' and marker['color'] == '192,0,0,255'  # map-style's 0 points along the line, QGIS's stands across it
+    assert layer_options(line)['use_custom_dash'] == '1' and marker['outline_style'] == 'solid'  # the dash stays on the line
+    free = symbol_named(style, rules['free']).findall('layer')[1]
+    assert layer_options(free)['rotate'] == '0' and layer_options(free.find('symbol/layer'))['angle'] == '180'
+    outline = symbol_named(styles(out / 'round-two.gpkg')['cells'], '3')
+    assert [n.get('class') for n in outline.findall('layer')] == ['SimpleFill', 'SimpleLine', 'MarkerLine']
+    assert outline.get('force_rhr') == '1' and symbol_named(styles(out / 'round-two.gpkg')['cells'], '0').get('force_rhr') == '0'
+
+
+def test_markers_that_do_not_apply_are_reported():
+    notes = []
+    line = {'id': 'l', 'geometry': 'line', 'renderer': {'type': 'single', 'symbol': {'stroke': {'color': '#000000', 'width': 1}, 'fill': {'color': '#FF0000'},
+                                                                                     'marker': {'shape': 'circle', 'size': 4}}}}
+    qgis.qml(line, notes, {})
+    assert {'symbol.fill', 'symbol.marker'} == {n['item'] for n in notes}
+    notes = []
+    point = {'id': 'p', 'geometry': 'point', 'renderer': {'type': 'single', 'symbol': {
+        'fill': {'color': '#FF0000', 'pattern': {'kind': 'hatch', 'spacing': 4, 'width': 1, 'color': '#000000'}},
+        'marker': {'shape': 'circle', 'size': 4, 'placement': 'line', 'spacing': 10}}}}
+    text, _ = qgis.qml(point, notes, {})
+    assert {'symbol.marker.placement', 'symbol.fill.pattern'} == {n['item'] for n in notes} and 'MarkerLine' not in text and 'LinePatternFill' not in text
+    notes = []
+    settings = ET.Element('s')
+    qgis.text_style(settings, {'size': 10, 'color': '#000000', 'box': {'fill': {'color': '#FFFFFF', 'pattern': {'kind': 'hatch', 'spacing': 4, 'width': 1, 'color': '#000000'}}}},
+                    'f', False, {}, {'layer': 'l'}, notes)
+    assert notes[0]['item'] == 'text.box.fill.pattern'
+
+
+def test_round_two_svg_markers_in_qml(round_two):
+    fixture, out, manifest = round_two
+    style = styles(out / 'round-two.gpkg')['marks']
+    rules = rules_of(style)
+    tall = layer_options(symbol_named(style, rules['tall']).find('layer'))
+    wide = layer_options(symbol_named(style, rules['wide']).find('layer'))
+    # QGIS's size is the width and map-style's the longer side
+    assert float(tall['size']) == pytest.approx(_map_style.mm(20)) and float(wide['size']) == pytest.approx(_map_style.mm(40))
+    assert base64.b64decode(tall['name'].removeprefix('base64:')).decode() == pack_fixture.TALL_SVG  # inside the style, so inside the GeoPackage
+    icons = {row['ref']: row for row in manifest['icons']}
+    assert icons['icons/tall.svg']['sha256'] == fixture['digest']['tall.svg'] and sorted(icons['icons/tall.svg']['layers']) == ['marks', 'routes', 'sized']
+    assert (icons['icons/wide.svg']['width'], icons['icons/wide.svg']['height']) == (40, 20)
+    sized = styles(out / 'round-two.gpkg')['sized']['qml'].find(".//layer[@class='SvgMarker']")
+    expression = sized.find("data_defined_properties/Option/Option[@name='properties']/Option[@name='size']/Option[@name='expression']").get('value')
+    assert expression.endswith(') * 0.5')  # the larger side, not the width, follows the field
+
+
+def test_round_two_rotation_field_in_qml(round_two):
+    _, out, _ = round_two
+    style = styles(out / 'round-two.gpkg')['marks']
+    rules = rules_of(style)
+
+    def angle(rule):
+        node = symbol_named(style, rules[rule]).find('layer/data_defined_properties/Option/Option[@name="properties"]/Option[@name="angle"]/Option[@name="expression"]')
+        return node.get('value')
+    assert angle('east') == 'coalesce(try(to_real("bearing")), 0) + 0'
+    assert angle('none') == 'coalesce(try(to_real("bearing")), 0) + 180'
+    routes = styles(out / 'round-two.gpkg')['routes']
+    inner = symbol_named(routes, rules_of(routes)['turned']).find('layer/symbol/layer/data_defined_properties/Option/Option[@name="properties"]/Option[@name="angle"]/Option[@name="expression"]')
+    assert inner.get('value') == 'coalesce(try(to_real("bearing")), 0) + 135'  # rotation 45, and 90 from along the line
+
+
+def test_round_two_patterns_in_qml(round_two):
+    _, out, _ = round_two
+    style = styles(out / 'round-two.gpkg')['cells']
+    hatch = symbol_named(style, '0').findall('layer')
+    assert [n.get('class') for n in hatch] == ['SimpleFill', 'LinePatternFill']  # the lines over the fill
+    values = layer_options(hatch[1])
+    assert values['angle'] == '45' and float(values['distance']) == pytest.approx(_map_style.mm(20)) and values['distance_unit'] == 'MM'
+    line = layer_options(hatch[1].find('symbol/layer'))
+    assert line['line_color'] == '0,170,0,255' and float(line['line_width']) == pytest.approx(_map_style.mm(4))
+    assert layer_options(symbol_named(style, '1').find('layer'))['color'].endswith(',0')  # fill opacity 0: lines only
+    cross = symbol_named(style, '2').findall('layer')
+    assert [n.get('class') for n in cross] == ['SimpleFill', 'LinePatternFill', 'LinePatternFill']
+    assert [layer_options(n)['angle'] for n in cross[1:]] == ['0', '90']
+    assert layer_options(cross[1].find('symbol/layer'))['line_color'] == '0,0,170,128'
+
+
+def test_round_two_panels(round_two):
+    _, out, manifest = round_two
+    labels = gpd.read_file(out / 'round-two.gpkg', layer='map_labels').set_index('text')
+    assert labels.loc['own panel', 'panel'] == 'inset'  # its own panel first, though its layer is in main
+    assert labels.loc['layer panel', 'panel'] == 'main' and labels.loc['whole map'].isna()['panel']
+    panels = {row['id']: row for row in manifest['panels']}
+    assert panels['inset']['frame'] == {'x': 7, 'y': 7, 'width': 3, 'height': 3} and not panels['inset']['shown']
+    assert any(n['item'] == 'extent.panels.frame' for n in manifest['unsupported'])
+    project = ET.fromstring(qgis.read_project(out / 'round-two.gpkg', 'round-two').split('\n', 1)[1])
+    assert {g.get('name') for g in project.find('layer-tree-group').findall('layer-tree-group')} >= {'main', 'inset'}
+
+
+def test_a_panel_only_labels_name_still_gets_its_layer(tmp_path):
+    fixture = pack_fixture.build_round_two(tmp_path / 'data')
+    document = fixture['document']
+    document['extent'].pop('panels')
+    for layer in document['layers']:
+        layer.pop('panel', None)
+    document['layers'] = document['layers'][:1]
+    document['labelPlacements'] = [{'panel': 'side', 'text': 'alone', 'position': [10.05, 0.45], 'style': {'size': 10, 'color': '#000000'}}]
+    fixture['style'].write_text(json.dumps(document))
+    manifest = run_plain(fixture, tmp_path / 'out')
+    assert [row['id'] for row in manifest['panels']] == ['side']
+    assert [row['features'] for row in manifest['layers'] if row['table'] == 'map_labels'] == [1]
+
+
+def test_round_two_errors(tmp_path):
+    fixture = pack_fixture.build_round_two(tmp_path / 'data')
+    good = fixture['style'].read_text()
+
+    def refused(change, name):
+        document = json.loads(good)
+        change(document)
+        fixture['style'].write_text(json.dumps(document))
+        return run_plain(fixture, tmp_path / name, success=False)
+
+    def tall(document):
+        return document['layers'][3]['renderer']['rules'][0]['symbol']['marker']
+    assert 'does not match marker.svg.sha256' in refused(lambda d: tall(d)['svg'].update(sha256='0' * 64), 'a')
+    assert 'not found' in refused(lambda d: tall(d)['svg'].update(path='icons/missing.svg'), 'b')
+    assert 'must be relative' in refused(lambda d: tall(d)['svg'].update(path='../outside.svg'), 'c')
+    assert 'needs svg.path and svg.sha256' in refused(lambda d: tall(d).pop('svg'), 'd')
+    assert 'needs a spacing above 0' in refused(lambda d: d['layers'][2]['renderer']['rules'][0]['symbol']['marker'].pop('spacing'), 'e')
+    assert 'is not one of extent.panels' in refused(lambda d: d['labelPlacements'][0].update(panel='nowhere'), 'f')
+    (fixture['project'] / 'icons' / 'broken.svg').write_text('<svg><rect></svg>', encoding='utf-8')
+    (fixture['project'] / 'icons' / 'empty.svg').write_text('<svg xmlns="http://www.w3.org/2000/svg"/>', encoding='utf-8')
+
+    def using(name):
+        digest = hashlib.sha256((fixture['project'] / 'icons' / name).read_bytes()).hexdigest()
+        return lambda d: tall(d)['svg'].update(path=f'icons/{name}', sha256=digest)
+    assert 'not a readable SVG' in refused(using('broken.svg'), 'g')
+    assert 'neither a viewBox nor a width and height' in refused(using('empty.svg'), 'h')
+    assert not any((tmp_path / name).exists() for name in 'abcdefgh')  # nothing published
+
+
+def check_python_env():
+    resources = Path(QGIS_PYTHON).parents[2] / 'Resources'
+    env = {**os.environ, 'QT_QPA_PLATFORM': 'offscreen', 'PYTHONDONTWRITEBYTECODE': '1'}
+    if (resources / 'proj').is_dir():  # the macOS bundle does not set its own PROJ and GDAL data paths
+        env.update(PROJ_DATA=str(resources / 'proj'), PROJ_LIB=str(resources / 'proj'), GDAL_DATA=str(resources / 'gdal'))
+    for key in ('PYTHONPATH', 'PYTHONHOME', 'VIRTUAL_ENV'):
+        env.pop(key, None)
+    return env
+
+
+@pytest.mark.skipif(QGIS_PYTHON is None, reason='QGIS not available')
+def test_qgis_draws_the_round_two_fields(round_two, tmp_path):
+    """QGIS reads the styles as written, and the render measures up: line spacing, marker positions, image sizes, directions, padding."""
+    _, out, _ = round_two
+    result = subprocess.run([QGIS_PYTHON, str(TESTS / 'qgis_open_check.py'), str(out / 'round-two.gpkg'), 'round-two', str(tmp_path / 'map.png')],
+                            capture_output=True, text=True, env=check_python_env(), timeout=300)
+    assert result.returncode == 0, result.stderr[-2000:]
+    report = json.loads(result.stdout)
+    assert report['read'] and all(row['valid'] for row in report['layers'].values())
+    layers = {row['name']: row for row in report['layers'].values()}
+    assert [c['symbol_layers'] for c in layers['cells']['classes']] == [
+        ['SimpleFill', 'LinePatternFill/SimpleLine'], ['SimpleFill', 'LinePatternFill/SimpleLine'],
+        ['SimpleFill', 'LinePatternFill/SimpleLine', 'LinePatternFill/SimpleLine'], ['SimpleFill', 'SimpleLine', 'MarkerLine/SvgMarker']]
+    routes = {r['label']: r['symbol_layers'] for r in layers['routes']['rules']}
+    assert routes['with'] == ['SimpleLine', 'MarkerLine/SimpleMarker'] and routes['turned'] == ['MarkerLine/SvgMarker']
+    placed = next(row for row in layers.values() if row.get('label_settings') and len(row['label_settings']) == 9)
+    assert [(row['family'], row['style']) for row in placed['label_settings']][3] == ('Arial', 'Bold')
+    pack_fixture.check_round_two_render(tmp_path / 'map.png', four_sides=False)
 
 
 def test_errors_are_clear(tmp_path):

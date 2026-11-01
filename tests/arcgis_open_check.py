@@ -5,8 +5,9 @@ the Python that ships with ArcGIS Pro, which has arcpy).
 
 FOLDER holds NAME.lpkx (and, packed with --lyrx, NAME.lyrx beside its geodatabase). Lists every layer of the
 direct .lyrx and of the layer file extracted from the .lpkx (ExtractPackage) with its broken state, data source,
-renderer, classes and colours, definition query, label classes and feature count; then adds the layer file to a
-new map in EPSG, exports the extent (lon/lat) to OUT.png and samples the colour at each LON,LAT.
+renderer, classes and colours, definition query, label classes and feature count; then adds the extracted layer
+file, which is what a colleague opens, to a new map in EPSG, exports the extent (lon/lat) to OUT.png and samples the
+colour at each LON,LAT.
 """
 import json
 import os
@@ -19,6 +20,12 @@ import arcpy
 
 def colour(value):
     return [round(v, 2) for v in value.values] if value is not None else None
+
+
+def symbol_layers(reference):
+    """The symbol layer classes as Pro reads them, and the properties connected to fields."""
+    rows = [type(item).__name__ for item in getattr(reference.symbol, 'symbolLayers', [])]
+    return rows + [f'{item.propertyName} by field' for item in reference.primitiveOverrides or []]
 
 
 def describe(layer):
@@ -36,7 +43,8 @@ def describe(layer):
             row['fields'] = list(renderer.fields or [])
             row['expression'] = bool(renderer.valueExpressionInfo)
             row['classes'] = [{'label': c.label, 'values': [v.fieldValues for v in c.values], 'visible': c.visible,
-                               'colours': [colour(l.color) for l in getattr(c.symbol.symbol, 'symbolLayers', []) if hasattr(l, 'color')]}
+                               'colours': [colour(l.color) for l in getattr(c.symbol.symbol, 'symbolLayers', []) if hasattr(l, 'color')],
+                               'symbol_layers': symbol_layers(c.symbol)}
                               for g in renderer.groups or [] for c in g.classes]
         elif row['renderer'] == 'CIMClassBreaksRenderer':
             row['breaks'] = [{'label': b.label, 'upper': b.upperBound,
@@ -91,7 +99,7 @@ def main():
     target = project.createMap('check')
     sr = arcpy.SpatialReference(epsg)
     target.spatialReference = sr
-    target.addLayer(arcpy.mp.LayerFile(direct if os.path.exists(direct) else os.path.join(extracted, inner[0])))
+    target.addLayer(arcpy.mp.LayerFile(os.path.join(extracted, inner[0])))
     layout = project.createLayout(20, 20, 'CENTIMETER')
     frame = layout.createMapFrame(arcpy.Extent(0, 0, 20, 20), target)
     corners = [arcpy.Point(bbox[0], bbox[1]), arcpy.Point(bbox[2], bbox[1]), arcpy.Point(bbox[2], bbox[3]), arcpy.Point(bbox[0], bbox[3])]

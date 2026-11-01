@@ -70,8 +70,12 @@ python package.py pack maps/example.map-style.json --output /work/send/example-c
 | `rule` | 规则（RuleRenderer）。map-style 取第一条命中的规则，QGIS 会画所有命中的规则，所以每条规则再排除前面的规则；`default` 写成“前面都不命中”的规则，`null` 不画 |
 | `renderer: null` | 不画要素（nullSymbol），只出标注 |
 | 面的 `fill` / `stroke` | 简单填充 + 一层简单线作轮廓（虚线、线帽、拐角都保留） |
+| `fill.pattern` | 简单填充之上的线图案填充（`LinePatternFill`）：`angle` 同样按逆时针，`spacing` 为线距，`width`、`color`、`opacity` 写在线符号上；`crossHatch` 是两层，角度差 90°。`fill.opacity: 0` 时只见线。点、线图层和标注底框不画图案，列入 `unsupported` |
 | 线的 `stroke` | 简单线；`dash` 写成自定义虚线，奇数个数值按 SVG 规则重复一遍 |
-| 点的 `marker` | 简单标记：circle、square、triangle、diamond；`ring` 写成空心圆（描边取 `stroke`，没有时取 `fill` 的颜色、1 px）；`arrow` 为实心箭头、`chevron` 为折线箭头（QGIS 的箭头朝右，转 −90° 使 0° 朝上）；`cross`、`x` 有 `fill` 时为实心十字（`x` 转 45°），只有 `stroke` 时为线画十字。`rotation` 按顺时针度数写入标记角度。只用线画的形状没有 `stroke` 时取 `fill` 的颜色。点图层的符号没有 `marker` 时画 6 px 圆并列入 `unsupported` |
+| 点的 `marker` | 简单标记：circle、square、triangle、diamond；`ring` 写成空心圆；`arrow` 为三角形，宽和长都等于 `size`，与 gis-composer 画的一致（QGIS 的实心箭头只有一半长，尖落在点上）；`chevron` 为折线箭头（QGIS 的箭头朝右，转 −90° 使 0° 朝上；尖落在点上，所以沿箭头方向前移 `size` 的四分之一，以点为中心）；`cross`、`x` 有 `fill` 时为实心十字（`x` 转 45°），只有 `stroke` 时为线画十字。`rotation` 按顺时针度数写入标记角度。只用线画的形状没有 `stroke` 时取 `fill` 的颜色，圆头圆角，线宽按 gis-composer 的画法：`chevron` 是 `size` 的 0.34，`ring` 是 0.15，`cross`、`x` 是 0.19。点图层的符号没有 `marker` 时画 6 px 圆并列入 `unsupported` |
+| `marker.rotationField` | 标记角度的数据定义表达式：`coalesce(try(to_real("字段")), 0) + rotation`，NULL 和非数值不加 |
+| `shape: "svg"` | SVG 标记。先核对 `marker.svg.sha256`，不符就拒绝打包。图片以 `base64:` 写进样式，所以就在 GeoPackage 里，工程和单独添加表都能显示，不需要旁边的文件；清单 `icons[]` 列出来源、哈希和尺寸。QGIS 的 `size` 是宽，map-style 的是较长边，竖长的图按比例写窄（比例圆同样乘这个比例）。按 SVG 自身颜色画 |
+| `marker.placement: "line"` | 线图层（和面的边线）上的标记线（`MarkerLine`）：`interval` 为 `spacing`，`offset_along_line` 为半个间距，第一个标记离起点半个间距；`alongLine` 对应 `rotate`。QGIS 按线的角度转标记，这时标记的 0° 横在线上，而 map-style 的 0 顺着线，所以角度多加 90°。标记的颜色取符号的 `fill`、`stroke`；`stroke` 的虚线只留在线上；符号没有 `stroke` 时不画线，只画标记。面的边线上打开“强制右手规则”（`force_rhr`），外环一律顺时针，与 MapLibre、文件地理数据库的方向相同，否则标记方向取决于数据里环的走向。线和面图层上没写 `placement: "line"` 的 `marker`、点图层上写了 `placement: "line"` 的都列入 `unsupported` |
 | `size`（比例圆） | 标记直径的数据定义表达式：`linear` 为线性，`sqrt` 为 `r0 + (r1 − r0)·(√v − √d0)/(√d1 − √d0)`；`clamp` 缺省按 `true`（与 gis-composer 用的 MapLibre 一致）；值为半径，乘 2 成直径 |
 | `sortBy` | 要素绘制顺序（order by），`asc` 先画小值 |
 | `opacity` | 图层不透明度 |
@@ -84,10 +88,10 @@ python package.py pack maps/example.map-style.json --output /work/send/example-c
 
 **标注**：
 
-- **字体**：`textStyle.font` 可能是主题别名（如 composer 的 `GC Sans`）。写 QML 时从顶层 `fonts[]` 里同名条目的 `names` 取实际字体：`names.family` 作字体族，`names.subfamily` 作字体样式（如 `Medium`、`Bold`）。用英文族名是因为 Qt 在任何语言的系统上都能按它找到字体，本地化名（如中文名）记在清单里备查。同一个别名有多个条目（不同字重）时取第一个；没有 `names` 的别名原样写入，列入 `unsupported`。
-- **文字样式**：字号、颜色、`opacity`、晕边（缓冲）的宽度、颜色与 `opacity` 照写；`halo.blur` 写成缓冲上的模糊效果（px 换成 mm，近似 MapLibre 的晕边渐隐）；`letterSpacing`（em）乘字号换成 mm 字距；`box` 写成标注背景框（矩形，`padding` 为外扩，`fill`、`stroke` 为填色与边框，边框虚线画成实线并报告）。
-- 图层上的 `labels` 写成 QGIS 原生标注：`field` 直接取字段，`template` 的 `{字段}` 转成 `concat(…)` 表达式。`placement`：点 `auto` 为环绕点、`point` 为点上；线 `auto` 为平行、`line` 为沿线弯曲；面为质心偏移，`polygon-center` 要求落在面内。`enabled: false`（gis-composer 导出时都是这样）时标注设置保留但关闭，在图层属性里打开即可用。
-- `labelPlacements` 写成 `map_labels` 点图层（EPSG:4326，就是给出的经纬度），每个标注一个点，字段有 `text`、`panel`、`layer`、`feature_id`、`style_id`、`font`（实际字体族）、`font_style`、`font_name`（map-style 里的写法）、`size_px`、`size_mm`、`color`、`halo_color`、`halo_px`、`anchor`、`quadrant`、`rotation`、`has_leader`。样式不画点、只出标注：每种不同的文字样式一条标注规则（按 `style_id`），字体、字号、颜色、透明度、晕边、模糊、字距、底框都是规则里的固定设置；锚点（象限）和旋转由字段数据定义；允许重叠、总是显示，与 PNG 一致，也能用标注工具逐个拖动。`rotation` 按顺时针度数（与 MapLibre `text-rotate` 相同，QGIS 的数据定义旋转也是顺时针，已实测）。
+- **字体**：`textStyle.font` 可能是主题别名（如 composer 的 `GC Sans`）。写 QML 时从顶层 `fonts[]` 里同名条目的 `names` 取实际字体：`names.family` 作字体族，`names.subfamily` 作字体样式（如 `Medium`、`Bold`）；没有 `subfamily` 时按字重取通用的样式名。用英文族名是因为 Qt 在任何语言的系统上都能按它找到字体，本地化名（如中文名）记在清单里备查。同一个别名有多个条目时按 `textStyle.weight` 选（没写的一方按 400 算）：取字重相等的，没有就按 CSS 字体匹配规则取最近的（400～500 先向上到 500，再向下，最后 500 以上；不到 400 先向下；500 以上先向上），在 `unsupported` 里记一条 `font.weight`（`kind: approximated`），清单 `fonts[]` 的这一行写 `substituted_weight`。只有一个条目的别名，文字样式没写字重时就用它，不算替换（`GC Sans Medium` 这样的别名本身就是唯一的）。没有 `names` 的条目不参与挑选；一个可用条目都没有的别名原样写入，列入 `unsupported`。
+- **文字样式**：字号、颜色、`opacity`、晕边（缓冲）的宽度、颜色与 `opacity` 照写；`halo.blur` 写成缓冲上的模糊效果（px 换成 mm，近似 MapLibre 的晕边渐隐）；`letterSpacing`（em）乘字号换成 mm 字距；`box` 写成标注背景框（矩形，`padding` 为外扩，`fill`、`stroke` 为填色与边框，边框虚线画成实线并报告）。`box.padding` 可以是一个数、`[纵, 横]` 或 `[上, 右, 下, 左]`；QGIS 的背景框只有横、纵两个值，四边不等时左右、上下各取平均，记 `text.box.padding`（`kind: approximated`）。
+- 图层上的 `labels` 写成 QGIS 原生标注：`field` 直接取字段，`template` 的 `{字段}` 转成 `concat(…)` 表达式。`placement`：点 `auto` 为环绕点（距点 0.8 倍字号，与 gis-composer 的点旁标注相同；QGIS 从点量，不看标记大小；约定里没有这个字段，放哪一侧由 QGIS 决定）、`point` 为点上；线 `auto` 为平行、`line` 为沿线弯曲；面为质心偏移，`polygon-center` 要求落在面内。`enabled: false`（gis-composer 导出时都是这样）时标注设置保留但关闭，在图层属性里打开即可用。
+- `labelPlacements` 写成 `map_labels` 点图层（EPSG:4326，就是给出的经纬度），面板优先取标注自己的 `panel`，其次是 `layer` 所在的面板，都没有就属于整张图；每个标注一个点，字段有 `text`、`panel`、`layer`、`feature_id`、`style_id`、`font`（实际字体族）、`font_style`、`font_name`（map-style 里的写法）、`size_px`、`size_mm`、`color`、`halo_color`、`halo_px`、`anchor`、`quadrant`、`rotation`、`has_leader`。样式不画点、只出标注：每种不同的文字样式一条标注规则（按 `style_id`），字体、字号、颜色、透明度、晕边、模糊、字距、底框都是规则里的固定设置；锚点（象限）和旋转由字段数据定义；允许重叠、总是显示，与 PNG 一致，也能用标注工具逐个拖动。`rotation` 按顺时针度数（与 MapLibre `text-rotate` 相同，QGIS 的数据定义旋转也是顺时针，已实测）。
 - 带 `leader` 的标注另写到 `map_label_leaders` 线图层（`label_id` 对应 `map_labels`），画在标注下面：每种不同的 `leaderStroke` 一条规则（按 `stroke_id`），颜色、线宽、虚线、线帽、拐角照写；没有 `leaderStroke` 时用文字颜色、1 px。
 - 多面板图里，`map_labels`、`map_label_leaders` 按 `panel` 字段各拆成每个面板一个 QGIS 图层（数据源加 `"panel" = '…'` 过滤），放进各自的面板组。
 
@@ -100,7 +104,8 @@ python package.py pack maps/example.map-style.json --output /work/send/example-c
 - `datasets[]`：`ref`（map-style 里的写法）、`root`（`project`、`file` 或 `@根名`）、`table`、类型、坐标系、档位、源要素数与打包要素数、`--clip` 时被切的要素数、源数据大小与 SHA-256、引用它的图层；栅格另有存储方式、尺寸、窗口。
 - `layers[]`：每个图层的表、map-style 渲染方式、写成的 QGIS 渲染器、是否默认样式、标注开关、筛选表达式。
 - `label_placements`：标注点和引线的数量。
-- `panels[]`：面板、是否默认显示、是否有书签；`background`：背景色。
+- `panels[]`：面板、是否默认显示、是否有书签，以及 `extent.panels[].frame`（只记录，留到导出版式时用，`unsupported` 里有一条说明）；`background`：背景色。
+- `icons[]`：`shape: "svg"` 用到的图片：`ref`、`root`、`sha256`、大小、宽高和引用它的图层。
 - `fonts[]`：标注用到的字体：map-style 里的写法 `name`、写给 QGIS 的 `family` 与 `style`、本地化族名、PostScript 名、用在哪里；没有 `names` 的别名标 `unresolved`。同事电脑上缺字体时 QGIS 会换成别的字体，`warnings` 里会提示。
 - `producer_notes[]`：map-style 顶层 `notes` 原样转来（生产方没能原样表达的地方），`warnings` 里提示条数。
 - `unsupported[]`：转不了或做了近似的地方（图层、项目、原因），例如不认识的筛选方言、线图层上的 `marker`、虚线的点标记轮廓、栅格的 `stretch`。
@@ -116,4 +121,8 @@ python package.py pack maps/example.map-style.json --output /work/send/example-c
 
 ## 验证
 
-`tests/test_package_pack.py` 用虚构数据覆盖三档范围、四种矢量渲染方式、比例圆、虚线、筛选、标注点层与引线、共享数据表、栅格两种存储、数据根与哈希报错、未打包数据和未支持项。装有 QGIS 时（macOS 默认路径，或设 `GIS_KIT_QGIS_PYTHON` 为 QGIS 自带的 Python），还会用 QGIS 打开包里的工程，核对图层有效、渲染器类型、类别颜色、绘制顺序、单独添加表时的默认样式，并在渲染图上取色（`tests/qgis_open_check.py`）。
+`tests/test_package_pack.py` 用虚构数据覆盖三档范围、四种矢量渲染方式、比例圆、虚线、筛选、标注点层与引线、共享数据表、栅格两种存储、数据根与哈希报错、未打包数据和未支持项，以及字重匹配、三种留白、沿线标记、SVG 标记（含哈希不符拒绝）、按字段旋转、晕线和标注的面板。装有 QGIS 时（macOS 默认路径，或设 `GIS_KIT_QGIS_PYTHON` 为 QGIS 自带的 Python），还会用 QGIS 打开包里的工程，核对图层有效、渲染器类型、类别颜色、绘制顺序、单独添加表时的默认样式，并在渲染图上取色（`tests/qgis_open_check.py`）。
+
+上面这些第二轮字段另有一张专门的虚构图（`tests/pack_fixture.py` 的 `build_round_two`），装有 QGIS 时渲染后量像素（`check_round_two_render`，1 px 对应一个像素）：线距和线宽、晕线倾斜方向、第一个标记离起点半个间距、相邻标记的间距、标记方向、SVG 的尺寸和方向、比例圆对 SVG 较长边的控制、字段旋转（含 NULL 和非数值）、留白。在 QGIS 3.42 上实测通过；工程格式按 3.34 写，但这些字段没有在 3.34 上跑过。
+
+与 gis-composer 的 PNG 对照的结论和预期内的差异见 [arcgis-pro-package.md](arcgis-pro-package.md) 的“验证”。QGIS 独有的一点：线图案填充按整数像素的贴图画，96 dpi 下线距小时有约 1 px 的偏差（7 px 的 45° 晕线量得约 6.4 px）。
