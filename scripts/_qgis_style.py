@@ -20,18 +20,20 @@ import uuid
 import xml.etree.ElementTree as ET
 import zipfile
 
-from _map_style import classes_as_rules, mm, number, padding_sides, resolve_font
+from _map_style import classes_as_rules, line_marker_outline, mm, number, padding_sides, resolve_font
 
 QGIS_VERSION = '3.34.0-Prizren'  # the oldest QGIS whose QML/project format this writer follows (LTR)
 DOCTYPE = "<!DOCTYPE qgis PUBLIC 'http://mrcc.com/qgis.dtd' 'SYSTEM'>"
 NAMESPACE = uuid.UUID('6f1b8d1c-4b0e-4a59-9a43-7d2b6c0e2f10')
 CAPS = {'butt': 'flat', 'round': 'round', 'square': 'square'}
 JOINS = {'miter': 'miter', 'round': 'round', 'bevel': 'bevel'}
-# map-style marker shape -> (QGIS SimpleMarker name, extra clockwise rotation, drawn with lines only). QGIS's
-# arrowheads point right, map-style's arrow and chevron point up; cross and x are filled shapes when the symbol
-# has a fill and lines (the stroke) when it has none.
+# map-style marker shape -> (QGIS SimpleMarker name, extra clockwise rotation, drawn with lines only). The arrow is a
+# triangle as wide and as long as its size, as gis-composer draws it (QGIS's filled_arrowhead is half as long, its tip
+# on the point). QGIS's arrowhead points right and map-style's chevron up; its tip is on the point, so the chevron is
+# moved a quarter of its size forward to centre it. cross and x are filled shapes when the symbol has a fill and
+# lines (the stroke) when it has none.
 MARKERS = {'circle': ('circle', 0, False), 'square': ('square', 0, False), 'triangle': ('triangle', 0, False),
-           'diamond': ('diamond', 0, False), 'ring': ('circle', 0, False), 'arrow': ('filled_arrowhead', -90, False),
+           'diamond': ('diamond', 0, False), 'ring': ('circle', 0, False), 'arrow': ('triangle', 0, False),
            'chevron': ('arrowhead', -90, True), 'cross': ('cross', 0, True), 'x': ('cross2', 0, True)}
 FILLED_CROSSES = {'cross': ('cross_fill', 0), 'x': ('cross_fill', 45)}
 SYMBOL_TYPES = {'polygon': 'fill', 'line': 'line', 'point': 'marker'}
@@ -233,8 +235,7 @@ def marker_layer(parent, spec, marker, name, where, notes, size=None, turn=0):
     ring = shape == 'ring'
     outline = stroke
     if outline is None and (ring or lines_only) and fill:  # a hollow or line-only shape takes the fill colour for its lines
-        width = 1 if ring else max(1.0, float(marker['size']) * (0.19 if shape == 'chevron' else 0.12))
-        outline = {'color': fill['color'], 'width': width, 'opacity': fill.get('opacity', 1)}
+        outline = line_marker_outline(shape, marker['size'], fill)
     turn += shape_turn
     values = {'name': qgis_name, 'size': number(mm(marker['size'])), 'size_unit': 'MM', 'scale_method': 'diameter',
               'color': '0,0,0,0' if ring or lines_only or not fill else color(fill['color'], fill.get('opacity', 1)),
@@ -242,7 +243,8 @@ def marker_layer(parent, spec, marker, name, where, notes, size=None, turn=0):
               'outline_color': color(outline['color'], outline.get('opacity', 1)) if outline else '0,0,0,0',
               'outline_width': number(mm(outline['width'])) if outline else '0', 'outline_width_unit': 'MM',
               'joinstyle': JOINS[(outline or {}).get('join', 'miter')], 'cap_style': CAPS[(outline or {}).get('cap', 'butt')],
-              'angle': number((float(marker.get('rotation', 0)) + turn) % 360), 'offset': '0,0', 'offset_unit': 'MM',
+              'angle': number((float(marker.get('rotation', 0)) + turn) % 360),
+              'offset': f'{number(mm(marker["size"]) / 4)},0' if shape == 'chevron' else '0,0', 'offset_unit': 'MM',
               'horizontal_anchor_point': '1', 'vertical_anchor_point': '1'}
     if outline and outline.get('dash'):
         notes.append({**where, 'item': 'symbol.stroke.dash', 'reason': 'dashed marker outlines are drawn solid'})
@@ -291,6 +293,8 @@ def symbol(parent, spec, geometry, name, where, notes, size=None):
     if geometry == 'polygon':
         if marker and not along:
             notes.append({**where, 'item': 'symbol.marker', 'reason': 'a marker on a polygon layer is not drawn unless it runs along the outline (placement: line)'})
+        if along:  # outlines run clockwise, whichever way the data's rings go, as in MapLibre and the file geodatabase
+            node.set('force_rhr', 1)
         if fill:
             symbol_layer(node, 'SimpleFill', {'color': color(fill['color'], fill.get('opacity', 1)), 'style': 'solid',
                                               'outline_style': 'no', 'outline_width': '0', 'outline_width_unit': 'MM',

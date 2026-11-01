@@ -72,10 +72,10 @@ python package.py pack maps/example.map-style.json --output /work/send/example-c
 | 面的 `fill` / `stroke` | 简单填充 + 一层简单线作轮廓（虚线、线帽、拐角都保留） |
 | `fill.pattern` | 简单填充之上的线图案填充（`LinePatternFill`）：`angle` 同样按逆时针，`spacing` 为线距，`width`、`color`、`opacity` 写在线符号上；`crossHatch` 是两层，角度差 90°。`fill.opacity: 0` 时只见线。点、线图层和标注底框不画图案，列入 `unsupported` |
 | 线的 `stroke` | 简单线；`dash` 写成自定义虚线，奇数个数值按 SVG 规则重复一遍 |
-| 点的 `marker` | 简单标记：circle、square、triangle、diamond；`ring` 写成空心圆（描边取 `stroke`，没有时取 `fill` 的颜色、1 px）；`arrow` 为实心箭头、`chevron` 为折线箭头（QGIS 的箭头朝右，转 −90° 使 0° 朝上）；`cross`、`x` 有 `fill` 时为实心十字（`x` 转 45°），只有 `stroke` 时为线画十字。`rotation` 按顺时针度数写入标记角度。只用线画的形状没有 `stroke` 时取 `fill` 的颜色。点图层的符号没有 `marker` 时画 6 px 圆并列入 `unsupported` |
+| 点的 `marker` | 简单标记：circle、square、triangle、diamond；`ring` 写成空心圆；`arrow` 为三角形，宽和长都等于 `size`，与 gis-composer 画的一致（QGIS 的实心箭头只有一半长，尖落在点上）；`chevron` 为折线箭头（QGIS 的箭头朝右，转 −90° 使 0° 朝上；尖落在点上，所以沿箭头方向前移 `size` 的四分之一，以点为中心）；`cross`、`x` 有 `fill` 时为实心十字（`x` 转 45°），只有 `stroke` 时为线画十字。`rotation` 按顺时针度数写入标记角度。只用线画的形状没有 `stroke` 时取 `fill` 的颜色，圆头圆角，线宽按 gis-composer 的画法：`chevron` 是 `size` 的 0.34，`ring` 是 0.15，`cross`、`x` 是 0.19。点图层的符号没有 `marker` 时画 6 px 圆并列入 `unsupported` |
 | `marker.rotationField` | 标记角度的数据定义表达式：`coalesce(try(to_real("字段")), 0) + rotation`，NULL 和非数值不加 |
 | `shape: "svg"` | SVG 标记。先核对 `marker.svg.sha256`，不符就拒绝打包。图片以 `base64:` 写进样式，所以就在 GeoPackage 里，工程和单独添加表都能显示，不需要旁边的文件；清单 `icons[]` 列出来源、哈希和尺寸。QGIS 的 `size` 是宽，map-style 的是较长边，竖长的图按比例写窄（比例圆同样乘这个比例）。按 SVG 自身颜色画 |
-| `marker.placement: "line"` | 线图层（和面的边线）上的标记线（`MarkerLine`）：`interval` 为 `spacing`，`offset_along_line` 为半个间距，第一个标记离起点半个间距；`alongLine` 对应 `rotate`。QGIS 按线的角度转标记，这时标记的 0° 横在线上，而 map-style 的 0 顺着线，所以角度多加 90°。标记的颜色取符号的 `fill`、`stroke`；`stroke` 的虚线只留在线上。线和面图层上没写 `placement: "line"` 的 `marker`、点图层上写了 `placement: "line"` 的都列入 `unsupported` |
+| `marker.placement: "line"` | 线图层（和面的边线）上的标记线（`MarkerLine`）：`interval` 为 `spacing`，`offset_along_line` 为半个间距，第一个标记离起点半个间距；`alongLine` 对应 `rotate`。QGIS 按线的角度转标记，这时标记的 0° 横在线上，而 map-style 的 0 顺着线，所以角度多加 90°。标记的颜色取符号的 `fill`、`stroke`；`stroke` 的虚线只留在线上；符号没有 `stroke` 时不画线，只画标记。面的边线上打开“强制右手规则”（`force_rhr`），外环一律顺时针，与 MapLibre、文件地理数据库的方向相同，否则标记方向取决于数据里环的走向。线和面图层上没写 `placement: "line"` 的 `marker`、点图层上写了 `placement: "line"` 的都列入 `unsupported` |
 | `size`（比例圆） | 标记直径的数据定义表达式：`linear` 为线性，`sqrt` 为 `r0 + (r1 − r0)·(√v − √d0)/(√d1 − √d0)`；`clamp` 缺省按 `true`（与 gis-composer 用的 MapLibre 一致）；值为半径，乘 2 成直径 |
 | `sortBy` | 要素绘制顺序（order by），`asc` 先画小值 |
 | `opacity` | 图层不透明度 |
@@ -124,3 +124,5 @@ python package.py pack maps/example.map-style.json --output /work/send/example-c
 `tests/test_package_pack.py` 用虚构数据覆盖三档范围、四种矢量渲染方式、比例圆、虚线、筛选、标注点层与引线、共享数据表、栅格两种存储、数据根与哈希报错、未打包数据和未支持项，以及字重匹配、三种留白、沿线标记、SVG 标记（含哈希不符拒绝）、按字段旋转、晕线和标注的面板。装有 QGIS 时（macOS 默认路径，或设 `GIS_KIT_QGIS_PYTHON` 为 QGIS 自带的 Python），还会用 QGIS 打开包里的工程，核对图层有效、渲染器类型、类别颜色、绘制顺序、单独添加表时的默认样式，并在渲染图上取色（`tests/qgis_open_check.py`）。
 
 上面这些第二轮字段另有一张专门的虚构图（`tests/pack_fixture.py` 的 `build_round_two`），装有 QGIS 时渲染后量像素（`check_round_two_render`，1 px 对应一个像素）：线距和线宽、晕线倾斜方向、第一个标记离起点半个间距、相邻标记的间距、标记方向、SVG 的尺寸和方向、比例圆对 SVG 较长边的控制、字段旋转（含 NULL 和非数值）、留白。在 QGIS 3.42 上实测通过；工程格式按 3.34 写，但这些字段没有在 3.34 上跑过。
+
+与 gis-composer 的 PNG 对照的结论和预期内的差异见 [arcgis-pro-package.md](arcgis-pro-package.md) 的“验证”。QGIS 独有的一点：线图案填充按整数像素的贴图画，96 dpi 下线距小时有约 1 px 的偏差（7 px 的 45° 晕线量得约 6.4 px）。

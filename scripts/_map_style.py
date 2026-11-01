@@ -349,6 +349,13 @@ def padding_sides(value):
     raise ValueError(f'box.padding {value!r} must be a number, [vertical, horizontal] or [top, right, bottom, left]')
 
 
+def line_marker_outline(shape, size, fill):
+    """The lines of a marker drawn with lines (chevron, cross, x, ring) when the symbol gives no stroke, as on a line
+    layer, where `stroke` is the line itself: the fill's colour, at the width gis-composer draws these shapes with."""
+    share = {'chevron': 0.34, 'ring': 0.15}.get(shape, 0.19)
+    return {'color': fill['color'], 'opacity': fill.get('opacity', 1), 'width': float(size) * share, 'cap': 'round', 'join': 'round'}
+
+
 def layer_symbols(layer):
     """Every symbol of a vector layer's renderer, default included."""
     spec = layer.get('renderer') or {}

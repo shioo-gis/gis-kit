@@ -150,7 +150,7 @@ WIDE_SVG = ('<svg xmlns="http://www.w3.org/2000/svg" width="40" height="20">'
             '<rect x="0" y="0" width="20" height="20" fill="#00CC00"/><rect x="20" y="0" width="20" height="20" fill="#FF00FF"/></svg>')
 FONT_NAMES = {400: 'Regular', 700: 'Bold'}
 MARKS = {'tall': (10.06, 0.48), 'wide': (10.08, 0.48), 'east': (10.06, 0.46), 'none': (10.08, 0.46), 'text-east': (10.06, 0.44), 'text-bad': (10.08, 0.44),
-         'tall-east': (10.06, 0.42), 'sized': (10.09, 0.47)}
+         'tall-east': (10.06, 0.42), 'sized': (10.09, 0.47), 'arrow': (10.08, 0.47), 'chevron': (10.07, 0.45)}
 LABELS = {'number': (10.07, 0.405), 'pair': (10.09, 0.405), 'four': (10.07, 0.415)}
 
 
@@ -175,8 +175,8 @@ def build_round_two(root: Path):
                      geometry=[LineString([(10.005, 0.425), (10.05, 0.425)]), LineString([(10.005, 0.415), (10.05, 0.415)]),
                                LineString([(10.05, 0.405), (10.005, 0.405)]), LineString([(10.045, 0.4 + 0.0005), (10.045, 0.43)])],
                      crs='EPSG:4326').to_file(project / 'data' / 'routes.geojson', driver='GeoJSON')
-    gpd.GeoDataFrame({'kind': list(MARKS), 'bearing': [0.0, 0.0, 90.0, None, 0.0, 0.0, 90.0, 0.0],
-                      'bearing_text': ['0', '0', '0', '0', '90', 'not a number', '0', '0'], 'scale': [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0]},
+    gpd.GeoDataFrame({'kind': list(MARKS), 'bearing': [0.0, 0.0, 90.0, None, 0.0, 0.0, 90.0, 0.0, 0.0, 0.0],
+                      'bearing_text': ['0', '0', '0', '0', '90', 'not a number', '0', '0', '0', '0'], 'scale': [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0]},
                      geometry=[Point(*position) for position in MARKS.values()],
                      crs='EPSG:4326').to_file(project / 'data' / 'marks.geojson', driver='GeoJSON')
     arrow = {'fill': {'color': '#C00000'}}
@@ -195,7 +195,8 @@ def build_round_two(root: Path):
              {'value': 'vertical', 'symbol': {'fill': {'color': '#FFFFFF', 'opacity': 0, 'pattern': {'kind': 'hatch', 'angle': 90, 'spacing': 40, 'width': 10, 'color': '#AA0000'}}}},
              {'value': 'cross', 'symbol': {'fill': {'color': '#FFEEBB', 'pattern': {'kind': 'crossHatch', 'angle': 0, 'spacing': 40, 'width': 10, 'color': '#0000AA', 'opacity': 0.5}}}},
              {'value': 'outlined', 'symbol': {'fill': {'color': '#EEEEEE'}, 'stroke': {'color': '#000000', 'width': 2},
-                                              'marker': {'shape': 'circle', 'size': 12, 'placement': 'line', 'spacing': 80}}}]}},
+                                              'marker': {'shape': 'svg', 'size': 24, 'rotation': 270, 'placement': 'line', 'spacing': 60,
+                                                         'svg': {'path': 'icons/wide.svg', 'sha256': digest['wide.svg']}}}}]}},
         {'id': 'routes', 'group': 'lines', 'geometry': 'line', 'data': {'path': 'data/routes.geojson'},
          'renderer': {'type': 'rule', 'rules': [
              marker_rule('with', {'stroke': {'color': '#808080', 'width': 2, 'dash': [6, 3]}, **arrow,
@@ -214,7 +215,9 @@ def build_round_two(root: Path):
              marker_rule('none', {**arrow, 'marker': {'shape': 'triangle', 'size': 30, 'rotationField': 'bearing', 'rotation': 180}}),
              marker_rule('text-east', {**arrow, 'marker': {'shape': 'triangle', 'size': 30, 'rotationField': 'bearing_text'}}),
              marker_rule('text-bad', {**arrow, 'marker': {'shape': 'triangle', 'size': 30, 'rotationField': 'bearing_text'}}),
-             marker_rule('tall-east', {'marker': {'shape': 'svg', 'size': 40, 'rotationField': 'bearing', 'svg': {'path': 'icons/tall.svg', 'sha256': digest['tall.svg']}}})]}},
+             marker_rule('tall-east', {'marker': {'shape': 'svg', 'size': 40, 'rotationField': 'bearing', 'svg': {'path': 'icons/tall.svg', 'sha256': digest['tall.svg']}}}),
+             marker_rule('arrow', {**arrow, 'marker': {'shape': 'arrow', 'size': 30}}),
+             marker_rule('chevron', {**arrow, 'marker': {'shape': 'chevron', 'size': 30}})]}},
         {'id': 'sized', 'group': 'points', 'geometry': 'point', 'data': {'path': 'data/marks.geojson'}, 'filter': {'field': 'kind', 'op': '==', 'value': 'sized'},
          'renderer': {'type': 'single', 'symbol': {'marker': {'shape': 'svg', 'size': 40, 'svg': {'path': 'icons/tall.svg', 'sha256': digest['tall.svg']}}}},
          'size': {'field': 'scale', 'scale': 'linear', 'domain': [0, 1], 'range': [5, 30]}},
@@ -351,6 +354,20 @@ def check_round_two_render(png, four_sides):
     assert pointing('#C00000', *MARKS['text-bad']) == 'north'
     east = box_of('#FF0000', *MARKS['tall-east']), box_of('#0000FF', *MARKS['tall-east'])
     assert east[1][2] <= east[0][0] + 1  # the image too: its top, red, now points east
+
+    # an arrow is as wide and as long as its size, centred on its point; a chevron as wide as its size, half as long
+    # and centred, in lines a third of its size across when the symbol gives only a fill (as gis-composer draws them)
+    for name, wanted in (('arrow', (30, 30)), ('chevron', (30 + 10, 15 + 10))):
+        left, top, right, bottom = box_of('#C00000', *MARKS[name])
+        assert (right - left, bottom - top) == (pytest_approx(wanted[0], 4), pytest_approx(wanted[1], 4))
+        assert (left + right) / 2 - x_of(MARKS[name][0]) == pytest_approx(0, 2) and (top + bottom) / 2 - y_of(MARKS[name][1]) == pytest_approx(0, 2)
+    assert pointing('#C00000', *MARKS['arrow']) == 'north'
+    # a polygon's outline runs clockwise whichever way its rings are stored: along the top edge the image's top, magenta, points east
+    edge = y_of(0.455)
+    green, magenta = (mask(colour)[edge - 4, x_of(10.03):x_of(10.05)] for colour in ('#00CC00', '#FF00FF'))
+    colours = [(int(c), 'm' if magenta[c] else 'g') for c in np.flatnonzero(green | magenta)]
+    steps = {(a[1], b[1]) for a, b in zip(colours, colours[1:]) if a[1] != b[1] and b[0] - a[0] <= 4}
+    assert steps == {('g', 'm')}, steps
 
     # box padding, against the label with 6 px on every side (the words differ, so a pixel or two of play)
     def gaps(lon, lat):

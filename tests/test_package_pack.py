@@ -285,11 +285,15 @@ def test_marker_shapes():
         values = {o.get('name'): o.get('value') for o in found.find('Option')}
         return values['name'], values['angle'], values['color']
     notes = []
-    assert marker({'marker': {'shape': 'arrow', 'size': 8}, 'fill': {'color': '#FF0000'}}) == ('filled_arrowhead', '270', '255,0,0,255')
+    assert marker({'marker': {'shape': 'arrow', 'size': 8}, 'fill': {'color': '#FF0000'}}) == ('triangle', '0', '255,0,0,255')
     assert marker({'marker': {'shape': 'chevron', 'size': 8, 'rotation': 90}, 'fill': {'color': '#FF0000'}}) == ('arrowhead', '0', '0,0,0,0')
     assert marker({'marker': {'shape': 'cross', 'size': 8}, 'fill': {'color': '#FF0000'}}) == ('cross_fill', '0', '255,0,0,255')
     assert marker({'marker': {'shape': 'x', 'size': 8}, 'fill': {'color': '#FF0000'}}) == ('cross_fill', '45', '255,0,0,255')
     assert marker({'marker': {'shape': 'cross', 'size': 8}, 'stroke': {'color': '#000000', 'width': 1}}) == ('cross', '0', '0,0,0,0')
+    text, _ = qgis.qml({'id': 'c', 'geometry': 'point', 'renderer': {'type': 'single', 'symbol': {'marker': {'shape': 'chevron', 'size': 8}, 'fill': {'color': '#FF0000'}}}}, notes, {})
+    chevron = {o.get('name'): o.get('value') for o in ET.fromstring(text.split('\n', 1)[1]).find(".//layer[@class='SimpleMarker']").find('Option')}
+    assert float(chevron['outline_width']) == pytest.approx(_map_style.mm(8 * 0.34)) and (chevron['cap_style'], chevron['joinstyle']) == ('round', 'round')
+    assert chevron['outline_color'] == '255,0,0,255' and float(chevron['offset'].split(',')[0]) == pytest.approx(_map_style.mm(2))  # its tip is on the point: moved to centre it
     assert marker({'fill': {'color': '#FF0000'}})[0] == 'circle' and notes[-1]['item'] == 'symbol.marker'
 
 
@@ -380,8 +384,9 @@ def test_round_two_markers_along_lines_in_qml(round_two):
     assert layer_options(line)['use_custom_dash'] == '1' and marker['outline_style'] == 'solid'  # the dash stays on the line
     free = symbol_named(style, rules['free']).findall('layer')[1]
     assert layer_options(free)['rotate'] == '0' and layer_options(free.find('symbol/layer'))['angle'] == '180'
-    outline = symbol_named(styles(out / 'round-two.gpkg')['cells'], '3').findall('layer')
-    assert [n.get('class') for n in outline] == ['SimpleFill', 'SimpleLine', 'MarkerLine']
+    outline = symbol_named(styles(out / 'round-two.gpkg')['cells'], '3')
+    assert [n.get('class') for n in outline.findall('layer')] == ['SimpleFill', 'SimpleLine', 'MarkerLine']
+    assert outline.get('force_rhr') == '1' and symbol_named(styles(out / 'round-two.gpkg')['cells'], '0').get('force_rhr') == '0'
 
 
 def test_markers_that_do_not_apply_are_reported():
@@ -528,7 +533,7 @@ def test_qgis_draws_the_round_two_fields(round_two, tmp_path):
     layers = {row['name']: row for row in report['layers'].values()}
     assert [c['symbol_layers'] for c in layers['cells']['classes']] == [
         ['SimpleFill', 'LinePatternFill/SimpleLine'], ['SimpleFill', 'LinePatternFill/SimpleLine'],
-        ['SimpleFill', 'LinePatternFill/SimpleLine', 'LinePatternFill/SimpleLine'], ['SimpleFill', 'SimpleLine', 'MarkerLine/SimpleMarker']]
+        ['SimpleFill', 'LinePatternFill/SimpleLine', 'LinePatternFill/SimpleLine'], ['SimpleFill', 'SimpleLine', 'MarkerLine/SvgMarker']]
     routes = {r['label']: r['symbol_layers'] for r in layers['routes']['rules']}
     assert routes['with'] == ['SimpleLine', 'MarkerLine/SimpleMarker'] and routes['turned'] == ['MarkerLine/SvgMarker']
     placed = next(row for row in layers.values() if row.get('label_settings') and len(row['label_settings']) == 9)

@@ -286,6 +286,9 @@ def test_marker_shapes():
     chevron = marker({'marker': {'shape': 'chevron', 'size': 8}, 'fill': {'color': '#FF0000'}})
     graphic = chevron['markerGraphics'][0]
     assert 'paths' in graphic['geometry'] and graphic['symbol']['type'] == 'CIMLineSymbol'  # line-only shapes take the fill colour
+    line = graphic['symbol']['symbolLayers'][0]
+    assert line['width'] == pytest.approx(8 * 0.34 * 0.75) and (line['capStyle'], line['joinStyle']) == ('Round', 'Round')
+    assert arrow['markerGraphics'][0]['geometry']['rings'][0] == cim.RINGS['triangle']  # as wide and as long as its size, as gis-composer draws it
     ring = marker({'marker': {'shape': 'ring', 'size': 8}, 'fill': {'color': '#00FF00'}})
     assert [l['type'] for l in ring['markerGraphics'][0]['symbol']['symbolLayers']] == ['CIMSolidStroke']
     cross = marker({'marker': {'shape': 'cross', 'size': 8}, 'fill': {'color': '#000000'}})
@@ -346,8 +349,8 @@ def test_round_two_markers_along_lines(round_two):
     free = routes['free']['symbol']['symbolLayers'][0]
     assert free['markerPlacement']['angleToLine'] is False and free['rotation'] == -180
     outlined = classes_of(named(found, 'cells'))['outlined']['symbol']['symbolLayers']
-    assert [l['type'] for l in outlined] == ['CIMVectorMarker', 'CIMSolidStroke', 'CIMSolidFill']
-    assert outlined[0]['markerPlacement']['placementTemplate'] == [60]
+    assert [l['type'] for l in outlined] == ['CIMPictureMarker', 'CIMSolidStroke', 'CIMSolidFill']
+    assert outlined[0]['markerPlacement']['placementTemplate'] == [45]
 
 
 def test_round_two_svg_markers(round_two):
@@ -485,7 +488,7 @@ def test_arcgis_pro_draws_the_round_two_fields(round_two, tmp_path):
         assert not any(row['broken'] for row in layers)
         rows = {row['name'].split('\\')[-1]: row for row in layers}
         cells = {c['label']: c['symbol_layers'] for c in rows['cells']['classes']}
-        assert cells['cross'] == ['CIMHatchFill', 'CIMHatchFill', 'CIMSolidFill'] and cells['outlined'][0] == 'CIMVectorMarker'
+        assert cells['cross'] == ['CIMHatchFill', 'CIMHatchFill', 'CIMSolidFill'] and cells['outlined'][0] == 'CIMPictureMarker'
         marks = {c['label']: c['symbol_layers'] for c in rows['marks']['classes']}
         assert marks['tall'] == ['CIMPictureMarker'] and marks['east'] == ['CIMVectorMarker', 'Rotation by field']
         routes = {c['label']: c['symbol_layers'] for c in rows['routes']['classes']}

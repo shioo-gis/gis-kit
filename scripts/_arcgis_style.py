@@ -18,7 +18,7 @@ import math
 import re
 import uuid
 
-from _map_style import classes_as_rules, layer_symbols, number, padding_sides, resolve_font
+from _map_style import classes_as_rules, layer_symbols, line_marker_outline, number, padding_sides, resolve_font
 
 CIM_VERSION, CIM_BUILD = '3.0.0', 36056  # the CIM that Pro 3.x writes into the p30 folder of a .lpkx
 PT_PER_PX = 0.75  # CSS pixel 1/96 inch, point 1/72 inch
@@ -212,7 +212,7 @@ def turned(points, degrees):
 CROSS = [[-0.4, 2], [0.4, 2], [0.4, 0.4], [2, 0.4], [2, -0.4], [0.4, -0.4], [0.4, -2], [-0.4, -2], [-0.4, -0.4], [-2, -0.4], [-2, 0.4], [-0.4, 0.4], [-0.4, 2]]
 # map-style marker shapes in a frame of -2..2 (the marker size is the frame's height), outer rings clockwise, 0 pointing up
 RINGS = {'square': [[-2, -2], [-2, 2], [2, 2], [2, -2], [-2, -2]], 'triangle': [[-2, -2], [0, 2], [2, -2], [-2, -2]],
-         'diamond': [[0, -2], [-2, 0], [0, 2], [2, 0], [0, -2]], 'arrow': [[-1.6, -2], [0, 2], [1.6, -2], [0, -1], [-1.6, -2]]}
+         'diamond': [[0, -2], [-2, 0], [0, 2], [2, 0], [0, -2]], 'arrow': [[-2, -2], [0, 2], [2, -2], [-2, -2]]}  # as gis-composer draws its arrow
 PATHS = {'cross': [[[0, -2], [0, 2]], [[-2, 0], [2, 0]]], 'x': [[[-2, -2], [2, 2]], [[-2, 2], [2, -2]]], 'chevron': [[[-2, -1], [0, 1], [2, -1]]]}
 
 
@@ -251,8 +251,7 @@ def marker_layer(spec, marker, where, notes, names, primitive, turn=0):
         lines_only = shape == 'chevron' or (shape in ('cross', 'x') and not fill)
         outline = stroke
         if outline is None and (shape == 'ring' or lines_only) and fill:  # a hollow or line-only shape takes the fill colour for its lines
-            width = 1 if shape == 'ring' else max(1.0, float(marker['size']) * (0.19 if shape == 'chevron' else 0.12))
-            outline = {'color': fill['color'], 'width': width, 'opacity': fill.get('opacity', 1)}
+            outline = line_marker_outline(shape, marker['size'], fill)
         plain = {'color': fill['color'], 'opacity': fill.get('opacity', 1)} if fill else None  # a marker cannot take a pattern
         if lines_only:
             graphic = {'type': 'CIMMarkerGraphic', 'geometry': {'paths': PATHS[shape]}, 'symbol': line_symbol(outline)}
