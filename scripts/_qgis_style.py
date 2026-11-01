@@ -20,7 +20,7 @@ import uuid
 import xml.etree.ElementTree as ET
 import zipfile
 
-from _map_style import mm
+from _map_style import classes_as_rules, mm, number
 
 QGIS_VERSION = '3.34.0-Prizren'  # the oldest QGIS whose QML/project format this writer follows (LTR)
 DOCTYPE = "<!DOCTYPE qgis PUBLIC 'http://mrcc.com/qgis.dtd' 'SYSTEM'>"
@@ -56,11 +56,6 @@ def color(value, opacity=1.0):
     value = value.lstrip('#')
     r, g, b = (int(value[i:i + 2], 16) for i in (0, 2, 4))
     return f'{r},{g},{b},{round(255 * (1.0 if opacity is None else opacity))}'
-
-
-def number(value):
-    value = float(value)
-    return str(int(value)) if value.is_integer() and abs(value) < 1e15 else repr(value)
 
 
 def sub(parent, tag, attrs=None, text=None):
@@ -374,29 +369,6 @@ def write_rules(parent, symbols, rules, layer, notes, size_expr, counter):
         sub(parent, 'rule', attrs)
         symbol(symbols, rule['symbol'], layer['geometry'], str(counter[0]), {**where, 'rule': attrs['label']}, notes, size_expr)
         counter[0] += 1
-
-
-def classes_as_rules(spec):
-    """Categorized, graduated and single renderers as first-match rules."""
-    if spec['type'] == 'single':
-        return [{'filter': None, 'default': True, 'label': 'all', 'symbol': spec['symbol']}]
-    rules = []
-    if spec['type'] == 'categorized':
-        for item in spec['classes']:
-            rules.append({'filter': {'field': spec['field'], 'op': '==', 'value': item['value']}, 'label': item.get('label', str(item['value'])),
-                          'symbol': item['symbol'], 'visible': item.get('visible', True)})
-    elif spec['type'] == 'graduated':
-        classes = spec['classes']
-        for index, item in enumerate(classes):
-            low, high = item['range']
-            upper = {'field': spec['field'], 'op': '<=' if index == len(classes) - 1 else '<', 'value': high}
-            rules.append({'filter': {'all': [{'field': spec['field'], 'op': '>=', 'value': low}, upper]},
-                          'label': item.get('label', f'{number(low)} - {number(high)}'), 'symbol': item['symbol'],
-                          'visible': item.get('visible', True)})
-    else:
-        rules = [dict(rule) for rule in spec['rules']]
-    rules.append({'filter': None, 'default': True, 'label': 'other', 'symbol': spec.get('default')})
-    return rules
 
 
 # --- labels --------------------------------------------------------------------------------------------------------

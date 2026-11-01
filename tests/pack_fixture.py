@@ -75,7 +75,7 @@ def build(root: Path, *, with_raster=True):
              {'filter': {'field': '等级', 'op': '==', 'value': '主干'}, 'label': '主干', 'symbol': {'stroke': {'color': '#C00000', 'width': 3, 'cap': 'round', 'join': 'round'}}},
              {'filter': {'field': '等级', 'op': 'in', 'value': ['主干', '次干']}, 'label': '次干', 'symbol': {'stroke': {'color': '#FF9900', 'width': 2}}},
              {'filter': {'expression': 'length($geometry) > 100', 'dialect': 'qgis'}, 'label': '长路', 'symbol': {'stroke': {'color': '#888888', 'width': 1}}},
-             {'filter': {'expression': "len(name) > 3", 'dialect': 'arcade'}, 'label': '其他方言', 'symbol': {'stroke': {'color': '#000000', 'width': 1}}}],
+             {'filter': {'expression': 'Count($feature["name"]) > 3', 'dialect': 'arcade'}, 'label': '其他方言', 'symbol': {'stroke': {'color': '#000000', 'width': 1}}}],
              'default': None},
          'labels': {'template': '{name}（{等级}）', 'text': {'size': 9, 'color': '#222222'}, 'placement': 'line'}},
         {'id': 'sites', 'group': 'points', 'geometry': 'point', 'data': {'path': 'inputs/analysis/sites.geojson'},
