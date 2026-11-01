@@ -7,7 +7,7 @@ python package.py pack maps/example.map-style.json --output /work/send/example
 python package.py pack maps/example.map-style.json --output /work/send/example-clip --clip --data-root basemap=/data/basemap
 ```
 
-`map-style` 由 gis-composer 从发布版导出（也可以来自 gis-view），gis-kit 只负责转成平台格式。转换按“map-style → 某个平台”的输出器组织：`_map_style.py` 读取、校验和解析数据路径，与平台无关；`_qgis_style.py` 只管 QGIS（QML、表达式、工程、`layer_styles`）。以后加 ArcGIS Pro（`.lyrx`、`.lpkx`）时另写一个输出器，取数部分照用。
+`map-style` 由 gis-composer 从发布版导出（也可以来自 gis-view），gis-kit 只负责转成平台格式。转换按“map-style → 某个平台”的输出器组织：`_map_style.py` 读取、校验和解析数据路径，与平台无关；`package.py` 按图幅取数；`_qgis_style.py` 只管 QGIS（QML、表达式、工程、`layer_styles`）。`--format` 选输出器，默认 `qgis`；`--format arcgis-pro` 写 ArcGIS Pro 图层包（`.lpkx`），取数部分相同，见 [arcgis-pro-package.md](arcgis-pro-package.md)。
 
 ## 数据范围
 

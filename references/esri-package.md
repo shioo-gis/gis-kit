@@ -1,6 +1,6 @@
 # ArcGIS 图层包与地图包
 
-`package.py unpack` 把 ArcGIS 的图层包（`.lpk`、`.lpkx`）或地图包（`.mpk`、`.mpkx`）安全地解开，清点里面有什么数据，并把每个图层文件和它引用的数据对上。解包结果发布到一个新目录，之后可以直接用 gis-kit 的其他工具读取。反方向（一张图的 `map-style` 打包成 QGIS 打开即带样式的 GeoPackage）见 [qgis-package.md](qgis-package.md)。
+`package.py unpack` 把 ArcGIS 的图层包（`.lpk`、`.lpkx`）或地图包（`.mpk`、`.mpkx`）安全地解开，清点里面有什么数据，并把每个图层文件和它引用的数据对上。解包结果发布到一个新目录，之后可以直接用 gis-kit 的其他工具读取。反方向（一张图的 `map-style` 打包成 QGIS 打开即带样式的 GeoPackage，或 ArcGIS Pro 的图层包）见 [qgis-package.md](qgis-package.md)、[arcgis-pro-package.md](arcgis-pro-package.md)；`unpack` 也能读回 gis-kit 自己打的 `.lpkx`。
 
 ```bash
 python package.py unpack 示例拆除类.lpk --output /work/pkg/chaichu

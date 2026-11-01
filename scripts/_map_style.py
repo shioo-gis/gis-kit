@@ -2,7 +2,7 @@
 
 What every platform writer shares: the checks a reader must make before trusting the document, resolving each
 `data.path` (dataRoot, `@root/...` external data roots), the structured filter, and the unit conversions. The
-platform writers (`_qgis_style.py`, later ArcGIS Pro) turn the layers into their own formats.
+platform writers (`_qgis_style.py`, `_arcgis_style.py`) turn the layers into their own formats.
 """
 from __future__ import annotations
 
@@ -26,6 +26,11 @@ FILTER_OPS = COMPARISONS | {'in', 'notIn', 'isNull', 'notNull'}
 
 def mm(px):
     return float(px) * MM_PER_PX
+
+
+def number(value):
+    value = float(value)
+    return str(int(value)) if value.is_integer() and abs(value) < 1e15 else repr(value)
 
 
 def load(path):
@@ -282,3 +287,26 @@ def fonts_used(document):
                 row[key] = entry[key]
         rows.append(row)
     return rows
+
+
+def classes_as_rules(spec):
+    """Categorized, graduated and single renderers as first-match rules."""
+    if spec['type'] == 'single':
+        return [{'filter': None, 'default': True, 'label': 'all', 'symbol': spec['symbol']}]
+    rules = []
+    if spec['type'] == 'categorized':
+        for item in spec['classes']:
+            rules.append({'filter': {'field': spec['field'], 'op': '==', 'value': item['value']}, 'label': item.get('label', str(item['value'])),
+                          'symbol': item['symbol'], 'visible': item.get('visible', True)})
+    elif spec['type'] == 'graduated':
+        classes = spec['classes']
+        for index, item in enumerate(classes):
+            low, high = item['range']
+            upper = {'field': spec['field'], 'op': '<=' if index == len(classes) - 1 else '<', 'value': high}
+            rules.append({'filter': {'all': [{'field': spec['field'], 'op': '>=', 'value': low}, upper]},
+                          'label': item.get('label', f'{number(low)} - {number(high)}'), 'symbol': item['symbol'],
+                          'visible': item.get('visible', True)})
+    else:
+        rules = [dict(rule) for rule in spec['rules']]
+    rules.append({'filter': None, 'default': True, 'label': 'other', 'symbol': spec.get('default')})
+    return rules
