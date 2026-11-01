@@ -29,9 +29,21 @@ def is_gdb(path: Path) -> bool:
     return path.suffix.lower() == ".gdb" or str(path).lower().endswith(".gdb")
 
 
-def guard_gdb_write(path: Path, operation: str = "write") -> None:
+def gdal_gdb_support() -> str:
+    """What the running GDAL can do with File GDB, for refusal messages."""
+    version = pyogrio.__gdal_version_string__
+    caps = pyogrio.list_drivers().get("OpenFileGDB")
+    if caps and "w" in caps:
+        return f"GDAL {version} here can write File GDB (OpenFileGDB driver), but gis-kit has no File GDB output accepted against a delivery template yet, so gpkg.py keeps File GDB read-only."
+    if caps:
+        return f"GDAL {version} here can only read File GDB (writing through OpenFileGDB needs GDAL >= 3.6)."
+    return f"GDAL {version} here has no OpenFileGDB driver."
+
+
+def guard_gdb_write(path: Path, operation: str, hint: str) -> None:
+    """Refuse a write to File GDB; ``operation`` reads as "<operation> File GDB"."""
     if is_gdb(path):
-        sys.exit(f"Error: {operation} to File GDB is not supported. GDB files are read-only via GDAL/OGR open-source drivers. Use GPKG instead.")
+        sys.exit(f"Error: {operation} File GDB is refused: gpkg.py does not write File GDB. {gdal_gdb_support()} {hint}")
 
 
 def copy_layer(source: Path, source_layer: str, target: Path, driver: str, *, layer: str | None = None, mode: str = "w") -> int:
@@ -88,7 +100,7 @@ def cmd_layers(args: argparse.Namespace) -> None:
 def cmd_import(args: argparse.Namespace) -> None:
     source = resolve_path(args.source)
     target = resolve_path(args.target, must_exist=False)
-    guard_gdb_write(target, "import")
+    guard_gdb_write(target, "import to", "Import into a .gpkg target instead, e.g. --target out.gpkg.")
 
     source_layer = args.source_layer
     if source_layer is None:
@@ -110,6 +122,7 @@ def cmd_import(args: argparse.Namespace) -> None:
 def cmd_export(args: argparse.Namespace) -> None:
     input_path = resolve_path(args.input)
     output_path = resolve_path(args.output, must_exist=False)
+    guard_gdb_write(output_path, "export to", "Export to .gpkg, .shp, .geojson, .fgb or .parquet instead.")
 
     layer = args.layer
     if layer is None:
@@ -153,7 +166,7 @@ def cmd_export(args: argparse.Namespace) -> None:
 
 def cmd_drop(args: argparse.Namespace) -> None:
     input_path = resolve_path(args.input)
-    guard_gdb_write(input_path, "layer deletion from")
+    guard_gdb_write(input_path, "layer deletion from", "Copy the layers you want to keep into a .gpkg (gpkg.py copy --source in.gdb --source-layer NAME --target out.gpkg), or delete the layer in ArcGIS.")
 
     layer = args.layer
     layers = pyogrio.list_layers(input_path)
@@ -361,7 +374,7 @@ def _rename_gpkg_layer(path: Path, old_name: str, new_name: str) -> None:
 
 def cmd_rename(args: argparse.Namespace) -> None:
     input_path = resolve_path(args.input)
-    guard_gdb_write(input_path, "layer rename in")
+    guard_gdb_write(input_path, "layer rename in", "Copy the layer into a .gpkg under the new name (gpkg.py copy --source in.gdb --source-layer OLD --target out.gpkg --target-layer NEW), or rename it in ArcGIS.")
 
     old_name = args.layer
     new_name = args.new_name
@@ -388,7 +401,7 @@ def cmd_rename(args: argparse.Namespace) -> None:
 def cmd_copy(args: argparse.Namespace) -> None:
     source = resolve_path(args.source)
     target = resolve_path(args.target, must_exist=False)
-    guard_gdb_write(target, "copy to")
+    guard_gdb_write(target, "copy to", "Copy into a .gpkg target instead, e.g. --target out.gpkg.")
 
     source_layer = args.source_layer
     if source_layer is None:
@@ -421,7 +434,7 @@ def cmd_sql(args: argparse.Namespace) -> None:
 
     if args.output:
         output_path = resolve_path(args.output, must_exist=False)
-        guard_gdb_write(output_path, "SQL output to")
+        guard_gdb_write(output_path, "SQL output to", "Save the result to a .gpkg instead, e.g. --output result.gpkg.")
         output_layer = args.output_layer or "sql_result"
         mode = "a" if output_path.exists() and output_path.suffix.lower() == ".gpkg" else "w"
         driver = "GPKG" if output_path.suffix.lower() == ".gpkg" else None
