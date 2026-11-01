@@ -22,7 +22,9 @@ dataset's source, scope and feature count, what could not be expressed in QGIS, 
 instead: a 7z .lpkx with the vector data in a file geodatabase (rasters as GeoTIFFs) under commondata/, one CIM
 layer file in p30/ with a group layer for the map (panels and groups as group layers, renderers, definition
 queries, Maplex label classes, the label placements as a labelled point layer), and esriinfo/. --lyrx also keeps
-the layer file beside the unpacked data. Only the style and container writer differs between the formats.
+the layer file beside the unpacked data. `package.py pack --format arcmap` writes an ArcMap layer package (.lpk) the same way,
+with binary layer files (.lyr, _arcmap_style.py) in place of the CIM one; --lyr keeps one beside the data. Only the style and
+container writer differs between the formats.
 """
 from __future__ import annotations
 
@@ -805,7 +807,7 @@ def project_crs(layers, datasets):
     return None
 
 
-PLATFORMS = {'qgis': 'QGIS', 'arcgis-pro': 'ArcGIS Pro'}
+PLATFORMS = {'qgis': 'QGIS', 'arcgis-pro': 'ArcGIS Pro', 'arcmap': 'ArcMap'}
 
 
 def prepare(args, platform):
@@ -965,9 +967,11 @@ def pack(args):
     """map-style -> one platform's package: the data selection is shared, the style and container writer is not."""
     if args.lyrx and args.format != 'arcgis-pro':
         raise ValueError('--lyrx belongs to --format arcgis-pro')
+    if args.lyr and args.format != 'arcmap':
+        raise ValueError('--lyr belongs to --format arcmap')
     ctx = prepare(args, PLATFORMS[args.format])
     with bundle(args.output) as stage:
-        return {'qgis': pack_qgis, 'arcgis-pro': pack_arcgis_pro}[args.format](ctx, stage, args)
+        return {'qgis': pack_qgis, 'arcgis-pro': pack_arcgis_pro, 'arcmap': pack_arcmap}[args.format](ctx, stage, args)
 
 
 def pack_qgis(ctx, stage, args):
@@ -1086,7 +1090,7 @@ def pack_qgis(ctx, stage, args):
 
 
 def seven_zip(folder, target, members):
-    """Archive members of folder as a 7z file (a .lpkx is a 7z archive): bsdtar (libarchive) or 7-Zip."""
+    """Archive members of folder as a 7z file (a .lpk or .lpkx is a 7z archive): bsdtar (libarchive) or 7-Zip."""
     tool = shutil.which('bsdtar')
     if tool:
         run = subprocess.run([tool, '--format', '7zip', '-cf', str(target), '-C', str(folder), *members], capture_output=True)
@@ -1095,7 +1099,7 @@ def seven_zip(folder, target, members):
         target.unlink(missing_ok=True)  # a libarchive built without the 7z writer: try 7-Zip
     tool = shutil.which('7z') or shutil.which('7za') or shutil.which('7zz')
     if tool is None:
-        raise ValueError('Writing a .lpkx (a 7z archive) needs bsdtar (libarchive) or 7-Zip; neither could write 7z here')
+        raise ValueError('Writing a layer package (a 7z archive) needs bsdtar (libarchive) or 7-Zip; neither could write 7z here')
     run = subprocess.run([tool, 'a', '-t7z', str(target), *members], cwd=folder, capture_output=True)
     if run.returncode:
         raise ValueError(f'{Path(tool).name} could not write {target.name}: {run.stderr.decode(errors="replace").strip()[-300:]}')
@@ -1309,6 +1313,13 @@ def pack_arcgis_pro(ctx, stage, args):
     return manifest
 
 
+def pack_arcmap(ctx, stage, args):
+    """A layer package (.lpk) for ArcMap, written by _arcmap_style with the helpers here."""
+    import sys
+    import _arcmap_style
+    return _arcmap_style.write_package(ctx, stage, args, sys.modules[__name__])
+
+
 def crs_label(crs):
     if crs is None:
         return None
@@ -1366,7 +1377,7 @@ def main():
     sub.add_argument('source', help='ArcGIS package file')
     sub.add_argument('--output', required=True, help='New directory for package/, package.json and record.json')
     sub.add_argument('--max-bytes', type=int, default=DEFAULT_MAX_BYTES, help='Refuse packages that expand beyond this (default 20 GiB)')
-    sub = commands.add_parser('pack', help='Pack a map-style map and its data for QGIS (styled GeoPackage) or ArcGIS Pro (.lpkx)')
+    sub = commands.add_parser('pack', help='Pack a map-style map and its data for QGIS (styled GeoPackage), ArcGIS Pro (.lpkx) or ArcMap (.lpk)')
     sub.add_argument('map_style', help='map-style v1 JSON file')
     sub.add_argument('--output', required=True, help='New directory for the package, package.json and record.json')
     scope = sub.add_mutually_exclusive_group()
@@ -1375,10 +1386,11 @@ def main():
     sub.add_argument('--margin', help='Widen the map extent by this share of its width and height before selecting, e.g. 10%% or 0.1')
     sub.add_argument('--project', help='Project root for dataRoot "project" (default: the folder with gis-project.json above the map-style)')
     sub.add_argument('--data-root', action='append', metavar='NAME=PATH', help='Path of an external data root @NAME on this device (repeatable)')
-    sub.add_argument('--name', help='Package name: the GeoPackage and project, or the .lpkx, .lyrx and geodatabase (default: the map-style id)')
+    sub.add_argument('--name', help='Package name: the GeoPackage and project, or the layer package, layer file and geodatabase (default: the map-style id)')
     sub.add_argument('--format', choices=sorted(PLATFORMS), default='qgis',
-                     help='qgis: a GeoPackage with styles and a project (default); arcgis-pro: a layer package (.lpkx)')
+                     help='qgis: a GeoPackage with styles and a project (default); arcgis-pro: a layer package (.lpkx); arcmap: a layer package (.lpk)')
     sub.add_argument('--lyrx', action='store_true', help='arcgis-pro: also write the .lyrx beside an unpacked file geodatabase')
+    sub.add_argument('--lyr', action='store_true', help='arcmap: also write the .lyr beside an unpacked file geodatabase')
     args = parser.parse_args()
     try:
         if args.command == 'pack':
