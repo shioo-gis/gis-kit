@@ -4,6 +4,7 @@
 
 - `gpkg.py sql --query` 接收完整 SQL，例如 `SELECT * FROM parcels WHERE area > 1000`；GDB 优先 OGR SQL，不将 query 当作 where 条件。
 - File GDB 使用 GDAL OpenFileGDB 驱动；写入需 GDAL ≥ 3.6，受限功能先输出 GPKG，不冒充写入成功。
+- `gpkg.py` 只读 File GDB：`import`、`copy`、`export`、`sql --output` 写到 `.gdb` 以及对 `.gdb` 的 `drop`、`rename` 都会拒绝，报错写明运行时 GDAL 的 File GDB 能力和改用 `.gpkg` 的做法。gis-kit 写出的 GDB 经 ArcGIS 验收之前不放开。
 - `batch.py --script` 用于简单单输入、`--output` 形式的脚本；带子命令或多参数布局使用 `--command` 及 `{input}` / `{output}`。必要时用 `--runner` 选择已有解释器，不假设所有脚本兼容简单模式。
 - 大文件优先选脚本已提供的数据裁剪或分块能力：`clip.py` 的普通 bbox 裁剪可下推；`merge.py --chunk-size` 顺序读写。分块本身不保证全局运算等价。
 
