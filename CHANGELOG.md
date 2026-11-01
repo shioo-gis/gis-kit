@@ -2,6 +2,7 @@
 
 ## 未发布
 
+- 新子命令 `package.py read`（#49）：读 QGIS `.qml`、ArcGIS Pro `.lyrx` 和 `.stylx`，转成 `map-style` v1，是 `pack` 的反方向。`.stylx` 按符号库的用途读成每种几何一个 `categorized` 图层（值是符号名称或 `KEY`），可直接当配色表用。多层点符号合成一张 SVG，标记里的文字有字体时转轮廓，没有时保留 `<text>` 并记入 `notes`；放不进一个符号的多层线和面拆成多个图层；转不了的全部写进 `notes`，`style-read.json`（`manifest: style-read` v1）统计每个符号的损失。读取代码在 `_style_read.py` 和各平台模块，结构见 `references/style-read.md`。
 - `package.py pack` 的 QGIS 和 ArcGIS Pro 输出读取 map-style 第二轮字段（#48，gis-plugin#23，仍是 v1）。字体按 `textStyle.weight` 在同一别名的条目里选，没有相等的按 CSS 规则取最近的并记入 `unsupported`（`font.weight`），清单 `fonts[]` 改为按字体和字重各一行。`box.padding` 支持一个数、`[纵, 横]`、`[上, 右, 下, 左]`：Pro 四边照写，QGIS 只有横、纵两个值，四边不等时取平均并记 `approximated`。`marker.placement: "line"` 写成 QGIS 标记线、CIM 沿线放置，第一个标记离起点半个间距，`alongLine` 控制是否随线转，面的边线同样支持。`shape: "svg"` 核对 `marker.svg.sha256`，不符就拒绝；图片写进样式（QGIS `base64:`、CIM `data:` URL），随包走，清单新增 `icons[]`；尺寸按较长边换算（QGIS 的 size 是宽，CIM 的是高）。`marker.rotationField` 写成 QGIS 数据定义角度、CIM 符号属性连接，NULL 和非数值不加。`fill.pattern` 写成 QGIS 线图案填充、CIM `CIMHatchFill`，`crossHatch` 两层。`labelPlacements[].panel` 优先于按 `layer` 反查；`extent.panels[].frame` 记入清单 `panels[]`，等导出版式时再用。两个输出都在真实软件（QGIS 3.42、ArcGIS Pro 3.4.3）里出图量过像素。
 - `package.py pack` 按 gis-composer 的 PNG 校正标记（#48）：`arrow` 改为宽和长都等于 `size` 的三角形（QGIS 原来只有一半长且尖落在点上，Pro 原来带缺口）；QGIS 的 `chevron` 以点为中心；只给 `fill` 的线型标记线宽按 composer 的画法（`chevron` 0.34、`ring` 0.15、`cross`、`x` 0.19 倍 `size`），圆头圆角；QGIS 面边线上的沿线标记统一按顺时针走，与 MapLibre、文件地理数据库相同。
 - `package.py pack` 的点图层 `auto` 标注离开 0.8 倍字号（#48）：原来距离几乎为 0，QGIS 和 Pro 都把标注贴在点上，盖住标记。这个距离与 gis-composer 的点旁标注相同；约定里没有距离和方位字段，放哪一侧由平台决定。

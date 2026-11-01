@@ -23,6 +23,9 @@ instead: a 7z .lpkx with the vector data in a file geodatabase (rasters as GeoTI
 layer file in p30/ with a group layer for the map (panels and groups as group layers, renderers, definition
 queries, Maplex label classes, the label placements as a labelled point layer), and esriinfo/. --lyrx also keeps
 the layer file beside the unpacked data. Only the style and container writer differs between the formats.
+
+`package.py read` goes the other way: a platform style (QGIS .qml, ArcGIS Pro .lyrx, .stylx) into a map-style
+document, reporting what could not be carried; the readers live in _style_read.py and its platform modules.
 """
 from __future__ import annotations
 
@@ -40,6 +43,7 @@ import zipfile
 
 from _delivery import bundle, digest, write_json
 import _map_style
+import _style_read
 
 VERSION = '0.1.0'
 SUFFIXES = {'.lpk', '.lpkx', '.mpk', '.mpkx'}
@@ -1379,8 +1383,12 @@ def main():
     sub.add_argument('--format', choices=sorted(PLATFORMS), default='qgis',
                      help='qgis: a GeoPackage with styles and a project (default); arcgis-pro: a layer package (.lpkx)')
     sub.add_argument('--lyrx', action='store_true', help='arcgis-pro: also write the .lyrx beside an unpacked file geodatabase')
+    _style_read.add_command(commands)
     args = parser.parse_args()
     try:
+        if args.command == 'read':
+            print(json.dumps(_style_read.run(args), ensure_ascii=False))
+            return
         if args.command == 'pack':
             manifest = pack(args)
             package = {'geopackage': manifest['geopackage']['file'], 'project': manifest['project']['name']} if args.format == 'qgis' else \
