@@ -76,26 +76,31 @@ BACK_REFERENCE = 0xFFFFFFFE  # marks a second mention while a stream is being as
 SIGNATURE = bytes.fromhex('d0cf11e0a1b11ae1')
 SECTOR, MINI_SECTOR, MINI_CUTOFF = 512, 64, 4096
 FREE, END_OF_CHAIN, FAT_SECTOR, NO_STREAM = 0xFFFFFFFF, 0xFFFFFFFE, 0xFFFFFFFD, 0xFFFFFFFF
+MAX_FAT_SECTORS = 109  # what the header holds without a DIFAT: about 7 MB of stream, far more than a layer file needs
 
 
 def read_layer_file(data):
-    """The `Layer` stream of a .lyr; ValueError when it is not a compound file with that stream."""
+    """The `Layer` stream of a .lyr; ValueError when it is not a compound file with that stream.
+
+    The file is not trusted: a chain may visit each sector once, so what it collects never exceeds the file, however its tables loop."""
     if data[:8] != SIGNATURE or len(data) < SECTOR:
         raise ValueError('not a compound file')
-    sector_size = 1 << struct.unpack_from('<H', data, 30)[0]
-    mini_size = 1 << struct.unpack_from('<H', data, 32)[0]
+    if struct.unpack_from('<HH', data, 30) != (9, 6):
+        raise ValueError('not a compound file with 512-byte sectors')
     fat_count, first_dir = struct.unpack_from('<II', data, 44)
     cutoff, first_mini_fat, mini_fat_count, first_difat, difat_count = struct.unpack_from('<IIIII', data, 56)
-    if difat_count or first_difat != END_OF_CHAIN:
+    if difat_count or first_difat != END_OF_CHAIN or fat_count > MAX_FAT_SECTORS:
         raise ValueError('compound file too large for a layer file')
 
     def sector(index):
-        return data[sector_size * (index + 1):sector_size * (index + 2)]
+        piece = data[SECTOR * (index + 1):SECTOR * (index + 2)]
+        if not piece:
+            raise ValueError('a sector outside the file')
+        return piece.ljust(SECTOR, b'\0')
 
-    fat_sectors = struct.unpack_from(f'<{fat_count}I', data, 76)
     fat = []
-    for index in fat_sectors:
-        fat += struct.unpack(f'<{sector_size // 4}I', sector(index))
+    for index in struct.unpack_from(f'<{fat_count}I', data, 76):
+        fat += struct.unpack(f'<{SECTOR // 4}I', sector(index))
 
     def chain(start):
         out, seen = bytearray(), set()
@@ -113,22 +118,27 @@ def read_layer_file(data):
         row = directory[offset:offset + 128]
         length = struct.unpack_from('<H', row, 64)[0]
         if row[66] in (1, 2, 5) and length >= 2:
-            entries[row[:length - 2].decode('utf-16le')] = (row[66], *struct.unpack_from('<I', row, 116), *struct.unpack_from('<I', row, 120))
-    if 'Layer' not in entries:
+            entries[row[:length - 2].decode('utf-16le')] = struct.unpack_from('<II', row, 116)
+    if 'Layer' not in entries or 'Root Entry' not in entries:
         raise ValueError('no Layer stream')
-    _, start, size = entries['Layer']
+    start, size = entries['Layer']
     if size >= cutoff:
-        return chain(start)[:size]
-    mini_fat = struct.unpack(f'<{len(chain(first_mini_fat)) // 4}I', chain(first_mini_fat)) if mini_fat_count else ()
-    mini = chain(entries['Root Entry'][1])
-    out, seen = bytearray(), set()
-    while start != END_OF_CHAIN:
-        if start in seen or start >= len(mini_fat):
-            raise ValueError('broken mini stream chain')
-        seen.add(start)
-        out += mini[start * mini_size:(start + 1) * mini_size]
-        start = mini_fat[start]
-    return bytes(out[:size])
+        stream = chain(start)
+    else:
+        table = chain(first_mini_fat) if mini_fat_count else b''
+        mini_fat = struct.unpack(f'<{len(table) // 4}I', table)
+        mini = chain(entries['Root Entry'][0])
+        out, seen = bytearray(), set()
+        while start != END_OF_CHAIN:
+            if start in seen or start >= len(mini_fat):
+                raise ValueError('broken mini stream chain')
+            seen.add(start)
+            out += mini[start * MINI_SECTOR:(start + 1) * MINI_SECTOR]
+            start = mini_fat[start]
+        stream = bytes(out)
+    if len(stream) < size:
+        raise ValueError('the Layer stream is shorter than its directory entry says')
+    return stream[:size]
 
 
 def directory_entry(name='', kind=0, start=0, size=0, child=NO_STREAM):
@@ -154,13 +164,9 @@ def write_layer_file(stream):
         mini_data = stream.ljust(count * MINI_SECTOR, b'\0')
         body = b''
     n_mini_fat, n_mini, n_body, n_dir = sectors(mini_fat_data), sectors(mini_data), sectors(body), 1
-    fat_count = 1
-    while True:  # the FAT describes itself too
-        total = fat_count + n_dir + n_mini_fat + n_mini + n_body
-        if total <= fat_count * (SECTOR // 4):
-            break
-        fat_count += 1
-    if fat_count > 109:
+    # the FAT describes itself too: the first count of FAT sectors that covers the file with them in it
+    fat_count = next((n for n in range(1, MAX_FAT_SECTORS + 1) if n + n_dir + n_mini_fat + n_mini + n_body <= n * (SECTOR // 4)), None)
+    if fat_count is None:
         raise ValueError('a layer file this large needs a DIFAT, which this writer does not write')
     position, fat = 0, []
 
@@ -192,7 +198,7 @@ def write_layer_file(stream):
     struct.pack_into('<HHHHH', header, 24, 0x3E, 3, 0xFFFE, 9, 6)
     struct.pack_into('<IIII', header, 40, 0, fat_count, dir_start, 0)
     struct.pack_into('<IIIII', header, 56, MINI_CUTOFF, mini_fat_start, n_mini_fat, END_OF_CHAIN, 0)
-    struct.pack_into('<109I', header, 76, *range(fat_count), *[FREE] * (109 - fat_count))
+    struct.pack_into('<109I', header, 76, *range(fat_count), *[FREE] * (MAX_FAT_SECTORS - fat_count))
     return bytes(header) + fat_data + dir_data + mini_fat_data + mini_data.ljust(n_mini * SECTOR, b'\0') + body.ljust(n_body * SECTOR, b'\0')
 
 
@@ -496,6 +502,7 @@ def breaks_renderer(field, minimum, classes):
 # --- labels --------------------------------------------------------------------------------------------------------
 
 LABEL_SIZE_BEFORE_FONT = 36  # a text symbol's size is this many bytes before its font object
+LABEL_SCRIPT_ROWS = 100000
 
 
 def field_expression(name):
@@ -838,8 +845,9 @@ def write_package(ctx, stage, args, shared):
     layer_notes = []
 
     def read_column(table, column):
-        """The distinct values of a text field, to know the labels' script before writing their font."""
-        frame = pyogrio.read_dataframe(gdb, layer=table, columns=[column], read_geometry=False)
+        """Distinct values of a text field, to know the labels' script before writing their font; the first rows tell, and a
+        huge table is not read into memory for this."""
+        frame = pyogrio.read_dataframe(gdb, layer=table, columns=[column], read_geometry=False, max_features=LABEL_SCRIPT_ROWS)
         return list(frame[column].dropna().unique()) if column in frame else []
 
     def assemble(workspace):

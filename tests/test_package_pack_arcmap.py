@@ -79,6 +79,140 @@ def test_container_reader_refuses_what_is_not_a_layer_file():
         arcmap.read_layer_file(bytes(data))
 
 
+def table_position(data, sector):
+    return 512 * (sector + 1)
+
+
+def fat_entry(data, index):
+    """Where FAT entry index sits in a file with one FAT sector."""
+    first_fat = struct.unpack_from('<I', data, 76)[0]
+    return table_position(data, first_fat) + 4 * index
+
+
+def directory_position(data, entry):
+    return table_position(data, struct.unpack_from('<I', data, 48)[0]) + 128 * entry
+
+
+def loop_the_sector_chain(data):
+    """The stream's last sector points back to its first (a stream big enough to sit in plain sectors)."""
+    first, size = struct.unpack_from('<II', data, directory_position(data, 1) + 116)
+    struct.pack_into('<I', data, fat_entry(data, first + -(-size // 512) - 1), first)
+
+
+def loop_the_stream_on_itself(data):
+    first = struct.unpack_from('<I', data, directory_position(data, 1) + 116)[0]
+    struct.pack_into('<I', data, fat_entry(data, first), first)
+
+
+def loop_the_directory(data):
+    first = struct.unpack_from('<I', data, 48)[0]
+    struct.pack_into('<I', data, fat_entry(data, first), first)
+
+
+def loop_the_mini_fat(data):
+    """The mini stream's last small sector points back to its first."""
+    size = struct.unpack_from('<I', data, directory_position(data, 1) + 120)[0]
+    table = table_position(data, struct.unpack_from('<I', data, 60)[0])
+    struct.pack_into('<I', data, table + 4 * (-(-size // 64) - 1), 0)
+
+
+def loop_the_mini_fat_chain(data):
+    first = struct.unpack_from('<I', data, 60)[0]
+    struct.pack_into('<I', data, fat_entry(data, first), first)
+
+
+def loop_the_mini_stream_container(data):
+    first = struct.unpack_from('<I', data, directory_position(data, 0) + 116)[0]
+    struct.pack_into('<I', data, fat_entry(data, first), first)
+
+
+def huge_fat_count(data):
+    struct.pack_into('<I', data, 44, 0xFFFFFFFF)
+
+
+def huge_sector_shift(data):
+    struct.pack_into('<H', data, 30, 0xFFFF)
+
+
+def fat_sector_outside_the_file(data):
+    struct.pack_into('<I', data, 76, 0x00FFFFFF)
+
+
+def stream_size_beyond_the_file(data):
+    struct.pack_into('<I', data, directory_position(data, 1) + 120, 0xFFFFFFF0)
+
+
+LOOPS = {loop_the_sector_chain: 5000, loop_the_stream_on_itself: 5000, loop_the_directory: 200, loop_the_mini_fat: 200, loop_the_mini_fat_chain: 200,
+         loop_the_mini_stream_container: 200, huge_fat_count: 200, huge_sector_shift: 200, fat_sector_outside_the_file: 200, stream_size_beyond_the_file: 200}
+# The damaged files are read in a child process with a short time limit and, where the system enforces it, a memory limit: a reader that
+# loops would otherwise take the whole machine down with this test (it did once, at 24 GB, before chains were guarded)
+GUARDED_READ = '''
+import faulthandler, sys, tracemalloc
+faulthandler.dump_traceback_later(10, exit=True)
+try:
+    import resource
+    resource.setrlimit(resource.RLIMIT_AS, (2 * 2**30, 2 * 2**30))
+except (ImportError, ValueError, OSError):
+    pass
+sys.path.insert(0, sys.argv[1])
+import _arcmap_style as arcmap
+outcomes = []
+files = open(sys.argv[2], 'rb').read()
+size = int(sys.argv[3])
+tracemalloc.start()
+for start in range(0, len(files), size):
+    try:
+        arcmap.read_layer_file(files[start:start + size])
+        outcomes.append('read')
+    except ValueError:
+        outcomes.append('refused')
+peak = tracemalloc.get_traced_memory()[1]
+print(' '.join(outcomes), peak)
+'''
+
+
+def read_guarded(tmp_path, files):
+    """read_layer_file on each of these files of one size, in a child process: (outcomes, peak bytes allocated)."""
+    path = tmp_path / 'files.bin'
+    path.write_bytes(b''.join(files))
+    result = subprocess.run([sys.executable, '-c', GUARDED_READ, str(SCRIPTS), str(path), str(len(files[0]))], capture_output=True, text=True,
+                            env={**os.environ, 'PYTHONDONTWRITEBYTECODE': '1'}, timeout=60)
+    assert result.returncode == 0, result.stdout + result.stderr  # a timeout or a crash, or an error other than ValueError
+    *outcomes, peak = result.stdout.split()
+    return outcomes, int(peak)
+
+
+@pytest.mark.parametrize('damage, size', LOOPS.items(), ids=[f.__name__ for f in LOOPS])
+def test_container_reader_refuses_loops_without_growing(damage, size, tmp_path):
+    data = bytearray(arcmap.write_layer_file(bytes(size)))
+    damage(data)
+    outcomes, peak = read_guarded(tmp_path, [bytes(data)])
+    assert outcomes == ['refused'] and peak < 2**20
+
+
+def test_container_reader_survives_random_damage(tmp_path):
+    """Whatever bytes the tables hold, the reader returns or refuses, soon and within the file's own size."""
+    generator = np.random.default_rng(45)
+    files = []
+    for size in (200, 5000):
+        clean = arcmap.write_layer_file(bytes(size))
+        tables = len(clean) if size == 200 else 2048  # header, FAT, directory, and in the small file the mini FAT
+        for _ in range(300):
+            data = bytearray(clean.ljust(7168, b'\0'))
+            for position in generator.integers(0, tables, 6):
+                data[position] = int(generator.integers(0, 256))
+            files.append(bytes(data))
+    outcomes, peak = read_guarded(tmp_path, files)
+    assert len(outcomes) == 600 and peak < 2**21
+    assert 'refused' in outcomes and 'read' in outcomes
+
+
+def test_container_writer_is_bounded():
+    assert arcmap.read_layer_file(arcmap.write_layer_file(bytes(7_000_000))) == bytes(7_000_000)
+    with pytest.raises(ValueError, match='DIFAT'):
+        arcmap.write_layer_file(bytes(8 * 2**20))
+
+
 # --- strings and ids -----------------------------------------------------------------------------------------------
 
 def test_string_rewrite_any_length_every_mention():

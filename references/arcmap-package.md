@@ -89,7 +89,7 @@ python package.py pack maps/example.map-style.json --output /work/send/example-a
 
 `.lyr` 是闭源的 COM 持久化格式。下面是从 ArcObjects 写的样本差分出来的，够用来改参数，不是完整规范：
 
-- **容器**：CFB v3（512 字节扇区），根目录下只有一条 `Layer` 流。gis-kit 自己读写（`read_layer_file`、`write_layer_file`），`olefile` 只读且是可选依赖，写容器不用它（测试里拿它交叉校验）。不到 4096 字节的流放迷你流。
+- **容器**：CFB v3（512 字节扇区），根目录下只有一条 `Layer` 流。gis-kit 自己读写（`read_layer_file`、`write_layer_file`），`olefile` 只读且是可选依赖，写容器不用它（测试里拿它交叉校验）。不到 4096 字节的流放迷你流。读取时不信任文件：扇区链和迷你链每个扇区只走一次，成环、越界、声明过大都报错，收集的内容不会超过文件本身；写入上限约 7 MB（不写 DIFAT），超过就报错。
 - **对象**：类 GUID（Windows 内存布局）+ u32 编号 + u16 版本 + 字段。**编号从根对象的 0 起全流递增**；同一个对象再次出现时只写 GUID 和编号（回引）。空对象是 16 个零字节。对象外面没有总长度，只有组图层的每个子图层前面有 u64 字节数。所以字符串可以改成任意长度，但增减对象后要统一重排编号（`renumber`）。
 - **字符串**：u32 字节数（含结尾）+ UTF-16LE。图层名、数据集名、工作空间路径会出现多次，要一起改（工作空间只改一处时能打开但 `isBroken=True`）。
 - **颜色**：`{7EE9C496-D123-11D0-8383-080009B996CC}`，版本后 3 个标志字节，然后 3 个双精度 CIELAB。Lab 由 gamma 1.8 的 RGB 算出，矩阵接近 Apple RGB 但不相同：用 ArcObjects 写的值反解到 1e-15，白点 D65。按 sRGB 算会暗十几级。写进去的 RGB 与 ArcMap 渲染出的像素逐字节相同，Pro 读回也相同。
