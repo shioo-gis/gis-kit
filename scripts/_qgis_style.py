@@ -523,7 +523,7 @@ def label_settings(parent, spec, geometry, fonts, where, notes):
         mode = {'point': 1, 'line': 2, 'polygon': 1}[geometry]
     around = geometry == 'point' and mode == 0  # 0 would put the label's corner on the point, over its marker; QGIS measures from the point here
     sub(settings, 'placement', {'placement': mode, 'placementFlags': 9 if geometry == 'line' else 10, 'quadOffset': 4,
-                                'dist': label_gap(spec['text']) if around else 0, 'distUnits': 'Pixel' if around else 'MM',
+                                'dist': mm(label_gap(spec['text'])) if around else 0, 'distUnits': 'MM',
                                 'offsetType': 0, 'centroidInside': int(placement == 'polygon-center'), 'centroidWhole': 0,
                                 'fitInPolygonOnly': 0, 'overlapHandling': 'PreventOverlap', 'allowDegraded': 0, 'priority': 5,
                                 'rotationAngle': 0, 'rotationUnit': 'AngleDegrees', 'preserveRotation': 1, 'repeatDistance': 0,

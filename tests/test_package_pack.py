@@ -355,7 +355,7 @@ def test_auto_labels_on_points_stand_off_the_point():
         node = qgis.labeling({'field': 'name', 'text': {'size': 20, 'color': '#000000'}, **spec}, geometry, {}, [])
         return node.find('settings/placement').attrib
     around = placement('point', placement='auto')
-    assert (around['placement'], float(around['dist']), around['distUnits']) == ('0', 16, 'Pixel')
+    assert (around['placement'], around['distUnits']) == ('0', 'MM') and float(around['dist']) == pytest.approx(16 * 25.4 / 96)
     assert placement('point')['dist'] == around['dist']
     on_point = placement('point', placement='point')
     assert (on_point['placement'], float(on_point['dist'])) == ('1', 0)
