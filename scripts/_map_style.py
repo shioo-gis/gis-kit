@@ -6,10 +6,13 @@ platform writers (`_qgis_style.py`, `_arcgis_style.py`) turn the layers into the
 """
 from __future__ import annotations
 
+import base64
+import hashlib
 import json
 import os
 from pathlib import Path, PurePosixPath
 import re
+import xml.etree.ElementTree as ET
 
 CONTRACT, SCHEMA_VERSION = 'map-style', 1
 MM_PER_PX = 25.4 / 96  # CSS pixel, 1/96 inch: 0.2646 mm
@@ -22,6 +25,7 @@ VECTOR_RENDERERS = {'single', 'categorized', 'graduated', 'rule'}
 RASTER_RENDERERS = {'pseudocolor', 'palette', 'rgb'}
 COMPARISONS = {'==', '!=', '<', '<=', '>', '>='}
 FILTER_OPS = COMPARISONS | {'in', 'notIn', 'isNull', 'notNull'}
+WEIGHT_STYLES = {100: 'Thin', 200: 'ExtraLight', 300: 'Light', 400: '', 500: 'Medium', 600: 'SemiBold', 700: 'Bold', 800: 'ExtraBold', 900: 'Black'}
 
 
 def mm(px):
@@ -77,6 +81,9 @@ def load(path):
             raise ValueError(f'{where} ({layer["id"]}): a raster layer needs a renderer')
         if renderer is not None and (not isinstance(renderer, dict) or renderer.get('type') not in allowed):
             raise ValueError(f'{where} ({layer["id"]}): renderer.type must be one of {", ".join(sorted(allowed))}')
+    for index, placement in enumerate(document.get('labelPlacements') or []):
+        if placement.get('panel') is not None and panels and placement['panel'] not in panels:
+            raise ValueError(f'{path.name}: labelPlacements[{index}]: panel {placement["panel"]!r} is not one of extent.panels ({", ".join(sorted(panels))})')
     bbox = (document.get('extent') or {}).get('bbox')
     if bbox is not None:
         if (not isinstance(bbox, list) or len(bbox) != 4 or not all(isinstance(v, (int, float)) for v in bbox)
@@ -85,10 +92,10 @@ def load(path):
     return document
 
 
-def check_reference(raw, where):
+def check_reference(raw, where, label='data.path'):
     posix = PurePosixPath(raw.replace('\\', '/'))
     if raw.startswith(('/', '~')) or re.match(r'^[A-Za-z]:[\\/]', raw) or '..' in posix.parts:
-        raise ValueError(f'{where}: data.path {raw!r} must be relative, without "..": map-style never names absolute paths')
+        raise ValueError(f'{where}: {label} {raw!r} must be relative, without "..": map-style never names absolute paths')
 
 
 def find_project(start):
@@ -235,58 +242,181 @@ def check_filter(spec, where):
         raise ValueError(f'{where}: "{op}" needs a string, number or boolean value')
 
 
-def font_names(document):
-    """{name used in a text style: (family, style)} from fonts[]: a theme alias resolves through its entry's `names`
-    (the installed family and its subfamily). An alias with several entries (weights) takes the first; one
-    without `names` stays as written and is reported by fonts_used."""
-    resolved = {}
+def font_table(document):
+    """{family as text styles name it: its fonts[] entries}."""
+    table = {}
     for entry in document.get('fonts') or []:
-        if not isinstance(entry, dict) or not entry.get('family') or entry['family'] in resolved:
-            continue
-        names = entry.get('names') or {}
-        if names.get('family'):
-            resolved[entry['family']] = (names['family'], names.get('subfamily') or '')
-    return resolved
+        if isinstance(entry, dict) and entry.get('family'):
+            table.setdefault(entry['family'], []).append(entry)
+    return table
+
+
+def weight_of(value):
+    """A CSS font weight as a number: a number or a numeric string; missing counts as 400."""
+    return 400.0 if value is None else float(value)
+
+
+def closest_weight(target, weights):
+    """CSS font matching: from 400 to 500, up to 500 then down then above 500; below 400, down then up; above 500, up then down."""
+    below = sorted((w for w in weights if w < target), reverse=True)
+    above = sorted(w for w in weights if w >= target)
+    if 400 <= target <= 500:
+        order = [w for w in above if w <= 500] + below + [w for w in above if w > 500]
+    elif target < 400:
+        order = sorted((w for w in weights if w <= target), reverse=True) + sorted(w for w in weights if w > target)
+    else:
+        order = above + below
+    return order[0]
+
+
+def pick_font(entries, weight):
+    """The entry of one family for this weight: the equal or closest one among those that name an installed font."""
+    usable = [e for e in entries or [] if (e.get('names') or {}).get('family')] or list(entries or [])
+    if not usable:
+        return None
+    target = closest_weight(weight_of(weight), [weight_of(e.get('weight')) for e in usable])
+    return next(e for e in usable if weight_of(e.get('weight')) == target)
+
+
+def weight_style(weight):
+    """A style name for a font that gives none: the name usual for the nearest hundred; regular is the empty name."""
+    return WEIGHT_STYLES[min(900, max(100, round(weight_of(weight) / 100) * 100))]
+
+
+def resolve_font(style, fonts):
+    """(family, named style) for a text style: its `font` through the fonts[] entry its `weight` picks (fonts is
+    font_table()). A font without an entry that names one stays as written and is reported by fonts_used."""
+    alias = style.get('font') or ''
+    entry = pick_font(fonts.get(alias), style.get('weight'))
+    names = (entry or {}).get('names') or {}
+    if names.get('family'):
+        return names['family'], names.get('subfamily') or weight_style(entry.get('weight'))
+    return alias, weight_style(style.get('weight'))
 
 
 def fonts_used(document):
-    """Fonts named by layer labels, label placements and fonts[]: who uses each, and the installed name QGIS is given."""
+    """One row per font and weight the labels ask for: who uses it, the installed name the platform is given, and
+    whether another weight stands in. With a single entry a text style that names no weight asks for that entry
+    (an alias like `Sans Medium` is unique on its own); with several, missing counts as 400, as the contract says."""
+    table = font_table(document)
     used = {}
     for layer in document['layers']:
-        font = ((layer.get('labels') or {}).get('text') or {}).get('font')
-        if font:
-            used.setdefault(font, set()).add(f'layer {layer["id"]}')
+        style = (layer.get('labels') or {}).get('text') or {}
+        if style.get('font'):
+            used.setdefault((style['font'], style.get('weight')), set()).add(f'layer {layer["id"]}')
     for placement in document.get('labelPlacements') or []:
-        font = (placement.get('style') or {}).get('font')
-        if font:
-            used.setdefault(font, set()).add('labelPlacements')
-    entries = {}
-    for entry in document.get('fonts') or []:
-        if isinstance(entry, dict) and entry.get('family'):
-            entries.setdefault(entry['family'], []).append(entry)
-    resolved = font_names(document)
+        style = placement.get('style') or {}
+        if style.get('font'):
+            used.setdefault((style['font'], style.get('weight')), set()).add('labelPlacements')
     rows = []
-    for alias in sorted(set(used) | set(entries)):
-        entry = (entries.get(alias) or [{}])[0]
-        names = entry.get('names') or {}
-        row = {'name': alias, 'used_by': sorted(used.get(alias, []))}
-        if alias in resolved:
-            row['family'], row['style'] = resolved[alias]
+    for (alias, weight), users in sorted(used.items(), key=lambda item: (item[0][0], weight_of(item[0][1]))):
+        entries = table.get(alias, [])
+        entry = pick_font(entries, weight)
+        names = (entry or {}).get('names') or {}
+        row = {'name': alias, 'used_by': sorted(users)}
+        if weight is not None:
+            row['weight'] = weight_of(weight)
+        row['family'], row['style'] = resolve_font({'font': alias, 'weight': weight}, table)
+        if names.get('family'):
             localized = [n['family'] for n in names.get('localized') or [] if n.get('family')]
             if localized:
                 row['localized_family'] = localized
             if names.get('postScriptName'):
                 row['postScriptName'] = names['postScriptName']
         else:
-            row['family'], row['style'] = alias, ''
             row['unresolved'] = True
-        if len(entries.get(alias, [])) > 1:
-            row['entries'] = len(entries[alias])
+        if entry and (weight is not None or len(entries) > 1) and weight_of(entry.get('weight')) != weight_of(weight):
+            row['substituted_weight'] = weight_of(entry.get('weight'))
+        if len(entries) > 1:
+            row['entries'] = len(entries)
         for key in ('file', 'sha256'):
-            if entry.get(key):
+            if (entry or {}).get(key):
                 row[key] = entry[key]
         rows.append(row)
     return rows
+
+
+def padding_sides(value):
+    """`box.padding` as (top, right, bottom, left): one number for all sides, [vertical, horizontal] or the four in CSS order."""
+    if value is None:
+        value = 0
+    if isinstance(value, (int, float)):
+        return (float(value),) * 4
+    if len(value) == 2:
+        return (float(value[0]), float(value[1])) * 2
+    if len(value) == 4:
+        return tuple(float(v) for v in value)
+    raise ValueError(f'box.padding {value!r} must be a number, [vertical, horizontal] or [top, right, bottom, left]')
+
+
+def layer_symbols(layer):
+    """Every symbol of a vector layer's renderer, default included."""
+    spec = layer.get('renderer') or {}
+    if layer.get('geometry') == 'raster':
+        return
+    if spec.get('type') == 'single':
+        yield spec.get('symbol') or {}
+    for item in spec.get('classes') or []:
+        yield item.get('symbol') or {}
+    for item in spec.get('rules') or []:
+        yield item.get('symbol') or {}
+    if spec.get('default'):
+        yield spec['default']
+
+
+def svg_size(text, where):
+    """(width, height) of an SVG image: its viewBox, else its width and height."""
+    if '<!ENTITY' in text:
+        raise ValueError(f'{where}: the SVG declares XML entities, which are not read')
+    try:
+        root = ET.fromstring(text)
+    except ET.ParseError as error:
+        raise ValueError(f'{where}: not a readable SVG: {error}') from error
+    if root.tag.rsplit('}', 1)[-1] != 'svg':
+        raise ValueError(f'{where}: not an SVG (the root element is {root.tag})')
+    box = re.split(r'[\s,]+', (root.get('viewBox') or '').strip())
+    try:
+        if len(box) == 4:
+            width, height = float(box[2]), float(box[3])
+        else:
+            width, height = (float(re.match(r'[\d.]+', root.get(side, ''))[0]) for side in ('width', 'height'))
+    except (TypeError, ValueError) as error:
+        raise ValueError(f'{where}: the SVG gives neither a viewBox nor a width and height') from error
+    if width <= 0 or height <= 0:
+        raise ValueError(f'{where}: the SVG has an empty size')
+    return width, height
+
+
+def load_svg(marker, roots, where):
+    """A `shape: svg` marker's file, checked against its sha256: what a writer needs, under marker['_svg'], and a row for the manifest.
+
+    The platforms take the image inside the style itself, so it travels with the package whichever way the layer is opened."""
+    svg = marker.get('svg') or {}
+    if not svg.get('path') or not svg.get('sha256'):
+        raise ValueError(f'{where}: a marker with shape svg needs svg.path and svg.sha256')
+    check_reference(svg['path'], where, 'marker.svg.path')
+    path, root = roots.resolve(svg['path'])
+    if not path.is_file():
+        raise ValueError(f'{where}: marker.svg.path {svg["path"]} is not a file')
+    data = path.read_bytes()
+    if hashlib.sha256(data).hexdigest() != svg['sha256']:
+        raise ValueError(f'{where}: {svg["path"]} does not match marker.svg.sha256; export the map-style again')
+    try:
+        width, height = svg_size(data.decode('utf-8'), f'{where}: {svg["path"]}')
+    except UnicodeDecodeError as error:
+        raise ValueError(f'{where}: {svg["path"]} is not UTF-8 text') from error
+    marker['_svg'] = {'base64': base64.b64encode(data).decode('ascii'), 'width': width, 'height': height}
+    return {'ref': svg['path'], 'root': root, 'sha256': svg['sha256'], 'bytes': len(data), 'width': width, 'height': height}
+
+
+def check_marker(marker, where):
+    """What the writers rely on: a line placement says how far apart the markers are."""
+    if marker.get('placement', 'point') not in ('point', 'line'):
+        raise ValueError(f'{where}: marker.placement must be point or line')
+    if marker.get('placement') == 'line':
+        spacing = marker.get('spacing')
+        if not isinstance(spacing, (int, float)) or isinstance(spacing, bool) or spacing <= 0:
+            raise ValueError(f'{where}: a marker with placement line needs a spacing above 0')
 
 
 def classes_as_rules(spec):

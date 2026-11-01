@@ -5,9 +5,11 @@ opens the package (tests/arcgis_open_check.py).
 """
 from __future__ import annotations
 
+import base64
 import json
 import os
 from pathlib import Path
+import re
 import subprocess
 import sys
 
@@ -313,6 +315,137 @@ def test_renamed_fields_follow_into_the_layer_file(tmp_path):
     assert manifest['layers'][0]['filter'] == "select_ IS NULL OR select_ <> 'z'"
 
 
+@pytest.fixture(scope='module')
+def round_two(tmp_path_factory):
+    root = tmp_path_factory.mktemp('round-two')
+    fixture = pack_fixture.build_round_two(root / 'data')
+    command = [sys.executable, str(SCRIPTS / 'package.py'), 'pack', str(fixture['style']), '--output', str(root / 'out'), '--format', 'arcgis-pro', '--lyrx']
+    result = subprocess.run(command, capture_output=True, text=True, env={**os.environ, 'PYTHONDONTWRITEBYTECODE': '1'})
+    assert result.returncode == 0, result.stdout + result.stderr
+    document = json.loads((root / 'out' / 'round-two.lyrx').read_text(encoding='utf-8'))
+    return root / 'out', json.loads((root / 'out' / 'package.json').read_text()), {d['uRI']: d for d in document['layerDefinitions']}, document
+
+
+def named(found, name, query=None):
+    return next(d for d in found.values() if d['name'] == name and (query is None or query in d['featureTable'].get('definitionExpression', '')))
+
+
+def classes_of(layer):
+    return {c['label']: c['symbol'] for g in layer['renderer']['groups'] for c in g['classes']}
+
+
+def test_round_two_markers_along_lines(round_two):
+    _, _, found, _ = round_two
+    routes = classes_of(named(found, 'routes'))
+    with_line = routes['with']['symbol']['symbolLayers']
+    assert [l['type'] for l in with_line] == ['CIMVectorMarker', 'CIMSolidStroke']  # the marker on top
+    assert with_line[0]['markerPlacement'] == {'type': 'CIMMarkerPlacementAlongLineSameSize', 'angleToLine': True, 'endings': 'NoConstraint',
+                                               'offsetAlongLine': 30, 'placementTemplate': [60]}
+    assert with_line[0]['rotation'] == -90 and with_line[0]['size'] == 15  # map-style's 0 points along the line, CIM's stands across it
+    assert 'effects' in with_line[1] and 'effects' not in with_line[0]['markerGraphics'][0]['symbol']['symbolLayers'][0]  # the dash stays on the line
+    free = routes['free']['symbol']['symbolLayers'][0]
+    assert free['markerPlacement']['angleToLine'] is False and free['rotation'] == -180
+    outlined = classes_of(named(found, 'cells'))['outlined']['symbol']['symbolLayers']
+    assert [l['type'] for l in outlined] == ['CIMVectorMarker', 'CIMSolidStroke', 'CIMSolidFill']
+    assert outlined[0]['markerPlacement']['placementTemplate'] == [60]
+
+
+def test_round_two_svg_markers(round_two):
+    _, manifest, found, _ = round_two
+    marks = classes_of(named(found, 'marks'))
+    tall, wide = marks['tall']['symbol']['symbolLayers'][0], marks['wide']['symbol']['symbolLayers'][0]
+    assert tall['type'] == wide['type'] == 'CIMPictureMarker'
+    assert tall['size'] == 30 and wide['size'] == 15  # CIM's size is the height and map-style's the longer side
+    assert base64.b64decode(tall['url'].removeprefix('data:image/svg+xml;base64,')).decode() == pack_fixture.TALL_SVG
+    assert {row['ref'] for row in manifest['icons']} == {'icons/tall.svg', 'icons/wide.svg'}
+    notes = []
+    image = {'shape': 'svg', 'size': 10, '_svg': {'base64': 'AA==', 'width': 2, 'height': 1}}
+    layer = {'id': 's', 'geometry': 'point', 'size': {'field': 'v', 'scale': 'linear', 'domain': [0, 1], 'range': [1, 2]},
+             'renderer': {'type': 'single', 'symbol': {'marker': image}}}
+    cim.renderer(layer, {}, notes)
+    assert notes[0]['item'] == 'size' and notes[0]['kind'] == 'approximated'  # a graduated size is the height, not the longer side
+    notes = []
+    image['_svg'] = {'base64': 'AA==', 'width': 1, 'height': 2}
+    cim.renderer(layer, {}, notes)
+    assert notes == []
+
+
+def test_round_two_rotation_field(round_two):
+    _, _, found, _ = round_two
+    marks = classes_of(named(found, 'marks'))
+    east, none = marks['east'], marks['none']
+    assert 'rotation' not in east['symbol']['symbolLayers'][0] and east['symbol']['symbolLayers'][0]['primitiveName']
+    override = east['primitiveOverrides'][0]
+    assert override['primitiveName'] == east['symbol']['symbolLayers'][0]['primitiveName'] and override['propertyName'] == 'Rotation'
+    assert override['valueExpressionInfo']['expression'] == 'var v = Number($feature["bearing"]);\nreturn -(0 + IIf(IsNan(v), 0, v))'
+    assert none['primitiveOverrides'][0]['valueExpressionInfo']['expression'].endswith('return -(180 + IIf(IsNan(v), 0, v))')
+    assert none['symbol']['symbolLayers'][0]['rotation'] == -180  # what Pro draws where the connection gives nothing
+    turned = classes_of(named(found, 'routes'))['turned']
+    assert turned['primitiveOverrides'][0]['valueExpressionInfo']['expression'].endswith('return -(135 + IIf(IsNan(v), 0, v))')  # 45, and 90 from along the line
+    renamed = cim.symbol({'marker': {'shape': 'circle', 'size': 4, 'rotationField': 'select'}}, 'point', {}, [], {'select': 'select_'})
+    assert '$feature["select_"]' in renamed['primitiveOverrides'][0]['valueExpressionInfo']['expression']
+
+
+def test_round_two_patterns(round_two):
+    _, _, found, _ = round_two
+    cells = classes_of(named(found, 'cells'))
+    hatch = cells['hatch']['symbol']['symbolLayers']
+    assert [l['type'] for l in hatch] == ['CIMHatchFill', 'CIMSolidFill']  # the lines over the fill
+    assert hatch[0]['rotation'] == 45 and hatch[0]['separation'] == 15 and hatch[0]['lineSymbol']['symbolLayers'][0]['width'] == 3
+    assert hatch[0]['lineSymbol']['symbolLayers'][0]['color']['values'] == [0, 170, 0, 100]
+    assert cells['vertical']['symbol']['symbolLayers'][1]['color']['values'][3] == 0  # fill opacity 0: lines only
+    cross = cells['cross']['symbol']['symbolLayers']
+    assert [l['type'] for l in cross] == ['CIMHatchFill', 'CIMHatchFill', 'CIMSolidFill'] and {l['rotation'] for l in cross[:2]} == {0, 90}
+    assert cross[0]['lineSymbol']['symbolLayers'][0]['color']['values'][3] == 50
+    notes = []
+    assert cim.symbol({'stroke': {'color': '#000000', 'width': 1}, 'fill': {'color': '#FF0000', 'pattern': {'kind': 'hatch', 'spacing': 4, 'width': 1, 'color': '#000000'}}},
+                      'line', {'layer': 'l'}, notes)['symbol']['symbolLayers'][0]['type'] == 'CIMSolidStroke'
+    assert {n['item'] for n in notes} == {'symbol.fill', 'symbol.fill.pattern'}
+    notes = []
+    text = cim.text_symbol({'size': 10, 'color': '#000000', 'box': {'fill': {'color': '#FFFFFF', 'pattern': {'kind': 'hatch', 'spacing': 4, 'width': 1, 'color': '#000000'}}}}, {}, {}, notes)
+    assert notes[0]['item'] == 'text.box.fill.pattern'
+    assert [l['type'] for l in text['symbol']['callout']['backgroundSymbol']['symbolLayers']] == ['CIMSolidFill']
+
+
+def test_round_two_text(round_two):
+    _, manifest, found, _ = round_two
+    placed = next(d for d in found.values() if d['name'] == 'labels (placed)' and d['featureTable']['definitionExpression'] == 'panel IS NULL')
+    classes = [c['textSymbol']['symbol'] for c in placed['labelClasses']]
+    assert [(t['fontFamilyName'], t['fontStyleName']) for t in classes] == [
+        ('Arial', 'Regular'), ('Arial', 'Regular'), ('Arial', 'Regular'), ('Arial', 'Bold'), ('Arial', 'Regular'), ('Arial', 'Bold'),
+        ('Arial', 'Regular'), ('Arial', 'Bold'), ('Arial', 'Regular')]
+    margins = [(t['callout']['margin']['top'], t['callout']['margin']['right'], t['callout']['margin']['bottom'], t['callout']['margin']['left']) for t in classes[:3]]
+    assert margins == [(4.5, 4.5, 4.5, 4.5), (1.5, 9, 1.5, 9), (1.5, 9, 6, 3)]  # four sides, all kept
+    assert not any(n['item'] == 'text.box.padding' for n in manifest['unsupported'])
+    assert sum(n['item'] == 'font.weight' for n in manifest['unsupported']) == 2
+
+
+def test_round_two_panels(round_two):
+    out, manifest, _, _ = round_two
+    labels = pyogrio.read_dataframe(out / 'round-two.gdb', layer='map_labels').set_index('text')
+    assert labels.loc['own panel', 'panel'] == 'inset' and labels.loc['layer panel', 'panel'] == 'main' and labels.loc['whole map'].isna()['panel']
+    panels = {row['id']: row for row in manifest['panels']}
+    assert panels['main']['frame'] == {'x': 0, 'y': 0, 'width': 10, 'height': 10} and any(n['item'] == 'extent.panels.frame' for n in manifest['unsupported'])
+    placed = [row for row in manifest['layers'] if row['table'] == 'map_labels']
+    assert {(row['panel'], row['features']) for row in placed} == {('main', 1), ('inset', 1), (None, 9)}
+
+
+def test_new_content_gets_a_new_package_id(tmp_path):
+    """Pro keeps one unpacked copy per package ID, so a package packed again with other content must not reuse the ID."""
+    fixture = pack_fixture.build(tmp_path / 'data', with_raster=False)
+
+    def package_id(name):
+        run(fixture, tmp_path / name)
+        lpkx = tmp_path / name / 'demo-map.lpkx'
+        package.extract(lpkx, '7z', package.list_members(lpkx, '7z')[1], tmp_path / f'{name}-x')
+        return re.search('<ID>(.+)</ID>', (tmp_path / f'{name}-x' / 'esriinfo' / 'item.pkinfo').read_text()).group(1)
+    first = package_id('a')
+    document = json.loads(fixture['style'].read_text())
+    document['layers'][1]['renderer']['symbol'] = {'fill': {'color': '#123456'}}
+    fixture['style'].write_text(json.dumps(document))
+    assert package_id('b') != first
+
+
 def test_errors(tmp_path):
     fixture = pack_fixture.build(tmp_path / 'data', with_raster=False)
     command = [sys.executable, str(SCRIPTS / 'package.py'), 'pack', str(fixture['style']), '--output', str(tmp_path / 'o'), '--lyrx',
@@ -337,3 +470,24 @@ def test_arcgis_pro_opens_the_package(pro, tmp_path):
         assert rows['用地分类']['renderer'] == 'CIMUniqueValueRenderer' and rows['容积率']['features'] == 12
         assert rows['height']['colorizer'] == 'CIMRasterStretchColorizer'
     assert report['samples'] == ['#bbbbbb', '#ed7d31', '#4f81bd', '#4f81bd']
+
+
+@pytest.mark.skipif(ARCGIS_PYTHON is None, reason='ArcGIS Pro not available (set GIS_KIT_ARCGIS_PYTHON to its Python)')
+def test_arcgis_pro_draws_the_round_two_fields(round_two, tmp_path):
+    """ArcGIS Pro reads the symbols as written, and the render measures up: line spacing, marker positions, image sizes, directions, padding."""
+    out = round_two[0]
+    result = subprocess.run([ARCGIS_PYTHON, str(TESTS / 'arcgis_open_check.py'), str(out), 'round-two', str(tmp_path / 'map.png'), '4326',
+                             ','.join(map(str, pack_fixture.BBOX))], capture_output=True, text=True, timeout=600)
+    assert result.returncode == 0, result.stderr[-2000:]
+    report = json.loads(result.stdout)
+    for key in ('lyrx', 'lpkx'):
+        layers = [row for row in report[key] if not row['group']]
+        assert not any(row['broken'] for row in layers)
+        rows = {row['name'].split('\\')[-1]: row for row in layers}
+        cells = {c['label']: c['symbol_layers'] for c in rows['cells']['classes']}
+        assert cells['cross'] == ['CIMHatchFill', 'CIMHatchFill', 'CIMSolidFill'] and cells['outlined'][0] == 'CIMVectorMarker'
+        marks = {c['label']: c['symbol_layers'] for c in rows['marks']['classes']}
+        assert marks['tall'] == ['CIMPictureMarker'] and marks['east'] == ['CIMVectorMarker', 'Rotation by field']
+        routes = {c['label']: c['symbol_layers'] for c in rows['routes']['classes']}
+        assert routes['turned'] == ['CIMPictureMarker', 'Rotation by field']
+    pack_fixture.check_round_two_render(tmp_path / 'map.png', four_sides=True)

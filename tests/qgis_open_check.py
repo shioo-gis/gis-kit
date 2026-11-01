@@ -18,12 +18,22 @@ from qgis.PyQt.QtCore import QSize  # noqa: E402
 from qgis.PyQt.QtGui import QColor  # noqa: E402
 
 
+def symbol_layers(symbol):
+    """The symbol layer classes QGIS built, with those of a sub-symbol (the marker of a marker line) after a slash."""
+    rows = []
+    for item in symbol.symbolLayers():
+        inner = item.subSymbol()
+        rows.append(item.layerType() + ('/' + ','.join(symbol_layers(inner)) if inner is not None else ''))
+    return rows
+
+
 def renderer_summary(layer):
     renderer = layer.renderer()
     row = {'renderer': renderer.type()}
     if renderer.type() == 'categorizedSymbol':
         row['field'] = renderer.classAttribute()
-        row['classes'] = [{'value': c.value(), 'color': c.symbol().color().name(), 'alpha': c.symbol().color().alpha(), 'render': c.renderState()}
+        row['classes'] = [{'value': c.value(), 'color': c.symbol().color().name(), 'alpha': c.symbol().color().alpha(), 'render': c.renderState(),
+                           'symbol_layers': symbol_layers(c.symbol())}
                           for c in renderer.categories()]
     elif renderer.type() == 'graduatedSymbol':
         row['field'] = renderer.classAttribute()
@@ -31,12 +41,13 @@ def renderer_summary(layer):
     elif renderer.type() == 'RuleRenderer':
         def walk(rule):
             return [{'filter': r.filterExpression(), 'label': r.label(), 'active': r.active(),
-                     'color': r.symbol().color().name() if r.symbol() else None, 'children': walk(r)} for r in rule.children()]
+                     'color': r.symbol().color().name() if r.symbol() else None,
+                     'symbol_layers': symbol_layers(r.symbol()) if r.symbol() else [], 'children': walk(r)} for r in rule.children()]
         row['rules'] = walk(renderer.rootRule())
     elif renderer.type() == 'singleSymbol':
         symbol = renderer.symbol()
         row['color'] = symbol.color().name()
-        row['symbol_layers'] = [s.layerType() for s in symbol.symbolLayers()]
+        row['symbol_layers'] = symbol_layers(symbol)
         marker = symbol.symbolLayers()[0] if symbol.symbolLayers() else None
         if marker is not None and marker.layerType() == 'SimpleMarker':
             row['size_expression'] = marker.dataDefinedProperties().property(marker.PropertySize).expressionString()
@@ -105,6 +116,7 @@ def main():
     extent = QgsReferencedRectangle(view, view.crs()) if not view.isEmpty() else project.mapLayers()[report['panel_order'][-1]].extent()
     settings.setExtent(extent)
     settings.setOutputSize(QSize(800, 800))
+    settings.setOutputDpi(96)  # so one map-style px is one pixel
     settings.setBackgroundColor(project.backgroundColor())
     job = QgsMapRendererParallelJob(settings)
     job.start()

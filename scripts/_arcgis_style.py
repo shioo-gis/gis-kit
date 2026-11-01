@@ -18,7 +18,7 @@ import math
 import re
 import uuid
 
-from _map_style import classes_as_rules, number
+from _map_style import classes_as_rules, layer_symbols, number, padding_sides, resolve_font
 
 CIM_VERSION, CIM_BUILD = '3.0.0', 36056  # the CIM that Pro 3.x writes into the p30 folder of a .lpkx
 PT_PER_PX = 0.75  # CSS pixel 1/96 inch, point 1/72 inch
@@ -45,7 +45,7 @@ def rgb(value, opacity=1.0):
 
 
 def guid(*parts):
-    """A stable GUID so the same map-style gives the same package."""
+    """A GUID that stays the same for the same parts."""
     return str(uuid.uuid5(NAMESPACE, '/'.join(map(str, parts)))).upper()
 
 
@@ -180,9 +180,19 @@ def fill_layer(fill):
     return {'type': 'CIMSolidFill', 'enable': True, 'color': rgb(fill['color'], fill.get('opacity', 1))}
 
 
+def hatch_layers(pattern):
+    """`fill.pattern`: a hatch fill per set of lines, top first; its rotation is counter-clockwise like map-style's angle."""
+    angles = [float(pattern.get('angle', 45))]
+    if pattern['kind'] == 'crossHatch':
+        angles.append(angles[0] + 90)
+    line = {'color': pattern['color'], 'width': pattern['width'], 'opacity': pattern.get('opacity', 1)}
+    return [{'type': 'CIMHatchFill', 'enable': True, 'lineSymbol': line_symbol(line), 'rotation': angle % 360, 'separation': pt(pattern['spacing'])}
+            for angle in reversed(angles)]
+
+
 def polygon_symbol(fill=None, stroke=None):
     """A CIMPolygonSymbol: the outline is listed first because CIM draws the first symbol layer on top."""
-    layers = ([stroke_layer(stroke)] if stroke else []) + ([fill_layer(fill)] if fill else [])
+    layers = ([stroke_layer(stroke)] if stroke else []) + (hatch_layers(fill['pattern']) if fill and fill.get('pattern') else []) + ([fill_layer(fill)] if fill else [])
     return {'type': 'CIMPolygonSymbol', 'symbolLayers': layers, 'angleAlignment': 'Map'}
 
 
@@ -206,57 +216,125 @@ RINGS = {'square': [[-2, -2], [-2, 2], [2, 2], [2, -2], [-2, -2]], 'triangle': [
 PATHS = {'cross': [[[0, -2], [0, 2]], [[-2, 0], [2, 0]]], 'x': [[[-2, -2], [2, 2]], [[-2, 2], [2, -2]]], 'chevron': [[[-2, -1], [0, 1], [2, -1]]]}
 
 
-def point_symbol(spec, where, notes):
-    """A CIMPointSymbol with one vector marker drawn in the map-style shape, fill and stroke."""
-    fill, stroke, marker = spec.get('fill'), spec.get('stroke'), spec.get('marker')
+def rotation_override(marker, primitive, turn, names):
+    """`rotationField` as a property connection of one symbol layer (a visual variable would rule the whole renderer,
+    and each class has its own marker): counter-clockwise like CIM, NULL or non-numeric adding nothing."""
+    if not marker.get('rotationField'):
+        return []
+    value = f'Number({arcade_field(marker["rotationField"], names)})'
+    expression = f'var v = {value};\nreturn -({number(float(marker.get("rotation", 0)) + turn)} + IIf(IsNan(v), 0, v))'
+    return [{'type': 'CIMPrimitiveOverride', 'primitiveName': primitive, 'propertyName': 'Rotation',
+             'valueExpressionInfo': expression_info('map-style rotationField', expression)}]
+
+
+def along_line_placement(marker):
+    """`placement: line`: every spacing, the first half a spacing from the start, whatever the line's length."""
+    spacing = pt(marker['spacing'])
+    return {'type': 'CIMMarkerPlacementAlongLineSameSize', 'angleToLine': bool(marker.get('alongLine', True)), 'endings': 'NoConstraint',
+            'offsetAlongLine': spacing / 2, 'placementTemplate': [spacing]}
+
+
+def marker_layer(spec, marker, where, notes, names, primitive, turn=0):
+    """The symbol layer that draws a marker in the symbol's fill and stroke, and its property connections. turn is added to the
+    rotation (an image or shape drawn pointing up, along a line). An SVG is a picture marker with the image inside the style."""
+    fill, stroke = spec.get('fill'), spec.get('stroke')
+    shape = marker['shape']
+    size = pt(marker['size'])
+    if shape == 'svg':
+        image = marker['_svg']
+        # CIM's size is the height and map-style's the longer side, so a wide image is written lower; it keeps its own colours
+        layer = {'type': 'CIMPictureMarker', 'enable': True, 'anchorPointUnits': 'Relative', 'dominantSizeAxis3D': 'Y',
+                 'size': size * min(1.0, image['height'] / image['width']), 'billboardMode3D': 'FaceNearPlane', 'invertBackfaceTexture': True,
+                 'scaleX': 1, 'textureFilter': 'Picture', 'tintColor': {'type': 'CIMRGBColor', 'values': [255, 255, 255, 100]},
+                 'url': 'data:image/svg+xml;base64,' + image['base64']}
+    else:
+        lines_only = shape == 'chevron' or (shape in ('cross', 'x') and not fill)
+        outline = stroke
+        if outline is None and (shape == 'ring' or lines_only) and fill:  # a hollow or line-only shape takes the fill colour for its lines
+            width = 1 if shape == 'ring' else max(1.0, float(marker['size']) * (0.19 if shape == 'chevron' else 0.12))
+            outline = {'color': fill['color'], 'width': width, 'opacity': fill.get('opacity', 1)}
+        plain = {'color': fill['color'], 'opacity': fill.get('opacity', 1)} if fill else None  # a marker cannot take a pattern
+        if lines_only:
+            graphic = {'type': 'CIMMarkerGraphic', 'geometry': {'paths': PATHS[shape]}, 'symbol': line_symbol(outline)}
+        else:
+            if shape in ('circle', 'ring'):
+                geometry = circle()
+            elif shape in ('cross', 'x'):
+                geometry = {'rings': [turned(CROSS, 45 if shape == 'x' else 0)]}
+            else:
+                geometry = {'rings': [RINGS[shape]]}
+            graphic = {'type': 'CIMMarkerGraphic', 'geometry': geometry,
+                       'symbol': polygon_symbol(None if shape == 'ring' else plain, outline)}
+        if not graphic['symbol']['symbolLayers']:
+            notes.append({**where, 'item': 'symbol', 'reason': 'the marker has neither fill nor stroke: nothing draws'})
+        layer = {'type': 'CIMVectorMarker', 'enable': True, 'anchorPointUnits': 'Relative', 'dominantSizeAxis3D': 'Z',
+                 'size': size, 'billboardMode3D': 'FaceNearPlane', 'frame': {'xmin': -2, 'ymin': -2, 'xmax': 2, 'ymax': 2},
+                 # stroke widths stay in points: with scaleSymbolsProportionally Pro multiplies them by size / frame height
+                 'markerGraphics': [graphic], 'respectFrame': True}
+    rotation = float(marker.get('rotation', 0)) + turn
+    if rotation:
+        layer['rotation'] = -rotation  # map-style turns clockwise, CIM counter-clockwise
+    overrides = rotation_override(marker, primitive, turn, names)
+    if overrides:
+        layer['primitiveName'] = primitive
+    return layer, overrides
+
+
+def point_symbol(spec, where, notes, names=None, overrides=None):
+    """A CIMPointSymbol with one marker in the map-style shape, fill and stroke; its property connections go into overrides."""
+    marker = spec.get('marker')
     if not marker:
         notes.append({**where, 'item': 'symbol.marker', 'reason': f'point symbol without a marker: drawn as a {DEFAULT_MARKER_PX} px circle'})
         marker = {'shape': 'circle', 'size': DEFAULT_MARKER_PX}
-    shape = marker['shape']
-    lines_only = shape == 'chevron' or (shape in ('cross', 'x') and not fill)
-    outline = stroke
-    if outline is None and (shape == 'ring' or lines_only) and fill:  # a hollow or line-only shape takes the fill colour for its lines
-        width = 1 if shape == 'ring' else max(1.0, float(marker['size']) * (0.19 if shape == 'chevron' else 0.12))
-        outline = {'color': fill['color'], 'width': width, 'opacity': fill.get('opacity', 1)}
-    if lines_only:
-        graphic = {'type': 'CIMMarkerGraphic', 'geometry': {'paths': PATHS[shape]}, 'symbol': line_symbol(outline)}
-    else:
-        if shape in ('circle', 'ring'):
-            geometry = circle()
-        elif shape in ('cross', 'x'):
-            geometry = {'rings': [turned(CROSS, 45 if shape == 'x' else 0)]}
-        else:
-            geometry = {'rings': [RINGS[shape]]}
-        graphic = {'type': 'CIMMarkerGraphic', 'geometry': geometry,
-                   'symbol': polygon_symbol(None if shape == 'ring' else fill, outline)}
-    if not graphic['symbol']['symbolLayers']:
-        notes.append({**where, 'item': 'symbol', 'reason': 'the marker has neither fill nor stroke: nothing draws'})
-    vector = {'type': 'CIMVectorMarker', 'enable': True, 'anchorPointUnits': 'Relative', 'dominantSizeAxis3D': 'Z',
-              'size': pt(marker['size']), 'billboardMode3D': 'FaceNearPlane', 'frame': {'xmin': -2, 'ymin': -2, 'xmax': 2, 'ymax': 2},
-              # stroke widths stay in points: with scaleSymbolsProportionally Pro multiplies them by size / frame height
-              'markerGraphics': [graphic], 'respectFrame': True}
-    if marker.get('rotation'):
-        vector['rotation'] = -float(marker['rotation'])  # map-style turns clockwise, CIM counter-clockwise
-    return {'type': 'CIMPointSymbol', 'symbolLayers': [vector], 'haloSize': 1, 'scaleX': 1, 'angleAlignment': 'Display'}
+    layer, connections = marker_layer(spec, marker, where, notes, names or {}, guid(json.dumps(where, sort_keys=True, ensure_ascii=False), 'marker'))
+    if overrides is not None:
+        overrides += connections
+    return {'type': 'CIMPointSymbol', 'symbolLayers': [layer], 'haloSize': 1, 'scaleX': 1, 'angleAlignment': 'Display'}
 
 
-def symbol(spec, geometry, where, notes):
+def along_marker(spec, where, notes, names):
+    """The symbol layer for `placement: line` on a line or an outline. CIM turns a marker with the line by the line's
+    angle, so a marker drawn pointing up would stand across the line; map-style's 0 points along it."""
+    marker = spec['marker']
+    if spec.get('stroke'):  # the dash belongs to the line the marker sits on
+        spec = {**spec, 'stroke': {k: v for k, v in spec['stroke'].items() if k != 'dash'}}
+    layer, overrides = marker_layer(spec, marker, where, notes, names, guid(json.dumps(where, sort_keys=True, ensure_ascii=False), 'along'),
+                                    turn=90 if marker.get('alongLine', True) else 0)
+    layer['markerPlacement'] = along_line_placement(marker)
+    return layer, overrides
+
+
+def symbol(spec, geometry, where, notes, names=None):
     """A CIMSymbolReference for one map-style Symbol on a layer of this geometry."""
-    fill, stroke = spec.get('fill'), spec.get('stroke')
+    fill, stroke, marker = spec.get('fill'), spec.get('stroke'), spec.get('marker')
+    names = names or {}
+    along = bool(marker) and marker.get('placement') == 'line'
+    overrides = []
+    if geometry != 'polygon' and fill and fill.get('pattern'):
+        notes.append({**where, 'item': 'symbol.fill.pattern', 'reason': 'a pattern fills polygons only: not drawn on this layer'})
     if geometry == 'polygon':
-        if spec.get('marker'):
-            notes.append({**where, 'item': 'symbol.marker', 'reason': 'a marker on a polygon layer is not drawn'})
+        if marker and not along:
+            notes.append({**where, 'item': 'symbol.marker', 'reason': 'a marker on a polygon layer is not drawn unless it runs along the outline (placement: line)'})
         body = polygon_symbol(fill, stroke)
     elif geometry == 'line':
-        for part in ('fill', 'marker'):
-            if spec.get(part):
-                notes.append({**where, 'item': f'symbol.{part}', 'reason': f'{part} on a line layer is not drawn'})
+        if fill and not along:
+            notes.append({**where, 'item': 'symbol.fill', 'reason': 'fill on a line layer is not drawn'})
+        if marker and not along:
+            notes.append({**where, 'item': 'symbol.marker', 'reason': 'a marker on a line layer is not drawn unless it runs along the line (placement: line)'})
         body = line_symbol(stroke)
     else:
-        body = point_symbol(spec, where, notes)
+        if along:
+            notes.append({**where, 'item': 'symbol.marker.placement', 'reason': 'a point layer draws one marker at each point: placement line does not apply'})
+        body = point_symbol(spec, where, notes, names, overrides)
+    if along and geometry != 'point':
+        layer, overrides = along_marker(spec, where, notes, names)
+        body['symbolLayers'].insert(0, layer)  # CIM draws the first symbol layer on top
     if not body['symbolLayers']:
         notes.append({**where, 'item': 'symbol', 'reason': f'nothing in this symbol draws on a {geometry} layer'})
-    return {'type': 'CIMSymbolReference', 'symbol': body}
+    reference = {'type': 'CIMSymbolReference', 'symbol': body}
+    if overrides:
+        reference['primitiveOverrides'] = overrides
+    return reference
 
 
 def empty_symbol(geometry):
@@ -279,12 +357,12 @@ def unique_class(label, values, symbol_ref, visible=True):
             'values': [{'type': 'CIMUniqueValue', 'fieldValues': [v]} for v in values], 'visible': visible}
 
 
-def unique_renderer(fields, classes, default, default_label, heading, geometry, where, notes, expression=None):
+def unique_renderer(fields, classes, default, default_label, heading, geometry, where, notes, expression=None, names=None):
     renderer = {'type': 'CIMUniqueValueRenderer', 'sampleSize': 10000, 'defaultLabel': default_label, 'defaultSymbolPatch': 'Default',
                 'fields': fields, 'groups': [{'type': 'CIMUniqueValueGroup', 'classes': classes, 'heading': heading}],
                 'useDefaultSymbol': default is not None, 'isDefaultSymbolVisible': default is not None, 'polygonSymbolColorTarget': 'Fill'}
     if default is not None:
-        renderer['defaultSymbol'] = symbol(default, geometry, {**where, 'class': 'default'}, notes)
+        renderer['defaultSymbol'] = symbol(default, geometry, {**where, 'class': 'default'}, notes, names)
     if expression:
         renderer['valueExpressionInfo'] = expression_info('map-style rules', expression)
     return renderer
@@ -331,13 +409,13 @@ def rule_renderer(layer, rules, names, where, notes):
                 continue
         key = str(len(classes) + 1)
         lines.append(f'if ({condition}) {{ return "{key}" }}')
-        classes.append(unique_class(label, [key], symbol(rule['symbol'], layer['geometry'], {**where, 'rule': label}, notes),
+        classes.append(unique_class(label, [key], symbol(rule['symbol'], layer['geometry'], {**where, 'rule': label}, notes, names),
                                     rule.get('visible', True) is not False))
     if default is not None:
-        classes.append(unique_class('other', ['default'], symbol(default, layer['geometry'], {**where, 'rule': 'default'}, notes)))
+        classes.append(unique_class('other', ['default'], symbol(default, layer['geometry'], {**where, 'rule': 'default'}, notes, names)))
     tail = 'return "default"' if default is not None else 'return null'
     expression = '\n'.join(['// map-style rules: the first that matches draws the feature'] + lines + [tail])
-    return unique_renderer([], classes, None, 'other', layer.get('title') or layer['id'], layer['geometry'], where, notes, expression)
+    return unique_renderer([], classes, None, 'other', layer.get('title') or layer['id'], layer['geometry'], where, notes, expression, names)
 
 
 def size_variable(spec, names):
@@ -365,14 +443,14 @@ def renderer(layer, names, notes):
     kind = spec['type']
     field = names.get(spec.get('field'), spec.get('field'))
     if kind == 'single':
-        result = {'type': 'CIMSimpleRenderer', 'sampleSize': 10000, 'patch': 'Default', 'symbol': symbol(spec['symbol'], geometry, where, notes)}
+        result = {'type': 'CIMSimpleRenderer', 'sampleSize': 10000, 'patch': 'Default', 'symbol': symbol(spec['symbol'], geometry, where, notes, names)}
     elif kind == 'categorized':
         classes = [unique_class(item.get('label', value_text(item['value'])), [value_text(item['value'])],
-                                symbol(item['symbol'], geometry, {**where, 'class': value_text(item['value'])}, notes), item.get('visible', True) is not False)
+                                symbol(item['symbol'], geometry, {**where, 'class': value_text(item['value'])}, notes, names), item.get('visible', True) is not False)
                    for item in spec['classes']]
         if spec.get('default') is not None:  # Pro's "all other values" leaves NULL out: NULL gets the default symbol as a class of its own
-            classes.append(unique_class('other (no value)', ['<Null>'], symbol(spec['default'], geometry, {**where, 'class': 'default'}, notes)))
-        result = unique_renderer([field], classes, spec.get('default'), 'other', layer.get('title') or spec['field'], geometry, where, notes)
+            classes.append(unique_class('other (no value)', ['<Null>'], symbol(spec['default'], geometry, {**where, 'class': 'default'}, notes, names)))
+        result = unique_renderer([field], classes, spec.get('default'), 'other', layer.get('title') or spec['field'], geometry, where, notes, names=names)
     elif kind == 'graduated' and contiguous(spec):
         classes = spec['classes']
         breaks = []
@@ -383,7 +461,7 @@ def renderer(layer, names, notes):
             # Pro compares (a double one step below still takes the bound into the lower class; checked in Pro 3.4)
             upper = below(high) if index < len(classes) - 1 else high
             breaks.append({'type': 'CIMClassBreak', 'label': item.get('label', f'{number(low)} - {number(high)}'), 'patch': 'Default',
-                           'symbol': symbol(item['symbol'], geometry, {**where, 'class': f'{number(low)}-{number(high)}'}, notes), 'upperBound': upper})
+                           'symbol': symbol(item['symbol'], geometry, {**where, 'class': f'{number(low)}-{number(high)}'}, notes, names), 'upperBound': upper})
         result = {'type': 'CIMClassBreaksRenderer', 'barrierWeight': 'High', 'classBreakType': 'GraduatedColor', 'field': field,
                   'heading': layer.get('title') or spec['field'], 'polygonSymbolColorTarget': 'Fill', 'classificationMethod': 'Manual',
                   'breaks': breaks, 'minimumBreak': float(classes[0]['range'][0]), 'showInAscendingOrder': True, 'sampleSize': 10000,
@@ -399,6 +477,10 @@ def renderer(layer, names, notes):
             notes.append({**where, 'item': 'size', 'reason': 'size by field applies to point markers only'})
         else:
             result['visualVariables'] = [size_variable(size, names)]
+            for mark in (s.get('marker') or {} for s in layer_symbols(layer)):
+                if '_svg' in mark and mark['_svg']['width'] > mark['_svg']['height']:
+                    notes.append({**where, 'item': 'size', 'kind': 'approximated',
+                                  'reason': 'a graduated size sets a picture marker\'s height: a wide SVG is drawn with its height, not its longer side, at the size'})
             if size.get('clamp', True) is False:
                 notes.append({**where, 'item': 'size.clamp', 'reason': 'values outside the domain are held at the end sizes (a graduated size variable always clamps)'})
     return result, result['type']
@@ -407,10 +489,9 @@ def renderer(layer, names, notes):
 # --- labels --------------------------------------------------------------------------------------------------------
 
 def text_symbol(style, fonts, where, notes):
-    """A CIMTextSymbol: the font is the installed family and style a theme alias resolves to (fonts: {alias:
-    (family, style)}); the halo is a solid polygon around the glyphs; `box` is a background callout."""
-    alias = style.get('font') or ''
-    family, named = fonts.get(alias, (alias, ''))
+    """A CIMTextSymbol: the font is the installed family and style a theme alias and weight resolve to (fonts:
+    _map_style.font_table); the halo is a solid polygon around the glyphs; `box` is a background callout."""
+    family, named = resolve_font(style, fonts)
     body = {'type': 'CIMTextSymbol', 'blockProgression': 'TTB', 'depth3D': 1, 'extrapolateBaselines': True, 'fontEffects': 'Normal',
             'fontEncoding': 'Unicode', 'fontFamilyName': family or 'Arial', 'fontStyleName': named or 'Regular', 'fontType': 'Unspecified',
             'height': pt(style['size']), 'hinting': 'Default', 'horizontalAlignment': 'Center', 'kerning': True, 'letterWidth': 100,
@@ -428,9 +509,12 @@ def text_symbol(style, fonts, where, notes):
         notes.append({**where, 'item': 'text.letterSpacing', 'reason': 'letter spacing in em is written as a percentage of the glyph width (approximate)'})
     box = style.get('box')
     if box:
-        padding = pt(box.get('padding', 0))
-        body['callout'] = {'type': 'CIMBackgroundCallout', 'backgroundSymbol': polygon_symbol(box.get('fill'), box.get('stroke')),
-                           'margin': {'type': 'CIMTextMargin', 'left': padding, 'right': padding, 'top': padding, 'bottom': padding}}
+        top, right, bottom, left = (pt(v) for v in padding_sides(box.get('padding')))
+        if (box.get('fill') or {}).get('pattern'):
+            notes.append({**where, 'item': 'text.box.fill.pattern', 'reason': 'a label box takes a plain fill: the pattern is not drawn'})
+        plain = {k: v for k, v in box['fill'].items() if k != 'pattern'} if box.get('fill') else None
+        body['callout'] = {'type': 'CIMBackgroundCallout', 'backgroundSymbol': polygon_symbol(plain, box.get('stroke')),
+                           'margin': {'type': 'CIMTextMargin', 'left': left, 'right': right, 'top': top, 'bottom': bottom}}
     return {'type': 'CIMSymbolReference', 'symbol': body}
 
 

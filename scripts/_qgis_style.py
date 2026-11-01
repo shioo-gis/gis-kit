@@ -20,7 +20,7 @@ import uuid
 import xml.etree.ElementTree as ET
 import zipfile
 
-from _map_style import classes_as_rules, mm, number
+from _map_style import classes_as_rules, mm, number, padding_sides, resolve_font
 
 QGIS_VERSION = '3.34.0-Prizren'  # the oldest QGIS whose QML/project format this writer follows (LTR)
 DOCTYPE = "<!DOCTYPE qgis PUBLIC 'http://mrcc.com/qgis.dtd' 'SYSTEM'>"
@@ -192,52 +192,130 @@ def line_options(stroke):
     return values
 
 
-def symbol(parent, spec, geometry, name, where, notes, size=None):
-    """<symbol> for one map-style Symbol on a layer of this geometry; size is a data-defined marker size expression."""
-    kind = SYMBOL_TYPES[geometry]
+def symbol_element(parent, kind, name):
     node = sub(parent, 'symbol', {'type': kind, 'name': name, 'alpha': 1, 'clip_to_extent': 1, 'force_rhr': 0})
     properties(node, 'data_defined_properties')
+    return node
+
+
+def rotation_property(marker, turn):
+    """The data-defined angle for `rotationField`: its degrees (clockwise, as QGIS's), NULL or non-numeric adding nothing, plus the static angle."""
+    if not marker.get('rotationField'):
+        return {}
+    return {'angle': ('expression', f'coalesce(try(to_real({field(marker["rotationField"])})), 0) + {number(float(marker.get("rotation", 0)) + turn)}')}
+
+
+def svg_marker(parent, marker, name, turn, size):
+    """An SVG marker with the image inside the style (base64:), so it travels with the GeoPackage. QGIS's size is the
+    width and map-style's the longer side, so a tall image is written narrower; it keeps its own colours."""
+    image = marker['_svg']
+    share = min(1.0, image['width'] / image['height'])
+    values = {'name': 'base64:' + image['base64'], 'size': number(mm(marker['size']) * share), 'size_unit': 'MM', 'scale_method': 'diameter',
+              'fixedAspectRatio': '0', 'color': '0,0,0,255', 'outline_color': '0,0,0,255', 'outline_width': '0', 'outline_width_unit': 'MM',
+              'angle': number((float(marker.get('rotation', 0)) + turn) % 360), 'offset': '0,0', 'offset_unit': 'MM',
+              'horizontal_anchor_point': '1', 'vertical_anchor_point': '1'}
+    dd = rotation_property(marker, turn)
+    if size:
+        dd['size'] = ('expression', f'({size}) * {number(share)}')
+    symbol_layer(parent, 'SvgMarker', values, f'{name}/marker', dd or None)
+
+
+def marker_layer(parent, spec, marker, name, where, notes, size=None, turn=0):
+    """The marker drawn in the symbol's fill and stroke; turn is added to its rotation (a marker along a line)."""
+    if marker['shape'] == 'svg':
+        svg_marker(parent, marker, name, turn, size)
+        return
+    fill, stroke = spec.get('fill'), spec.get('stroke')
+    shape = marker['shape']
+    qgis_name, shape_turn, lines_only = MARKERS[shape]
+    if shape in FILLED_CROSSES and fill:
+        (qgis_name, shape_turn), lines_only = FILLED_CROSSES[shape], False
+    ring = shape == 'ring'
+    outline = stroke
+    if outline is None and (ring or lines_only) and fill:  # a hollow or line-only shape takes the fill colour for its lines
+        width = 1 if ring else max(1.0, float(marker['size']) * (0.19 if shape == 'chevron' else 0.12))
+        outline = {'color': fill['color'], 'width': width, 'opacity': fill.get('opacity', 1)}
+    turn += shape_turn
+    values = {'name': qgis_name, 'size': number(mm(marker['size'])), 'size_unit': 'MM', 'scale_method': 'diameter',
+              'color': '0,0,0,0' if ring or lines_only or not fill else color(fill['color'], fill.get('opacity', 1)),
+              'outline_style': 'solid' if outline else 'no',
+              'outline_color': color(outline['color'], outline.get('opacity', 1)) if outline else '0,0,0,0',
+              'outline_width': number(mm(outline['width'])) if outline else '0', 'outline_width_unit': 'MM',
+              'joinstyle': JOINS[(outline or {}).get('join', 'miter')], 'cap_style': CAPS[(outline or {}).get('cap', 'butt')],
+              'angle': number((float(marker.get('rotation', 0)) + turn) % 360), 'offset': '0,0', 'offset_unit': 'MM',
+              'horizontal_anchor_point': '1', 'vertical_anchor_point': '1'}
+    if outline and outline.get('dash'):
+        notes.append({**where, 'item': 'symbol.stroke.dash', 'reason': 'dashed marker outlines are drawn solid'})
+    dd = rotation_property(marker, turn)
+    if size:
+        dd['size'] = ('expression', size)
+    symbol_layer(parent, 'SimpleMarker', values, f'{name}/marker', dd or None)
+
+
+def marker_line(parent, spec, name, where, notes):
+    """`placement: line`: a marker line, the first marker half a spacing from the start. QGIS turns a marker with the
+    line by the line's angle, so a marker's angle 0 (its up) would stand across the line; map-style's 0 points along it."""
+    marker = spec['marker']
+    if spec.get('stroke'):  # the dash belongs to the line the marker sits on
+        spec = {**spec, 'stroke': {k: v for k, v in spec['stroke'].items() if k != 'dash'}}
+    spacing = mm(marker['spacing'])
+    along = marker.get('alongLine', True)
+    node = symbol_layer(parent, 'MarkerLine', {'interval': number(spacing), 'interval_unit': 'MM', 'placements': 'Interval', 'placement': 'interval',
+                                               'offset_along_line': number(spacing / 2), 'offset_along_line_unit': 'MM', 'rotate': int(bool(along)),
+                                               'place_on_every_part': '1', 'ring_filter': '0', 'offset': '0', 'offset_unit': 'MM',
+                                               'average_angle_length': '0', 'average_angle_unit': 'MM'}, f'{name}/along')
+    marker_layer(symbol_element(node, 'marker', f'@{name}@along'), spec, marker, f'{name}/along', where, notes, turn=90 if along else 0)
+
+
+def pattern_layers(parent, pattern, name):
+    """`fill.pattern`: a line pattern fill per set of lines, whose angle is counter-clockwise like map-style's."""
+    angles = [float(pattern.get('angle', 45))]
+    if pattern['kind'] == 'crossHatch':
+        angles.append(angles[0] + 90)
+    for index, angle in enumerate(angles):
+        line = {'color': pattern['color'], 'width': pattern['width'], 'opacity': pattern.get('opacity', 1)}
+        node = symbol_layer(parent, 'LinePatternFill', {'angle': number(angle % 360), 'distance': number(mm(pattern['spacing'])), 'distance_unit': 'MM',
+                                                        'line_width': number(mm(pattern['width'])), 'line_width_unit': 'MM',
+                                                        'color': color(pattern['color'], pattern.get('opacity', 1)), 'offset': '0', 'offset_unit': 'MM',
+                                                        'coordinate_reference': 'feature', 'clip_mode': 'during_render'}, f'{name}/pattern{index}')
+        symbol_layer(symbol_element(node, 'line', f'@{name}@pattern{index}'), 'SimpleLine', line_options(line), f'{name}/pattern{index}/line')
+
+
+def symbol(parent, spec, geometry, name, where, notes, size=None):
+    """<symbol> for one map-style Symbol on a layer of this geometry; size is a data-defined marker size expression."""
+    node = symbol_element(parent, SYMBOL_TYPES[geometry], name)
     fill, stroke, marker = spec.get('fill'), spec.get('stroke'), spec.get('marker')
+    along = bool(marker) and marker.get('placement') == 'line'
+    if geometry != 'polygon' and fill and fill.get('pattern'):
+        notes.append({**where, 'item': 'symbol.fill.pattern', 'reason': 'a pattern fills polygons only: not drawn on this layer'})
     if geometry == 'polygon':
-        if marker:
-            notes.append({**where, 'item': 'symbol.marker', 'reason': 'a marker on a polygon layer is not drawn'})
+        if marker and not along:
+            notes.append({**where, 'item': 'symbol.marker', 'reason': 'a marker on a polygon layer is not drawn unless it runs along the outline (placement: line)'})
         if fill:
             symbol_layer(node, 'SimpleFill', {'color': color(fill['color'], fill.get('opacity', 1)), 'style': 'solid',
                                               'outline_style': 'no', 'outline_width': '0', 'outline_width_unit': 'MM',
                                               'outline_color': '0,0,0,0', 'joinstyle': 'miter', 'offset': '0,0', 'offset_unit': 'MM'},
                          f'{name}/fill')
+            if fill.get('pattern'):
+                pattern_layers(node, fill['pattern'], name)
         if stroke:  # an outline line layer keeps dashes, caps and joins that a fill's own border cannot
             symbol_layer(node, 'SimpleLine', line_options(stroke), f'{name}/stroke')
     elif geometry == 'line':
-        for part in ('fill', 'marker'):
-            if spec.get(part):
-                notes.append({**where, 'item': f'symbol.{part}', 'reason': f'{part} on a line layer is not drawn'})
+        if fill and not along:
+            notes.append({**where, 'item': 'symbol.fill', 'reason': 'fill on a line layer is not drawn'})
+        if marker and not along:
+            notes.append({**where, 'item': 'symbol.marker', 'reason': 'a marker on a line layer is not drawn unless it runs along the line (placement: line)'})
         if stroke:
             symbol_layer(node, 'SimpleLine', line_options(stroke), f'{name}/stroke')
     else:
         if not marker:
             notes.append({**where, 'item': 'symbol.marker', 'reason': f'point symbol without a marker: drawn as a {DEFAULT_MARKER_PX} px circle'})
             marker = {'shape': 'circle', 'size': DEFAULT_MARKER_PX}
-        shape = marker['shape']
-        qgis_name, turn, lines_only = MARKERS[shape]
-        if shape in FILLED_CROSSES and fill:
-            (qgis_name, turn), lines_only = FILLED_CROSSES[shape], False
-        ring = shape == 'ring'
-        outline = stroke
-        if outline is None and (ring or lines_only) and fill:  # a hollow or line-only shape takes the fill colour for its lines
-            width = 1 if ring else max(1.0, float(marker['size']) * (0.19 if shape == 'chevron' else 0.12))
-            outline = {'color': fill['color'], 'width': width, 'opacity': fill.get('opacity', 1)}
-        values = {'name': qgis_name, 'size': number(mm(marker['size'])), 'size_unit': 'MM', 'scale_method': 'diameter',
-                  'color': '0,0,0,0' if ring or lines_only or not fill else color(fill['color'], fill.get('opacity', 1)),
-                  'outline_style': 'solid' if outline else 'no',
-                  'outline_color': color(outline['color'], outline.get('opacity', 1)) if outline else '0,0,0,0',
-                  'outline_width': number(mm(outline['width'])) if outline else '0', 'outline_width_unit': 'MM',
-                  'joinstyle': JOINS[(outline or {}).get('join', 'miter')], 'cap_style': CAPS[(outline or {}).get('cap', 'butt')],
-                  'angle': number((float(marker.get('rotation', 0)) + turn) % 360), 'offset': '0,0', 'offset_unit': 'MM',
-                  'horizontal_anchor_point': '1', 'vertical_anchor_point': '1'}
-        if outline and outline.get('dash'):
-            notes.append({**where, 'item': 'symbol.stroke.dash', 'reason': 'dashed marker outlines are drawn solid'})
-        symbol_layer(node, 'SimpleMarker', values, f'{name}/marker', {'size': ('expression', size)} if size else None)
+        if along:
+            notes.append({**where, 'item': 'symbol.marker.placement', 'reason': 'a point layer draws one marker at each point: placement line does not apply'})
+        marker_layer(node, spec, marker, name, where, notes, size)
+    if along and geometry != 'point':
+        marker_line(node, spec, name, where, notes)
     if not len(node.findall('layer')):
         notes.append({**where, 'item': 'symbol', 'reason': f'nothing in this symbol draws on a {geometry} layer'})
     return node
@@ -382,10 +460,9 @@ def template_expression(template):
 
 
 def text_style(parent, style, field_name, is_expression, fonts, where, notes):
-    """<text-style>: the font is the installed family and style a theme alias resolves to (fonts: {alias: (family,
-    style)}); letter spacing in em becomes mm at the text size; halo blur is a blur effect on the buffer."""
-    alias = style.get('font') or ''
-    family, named = fonts.get(alias, (alias, ''))
+    """<text-style>: the font is the installed family and style a theme alias and weight resolve to (fonts:
+    _map_style.font_table); letter spacing in em becomes mm at the text size; halo blur is a blur effect on the buffer."""
+    family, named = resolve_font(style, fonts)
     size = mm(style['size'])
     attrs = {'fontFamily': family, 'namedStyle': named, 'fontSize': number(size), 'fontSizeUnit': 'MM',
              'textColor': color(style['color']), 'textOpacity': number(style.get('opacity', 1)), 'fieldName': field_name,
@@ -406,8 +483,14 @@ def text_style(parent, style, field_name, is_expression, fonts, where, notes):
     box = style.get('box')
     if box:
         fill, stroke = box.get('fill'), box.get('stroke')
-        padding = number(mm(box.get('padding', 0)))
-        sub(node, 'background', {'shapeDraw': 1, 'shapeType': 0, 'shapeSizeType': 0, 'shapeSizeX': padding, 'shapeSizeY': padding,
+        top, right, bottom, left = padding_sides(box.get('padding'))
+        if top != bottom or left != right:
+            notes.append({**where, 'item': 'text.box.padding', 'kind': 'approximated',
+                          'reason': f'a QGIS label background has one horizontal and one vertical size: padding {box["padding"]} is drawn with each pair averaged'})
+        if fill and fill.get('pattern'):
+            notes.append({**where, 'item': 'text.box.fill.pattern', 'reason': 'a label box takes a plain fill: the pattern is not drawn'})
+        sub(node, 'background', {'shapeDraw': 1, 'shapeType': 0, 'shapeSizeType': 0, 'shapeSizeX': number(mm((left + right) / 2)),
+                                 'shapeSizeY': number(mm((top + bottom) / 2)),
                                  'shapeSizeUnit': 'MM', 'shapeOpacity': 1, 'shapeBlendMode': 0, 'shapeJoinStyle': 64,
                                  'shapeFillColor': color(fill['color'], fill.get('opacity', 1)) if fill else '0,0,0,0',
                                  'shapeBorderColor': color(stroke['color'], stroke.get('opacity', 1)) if stroke else '0,0,0,0',

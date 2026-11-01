@@ -28,6 +28,7 @@ from __future__ import annotations
 
 import argparse
 from datetime import datetime, timezone
+import hashlib
 import json
 import math
 from pathlib import Path, PurePosixPath
@@ -700,7 +701,7 @@ def pack_raster(entry, gpkg, stage, scope, bbox, tiles=True):
 def placement_tables(document, gpkg, fonts, driver='GPKG', extra=None, crs=None):
     """labelPlacements as a point table (map_labels) and their leaders as a line table (map_label_leaders).
 
-    Each label carries the panel of the layer it belongs to and a style_id (its text style among the distinct ones),
+    Each label carries its panel (its own, else that of the layer it belongs to) and a style_id (its text style among the distinct ones),
     each leader a stroke_id (its leaderStroke, or the text colour at 1 px); the platform draws one rule (or label
     class) per style and stroke. extra(placement) adds a writer's own fields. The tables are in EPSG:4326, the
     positions as given, unless crs names another CRS to project them to. Field renames on writing are returned.
@@ -719,11 +720,11 @@ def placement_tables(document, gpkg, fonts, driver='GPKG', extra=None, crs=None)
     for index, item in enumerate(document.get('labelPlacements') or []):
         style = item['style']
         halo = style.get('halo')
-        family, named = fonts.get(style.get('font'), (style.get('font'), ''))
-        panel = panels.get(item.get('layer'))
+        family, named = _map_style.resolve_font(style, fonts)
+        panel = item.get('panel') or panels.get(item.get('layer'))
         labels.append({'label_id': index + 1, 'panel': panel, 'layer': item.get('layer'),
                        'feature_id': None if item.get('featureId') is None else str(item['featureId']), 'text': item['text'],
-                       'style_id': index_of(styles, style), 'font': family, 'font_style': named or None, 'font_name': style.get('font'),
+                       'style_id': index_of(styles, style), 'font': family or style.get('font'), 'font_style': named or None, 'font_name': style.get('font'),
                        'size_px': float(style['size']), **(extra(item) if extra else {}), 'color': style['color'],
                        'halo_color': halo['color'] if halo else None, 'halo_px': float(halo['width']) if halo else None,
                        'anchor': item.get('anchor', 'center'), 'rotation': float(item.get('rotation', 0)), 'has_leader': bool(item.get('leader')),
@@ -747,12 +748,18 @@ def placement_tables(document, gpkg, fonts, driver='GPKG', extra=None, crs=None)
 
 
 def panel_order(document):
-    """Panel ids, main first: extent.panels in order, then any other panel a layer names."""
+    """Panel ids, main first: extent.panels in order, then any other panel a layer or a placed label names."""
     order = [p['id'] for p in (document.get('extent') or {}).get('panels') or []]
-    for layer in document['layers']:
-        if layer.get('panel') and layer['panel'] not in order:
-            order.append(layer['panel'])
+    for item in document['layers'] + (document.get('labelPlacements') or []):
+        if item.get('panel') and item['panel'] not in order:
+            order.append(item['panel'])
     return order
+
+
+def panel_frame(document, panel):
+    """The panel's place on the page, for the manifest: nothing uses it until there is a page layout."""
+    item = next((p for p in (document.get('extent') or {}).get('panels') or [] if p['id'] == panel), {})
+    return {'frame': item['frame']} if item.get('frame') else {}
 
 
 def layer_tree(rows, panels):
@@ -826,14 +833,32 @@ def prepare(args, platform):
         renderer = layer.get('renderer') or {}
         for rule in renderer.get('rules', []) if renderer.get('type') == 'rule' else []:
             _map_style.check_filter(rule['filter'], where)
-    fonts = _map_style.font_names(document)
+    fonts = _map_style.font_table(document)
     for row in _map_style.fonts_used(document):
-        if row.get('unresolved') and row['used_by']:
+        if row.get('unresolved'):
             notes.append({'layer': ', '.join(row['used_by']), 'item': 'font',
                           'reason': f'{row["name"]!r} has no fonts[] entry with names; {platform} is given it as written'})
-    datasets, tiles = {}, []
+        if 'substituted_weight' in row:
+            notes.append({'layer': ', '.join(row['used_by']), 'item': 'font.weight', 'kind': 'approximated',
+                          'reason': f'{row["name"]!r} has no weight {_map_style.number(row.get("weight", 400))}: '
+                                    f'the closest, {_map_style.number(row["substituted_weight"])}, is used'})
+    if any(p.get('frame') for p in (document.get('extent') or {}).get('panels') or []):
+        notes.append({'layer': None, 'item': 'extent.panels.frame', 'reason': 'there is no page layout in the package yet: '
+                                                                               'the panels\' positions on the page are only recorded (panels[].frame)'})
+    datasets, tiles, icons = {}, [], {}
     for layer in document['layers']:
         data = layer['data']
+        if data.get('kind') not in TILE_KINDS:
+            for symbol in _map_style.layer_symbols(layer):
+                marker = symbol.get('marker')
+                if not marker:
+                    continue
+                _map_style.check_marker(marker, f'layer {layer["id"]}')
+                if marker.get('shape') == 'svg':
+                    row = _map_style.load_svg(marker, roots, f'layer {layer["id"]}')
+                    icon = icons.setdefault(row['ref'], {**row, 'layers': []})
+                    if layer['id'] not in icon['layers']:
+                        icon['layers'].append(layer['id'])
         if data.get('kind') in TILE_KINDS:  # tiles cannot be cut to the map extent or stored as a table
             tiles.append({'ref': data['path'], 'layers': [layer['id']], 'reason': f'{data["kind"]}: tiles are not packed'})
             continue
@@ -855,7 +880,7 @@ def prepare(args, platform):
         entry['refs'].add(data['path'])
         entry['layers'].append(layer['id'])
     return {'style_path': style_path, 'document': document, 'scope': scope, 'margin': margin, 'bbox': bbox, 'notes': notes,
-            'fonts': fonts, 'datasets': datasets, 'tiles': tiles, 'platform': platform}
+            'fonts': fonts, 'datasets': datasets, 'tiles': tiles, 'platform': platform, 'icons': list(icons.values())}
 
 
 def store(ctx, stage, target, driver, tiles=True):
@@ -904,13 +929,13 @@ def shared_warnings(ctx, packed, size):
     warnings = []
     if size > LARGE_BYTES:
         warnings.append(f'The package is {size / 2**20:.0f} MiB; --clip keeps less, or check what the map really needs')
-    font_rows = [row for row in _map_style.fonts_used(ctx['document']) if row['used_by']]
+    font_rows = _map_style.fonts_used(ctx['document'])
     if font_rows:
         families = sorted({' '.join(filter(None, (row['family'], row['style']))) for row in font_rows})
         warnings.append(f'The map uses the fonts {", ".join(families)}; {ctx["platform"]} substitutes another font where they are not installed')
     if ctx['document'].get('notes'):
         warnings.append(f'The map-style producer reports {len(ctx["document"]["notes"])} thing(s) it could not express exactly (see producer_notes)')
-    if any(entry['root'].startswith('@') for entry in packed.values()):
+    if any(entry['root'].startswith('@') for entry in [*packed.values(), *ctx['icons']]):
         warnings.append('Some data comes from external data roots (see datasets[].root); check its licence before sending the package')
     return warnings, font_rows
 
@@ -1040,12 +1065,14 @@ def pack_qgis(ctx, stage, args):
                     'open': f'QGIS: Project > Open From > GeoPackage, or open {gpkg.name} in the Browser and double-click project {name}'},
         'datasets': [dataset_row(entry, scope) for entry in packed.values()],
         'layers': layer_rows,
-        'panels': [{'id': panel, 'shown': index == 0, 'bookmark': any(b[0] == panel for b in bookmarks)} for index, panel in enumerate(panels)],
+        'panels': [{'id': panel, 'shown': index == 0, 'bookmark': any(b[0] == panel for b in bookmarks), **panel_frame(document, panel)}
+                   for index, panel in enumerate(panels)],
         'background': (background or {}).get('color'),
         'label_placements': {'labels': label_count, 'leaders': leader_count, 'table': 'map_labels' if label_count else None,
                              'leader_table': 'map_label_leaders' if leader_count else None,
                              'text_styles': len(placed['styles']), 'leader_strokes': len(placed['strokes'])},
         'fonts': font_rows,
+        'icons': ctx['icons'],
         'producer_notes': document.get('notes') or [],
         'not_packed': not_packed,
         'unsupported': unique_notes(notes),
@@ -1085,6 +1112,14 @@ def relink(node, mapping):
     if isinstance(node, list):
         return [relink(v, mapping) for v in node]
     return node
+
+
+def folder_digest(folder):
+    """One SHA-256 over every file under folder, names included."""
+    combined = hashlib.sha256()
+    for path in sorted(p for p in folder.rglob('*') if p.is_file()):
+        combined.update(f'{path.relative_to(folder).as_posix()} {digest(path)}\n'.encode())
+    return combined.hexdigest()
 
 
 def background_polygon(document, bbox, packed, crs):
@@ -1213,7 +1248,8 @@ def pack_arcgis_pro(ctx, stage, args):
     layer_document = cim.document([top['uRI']], definitions)
     (build / 'p30').mkdir()
     (build / 'p30' / f'{name}.lyrx').write_text(json.dumps(layer_document, ensure_ascii=False, indent=2), encoding='utf-8')
-    item_id = cim.guid(document['id'], name)
+    # Pro unpacks a package once per ID (under Documents\\ArcGIS\\Packages) and reuses that copy, so new content needs a new ID
+    item_id = cim.guid(document['id'], name, folder_digest(build))
     (build / 'esriinfo').mkdir()
     (build / 'esriinfo' / 'item.pkinfo').write_text(cim.pkinfo(item_id, name), encoding='utf-8')
     (build / 'esriinfo' / 'iteminfo.xml').write_text(
@@ -1252,12 +1288,13 @@ def pack_arcgis_pro(ctx, stage, args):
                         + (f'. Or Add Data > {name}.lyrx, kept beside {gdb.name}' if args.lyrx else '')},
         'datasets': [dataset_row(entry, scope) for entry in packed.values()],
         'layers': layer_rows,
-        'panels': [{'id': panel, 'shown': index == 0} for index, panel in enumerate(panels)],
+        'panels': [{'id': panel, 'shown': index == 0, **panel_frame(document, panel)} for index, panel in enumerate(panels)],
         'background': {'color': background['color'], 'layer': 'map_background'} if background else None,
         'label_placements': {'labels': label_count, 'leaders': leader_count, 'table': 'map_labels' if label_count else None,
                              'leader_table': 'map_label_leaders' if leader_count else None,
                              'text_styles': len(placed['styles']), 'leader_strokes': len(placed['strokes'])},
         'fonts': font_rows,
+        'icons': ctx['icons'],
         'producer_notes': document.get('notes') or [],
         'not_packed': not_packed,
         'unsupported': unique_notes(notes),
