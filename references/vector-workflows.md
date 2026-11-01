@@ -5,6 +5,21 @@
 - `gpkg.py sql --query` 接收完整 SQL，例如 `SELECT * FROM parcels WHERE area > 1000`；GDB 优先 OGR SQL，不将 query 当作 where 条件。
 - File GDB 使用 GDAL OpenFileGDB 驱动；写入需 GDAL ≥ 3.6，受限功能先输出 GPKG，不冒充写入成功。
 - `gpkg.py` 只读 File GDB：`import`、`copy`、`export`、`sql --output` 写到 `.gdb` 以及对 `.gdb` 的 `drop`、`rename` 都会拒绝，报错写明运行时 GDAL 的 File GDB 能力和改用 `.gpkg` 的做法。gis-kit 写出的 GDB 经 ArcGIS 验收之前不放开。
+
+## File GDB 兼容性实测
+
+2026-11-01 用 GDAL 3.11.4（pyogrio 0.12.1）的 OpenFileGDB 写出一份虚构 `.gdb`：两个图层（`parcels` 面、`设施点` 点），中文字段名和中文值，有空值、带洞面和多部件面，坐标系 EPSG:4547（CGCS2000 3 度带）。分别用 ArcGIS Pro 3.4.3 和 ArcMap 10.8 的 arcpy 打开，结果一致：
+
+- 两边都能识别图层（release `3,0,0`），要素数、字段名与类型（String / Double / Integer / Date）、属性值、坐标、面积合计、EPSG:4547 都与写入时一致；`CheckGeometry` 没有报问题。
+- 用 arcpy 复制后插入、更新中文值并 `Compact`，两边都能正常完成；改过的副本 GDAL 也能读回。
+- 这只证明 ArcGIS 能打开这份文件，不能代替按交付模板（字段长度、别名、域、要素数据集）所做的验收，所以 `gpkg.py` 仍拒绝写 GDB。
+
+以后放开写入时，要注意 GDAL 写 GDB 的几处默认行为：
+
+- `int64` 列写成 Double（GDAL 会警告）。整数字段先转成 `int32`；只有确定目标是 Pro 3.2 及以上时，才用 `TARGET_ARCGIS_VERSION=ARCGIS_PRO_3_2_OR_LATER` 写成 BigInteger。
+- 存放 Python `date` 对象的 object 列写成 String，要先转成 `datetime64` 才是 Date 字段；GDAL 读回时日期带 UTC 时区。
+- 同一图层里 Polygon 和 MultiPolygon 混在一起会被拒绝（`Unsupported geometry type`），要用 `promote_to_multi=True` 统一成多部件。
+- 文本字段不给宽度时，ArcGIS 里读出来的长度是 65536，不是 ArcGIS 默认的 255；有模板时按模板设定宽度。
 - `batch.py --script` 用于简单单输入、`--output` 形式的脚本；带子命令或多参数布局使用 `--command` 及 `{input}` / `{output}`。必要时用 `--runner` 选择已有解释器，不假设所有脚本兼容简单模式。
 - 大文件优先选脚本已提供的数据裁剪或分块能力：`clip.py` 的普通 bbox 裁剪可下推；`merge.py --chunk-size` 顺序读写。分块本身不保证全局运算等价。
 

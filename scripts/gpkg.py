@@ -34,7 +34,7 @@ def gdal_gdb_support() -> str:
     version = pyogrio.__gdal_version_string__
     caps = pyogrio.list_drivers().get("OpenFileGDB")
     if caps and "w" in caps:
-        return f"GDAL {version} here can write File GDB (OpenFileGDB driver), but gis-kit's File GDB output has not been checked in ArcGIS yet, so gpkg.py keeps File GDB read-only."
+        return f"GDAL {version} here can write File GDB (OpenFileGDB driver), but gis-kit has no File GDB output accepted against a delivery template yet, so gpkg.py keeps File GDB read-only."
     if caps:
         return f"GDAL {version} here can only read File GDB (writing through OpenFileGDB needs GDAL >= 3.6)."
     return f"GDAL {version} here has no OpenFileGDB driver."
