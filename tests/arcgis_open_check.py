@@ -8,14 +8,19 @@ direct .lyrx and of the layer file extracted from the .lpkx (ExtractPackage) wit
 renderer, classes and colours, definition query, label classes and feature count; then adds the extracted layer
 file, which is what a colleague opens, to a new map in EPSG, exports the extent (lon/lat) to OUT.png and samples the
 colour at each LON,LAT.
+
+The work folder (the extracted package and the project) is made in %TEMP% by the process you start, which only runs
+a child process that does the arcpy work. Pro keeps the extracted geodatabase and the project open until its process
+ends, whatever is released in Python, so the folder is removed after the child has exited, on success and on
+failure; a folder that still cannot be removed is reported on stderr.
 """
 import json
 import os
 import shutil
+import subprocess
 import sys
 import tempfile
-
-import arcpy
+import time
 
 
 def colour(value):
@@ -79,11 +84,13 @@ def blank_project(folder):
     raise SystemExit('no Blank.aprx found under the ArcGIS Pro install folder')
 
 
-def main():
-    folder, name, png, epsg, bbox = sys.argv[1], sys.argv[2], sys.argv[3], int(sys.argv[4]), [float(v) for v in sys.argv[5].split(',')]
-    points = [tuple(float(v) for v in item.split(',')) for item in sys.argv[6:]]
+def inspect_package(work, args):
+    """The arcpy work, in the child process: print the JSON report; the extracted package and the project go in work."""
+    folder, name, png, epsg, bbox = args[0], args[1], args[2], int(args[3]), [float(v) for v in args[4].split(',')]
+    points = [tuple(float(v) for v in item.split(',')) for item in args[5:]]
+    global arcpy
+    import arcpy  # only the child loads it; the parent just waits and cleans up
     arcpy.env.overwriteOutput = True
-    work = tempfile.mkdtemp(prefix='gis-kit-pro-')
     report = {'version': arcpy.GetInstallInfo()['Version']}
     direct = os.path.join(folder, name + '.lyrx')
     if os.path.exists(direct):
@@ -116,9 +123,29 @@ def main():
             x = int((point.X - extent.XMin) / (extent.XMax - extent.XMin) * width)
             y = int((extent.YMax - point.Y) / (extent.YMax - extent.YMin) * height)
             report['samples'].append('#%02x%02x%02x' % image.getpixel((x, y)))
-    del project
-    shutil.rmtree(work, ignore_errors=True)
     print(json.dumps(report, ensure_ascii=False))
+
+
+def remove(work):
+    """Remove the work folder, trying again for a moment in case the files are still being released."""
+    failures = []
+    for _ in range(5):
+        failures.clear()
+        shutil.rmtree(work, onerror=lambda function, path, error: failures.append(f'{path}: {error[1]}'))
+        if not failures:
+            return
+        time.sleep(1)
+    print(f'could not remove {work} ({len(failures)} paths, first: {failures[0]})', file=sys.stderr)
+
+
+def main():
+    if sys.argv[1] == '--work':
+        return inspect_package(sys.argv[2], sys.argv[3:])
+    work = tempfile.mkdtemp(prefix='gis-kit-pro-')
+    try:
+        sys.exit(subprocess.run([sys.executable, os.path.abspath(__file__), '--work', work, *sys.argv[1:]]).returncode)
+    finally:
+        remove(work)
 
 
 if __name__ == '__main__':
