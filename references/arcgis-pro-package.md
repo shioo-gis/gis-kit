@@ -33,7 +33,7 @@ python package.py pack maps/example.map-style.json --output /work/send/example-p
 ```
 
 - 图层文件放在 `p30/`（ArcGIS Pro 3.x），里面的 CIM 版本是 3.0.0，即 Pro 3.0 起都能读；Pro 在别处另存的 `.lyrx` 写的是安装版本（3.4.0），打进包时降到 3.0.0。
-- ArcMap 的图层包（`.lpk`）是另一种布局：`v10/`、`v105/` 等版本文件夹里放 `.lyr`，见 [esri-package.md](esri-package.md)。
+- ArcMap 的图层包（`.lpk`）是另一种布局：`v10/`、`v105/` 等版本文件夹里放 `.lyr`，见 [esri-package.md](esri-package.md)；gis-kit 用 `--format arcmap` 写，见 [arcmap-package.md](arcmap-package.md)。
 - gis-kit 照此写：`commondata/<名>.gdb`、`commondata/rasters/*.tif`、`p30/<名>.lyrx`、`esriinfo/item.pkinfo`（`version` 写 13.0，与 `p30`、CIM 3.0.0 对应）、`esriinfo/iteminfo.xml`；不写缩略图。用 bsdtar（libarchive，macOS 自带）写 7z，没有时用 7-Zip（`7z`、`7za`、`7zz`），两者都没有就报错。Pro 3.4.3 的 `ExtractPackage` 能解开，解出的图层全部连得上数据（见“验证”）。
 - **包 ID 随内容变化**：Pro 按包 ID 把包解到 `文档\ArcGIS\Packages\<名>_<短哈希>`，再遇到同一个 ID 就直接用这份旧副本，`ExtractPackage` 换了输出文件夹也一样（Pro 3.4.3 实测）。所以 `item.pkinfo` 的 ID 由图名和包内所有文件的哈希算出：改了样式或数据重新打包，同事打开的就是新内容。这个缓存目录里的旧副本 Pro 不会自己清理。
 
@@ -105,7 +105,7 @@ ArcMap 读不了 ArcGIS Pro 的格式（ArcMap 10.8 实测）：
 - `.lyrx`：`arcpy.mapping.Layer` 报“CreateObject Layer 的数据源无效”；在 ArcMap 里添加也同样不认。
 - `.lpkx`：`ExtractPackage` 报 `ERROR 000814: 无效的文件类型`。ArcMap 只认 `.lpk`。
 
-给 ArcMap 的同事时，用 `--lyrx` 打包，把 `<名>.gdb` 和 `rasters/` 发过去：ArcMap 10.8 能直接读 gis-kit 写的文件地理数据库（几何类型、坐标系、要素数、中文字段名都正确，图层不断链）和 GeoTIFF，只是没有样式，要照 `package.json` 的 `layers` 手动配。gis-kit 不写 ArcMap 的 `.lyr`（二进制格式）。
+给 ArcMap 的同事时，现在可以直接用 `--format arcmap` 打成 `.lpk`（见 [arcmap-package.md](arcmap-package.md)）。也可以用 `--lyrx` 打包，把 `<名>.gdb` 和 `rasters/` 发过去：ArcMap 10.8 能直接读 gis-kit 写的文件地理数据库（几何类型、坐标系、要素数、中文字段名都正确，图层不断链）和 GeoTIFF，只是没有样式，要照 `package.json` 的 `layers` 手动配。gis-kit 不写 ArcMap 的 `.lyr`（二进制格式）。
 
 ## 清单
 

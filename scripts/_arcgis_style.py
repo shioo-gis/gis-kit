@@ -790,19 +790,19 @@ def xml_text(value):
     return str(value).replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
 
 
-def pkinfo(item_id, name):
-    """esriinfo/item.pkinfo, as Pro writes it for a layer package."""
+def pkinfo(item_id, name, version='13.0'):
+    """esriinfo/item.pkinfo, as Pro writes it for a layer package (the ArcMap writer passes its own version)."""
     return ('<?xml version="1.0" encoding="utf-8" ?>\n'
             "<pkinfo Culture='en-US'>\n"
-            f'<ID>{item_id}</ID>\n<name>{xml_text(name)}</name>\n<version>13.0</version>\n<size>-1</size>\n<created></created>\n'
+            f'<ID>{item_id}</ID>\n<name>{xml_text(name)}</name>\n<version>{version}</version>\n<size>-1</size>\n<created></created>\n'
             '<type>Layer Package</type>\n<servable>false</servable>\n<packagelocation></packagelocation>\n<pkinfolocation></pkinfolocation>\n'
             '</pkinfo>\n')
 
 
-def iteminfo(item_id, name, title, summary, tags, bbox, crs_name):
+def iteminfo(item_id, name, title, summary, tags, bbox, crs_name, keywords=('Layer Package', 'Data', 'ArcGIS Pro', 'lpkx')):
     """esriinfo/iteminfo.xml: the item description ArcGIS shows for the package; bbox in degrees."""
     extent = ''.join(f'<{k}>{v!r}</{k}>\n' for k, v in zip(('xmin', 'ymin', 'xmax', 'ymax'), bbox)) if bbox else ''
-    keywords = ''.join(f'<typekeyword>{k}</typekeyword>\n' for k in ('Layer Package', 'Data', 'ArcGIS Pro', 'lpkx'))
+    keywords = ''.join(f'<typekeyword>{k}</typekeyword>\n' for k in keywords)
     return ('<?xml version="1.0" encoding="utf-8" ?>\n'
             "<ESRI_ItemInformation Culture='en-US'>\n"
             f'<name>{xml_text(name)}</name>\n<guid>{item_id}</guid>\n<version>1.0</version>\n<created></created>\n<modified></modified>\n'

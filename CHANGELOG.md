@@ -2,6 +2,7 @@
 
 ## 未发布
 
+- `package.py pack --format arcmap`（#45 写入方向，gis-plugin#16 第三个平台）：把 `map-style` v1 打成 ArcMap 图层包 `.lpk`（7z；`v107/<名>.gdb`、`v107/`、`v105/`、`v10/` 各一份 `.lyr`、`esriinfo/`），`--lyr` 另把图层文件放在解开的数据旁边。闭源的 `.lyr` 不从零序列化：新模块 `_arcmap_style.py` 自带 CFB v3 读写（不依赖 olefile），裁切、改写、拼接 `templates/arcmap/` 里 ArcObjects 用虚构数据写的骨架（生成方法和脚本在 `tests/arcmap_skeletons/`），并重排对象编号。组装结果与 ArcObjects 写的文件除 Lab 末位外逐字节相同（单元测试比对摘要）。single、categorized、graduated 写成简单、唯一值、分级渲染器，任意类数；rule 和带缺口的 graduated 写成组图层，每条规则一个单一符号图层加定义查询；线宽、标记大小与形状、空填充、透明度、筛选、标注字段与表达式、字体、晕边，面板和分组写成组图层。颜色按 ArcObjects 的 gamma 1.8 矩阵写 CIELAB。栅格、阴影线、比例圆、箭头形标记等没有骨架的列入 `unsupported`。在 ArcMap 10.8、ArcGIS Pro 3.4.3 上实测（`tests/arcmap_open_check.py`、`tests/arcmap_open_check_pro.py`）：不断链，渲染器类型、类、分界值读回一致，渲染像素与请求的颜色逐字节相同；据此把数据放进 `v107/`（Pro 解 `.lpk` 只取最新版本文件夹，`commondata/` 不会解出）。清单 `arcmap-package` v1，`gis.py capabilities` 已声明。说明见 `references/arcmap-package.md`。
 - 修复 Windows 上的文件读写：工具读写文本（`--params`、`package.json`、`<id>.map-style.json` 等）都明确用 UTF-8，不再用系统代码页。此前 `package.py read` 遇到中文必然失败。`batch.py`、`recipe.py` 读子工具输出也固定 UTF-8。
 - `package.py` 的 7-Zip 列表在 Windows 上也用 `/` 分隔路径。
 - `raster.py <操作> --help` 列出这个操作的 `--params`，内容直接取自 references，不再只有通用用法。
