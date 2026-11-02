@@ -7,7 +7,9 @@ import hashlib
 import math
 import os
 from pathlib import Path
+import re
 import shutil
+import sys
 import tempfile
 
 import numpy as np
@@ -277,8 +279,21 @@ def execute(args):
     print(json.dumps({'output':str(destination),'record':'record.json'}))
 
 
+def operation_help(operation):
+    """What the references say about one operation's --params: the table rows, bullets and paragraphs that start with its name."""
+    starts=re.compile(r'(\|\s*|- )?\*{0,2}`'+re.escape(operation)+'`')
+    found=[]
+    for name in ('analysis-extensions.md','raster-numeric.md','raster-cleanup.md','composer-display.md'):
+        path=Path(__file__).resolve().parents[1]/'references'/name
+        lines=[line.strip() for line in path.read_text(encoding='utf-8').splitlines() if starts.match(line)]
+        if lines: found+=[f'references/{name}:',*lines]
+    return '\n'.join([f'Parameters of {operation} (--params is a JSON file with schema_version 1):',*found]) if found else None
+
+
 def main():
-    parser=argparse.ArgumentParser(description=__doc__)
+    wanted=next((word for word in sys.argv[1:] if not word.startswith('-')),None) if {'-h','--help'}&set(sys.argv[1:]) else None
+    parser=argparse.ArgumentParser(description=__doc__,formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=(wanted and operation_help(wanted)) or 'raster.py OPERATION --help lists the --params of that operation.')
     parser.add_argument('operation',choices=['inspect','display','clip','warp','align','mosaic','copy','calculate','reclassify','sample','histogram','zonal',*numeric.OPERATIONS,*cleanup.OPERATIONS])
     parser.add_argument('input',nargs='+'); parser.add_argument('--params',required=True); parser.add_argument('--output',required=True)
     args=parser.parse_args()
