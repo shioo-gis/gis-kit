@@ -75,7 +75,7 @@ def main():
     p=argparse.ArgumentParser(description=__doc__);p.add_argument('run');p.add_argument('--ledger',required=True);p.add_argument('--output',required=True)
     args=p.parse_args()
     try:
-        result=audit(args.run,json.loads(Path(args.ledger).read_text()))
+        result=audit(args.run,json.loads(Path(args.ledger).read_text(encoding='utf-8')))
         result['ledger_sha256']=annotation.digest(args.ledger)
         meta,_=annotation.source(args.run)
         if annotation.load(args.run)['revision']!=result['revision']: raise ValueError('Annotation changed during audit')

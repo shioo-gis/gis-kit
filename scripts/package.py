@@ -126,7 +126,7 @@ def list_members(path, kind):
             if not line.strip():
                 if 'Path' in entry:
                     attributes = entry.get('Attributes', '')
-                    rows.append((entry['Path'], int(entry.get('Size') or 0), attributes.startswith('D') or 'D' in attributes[:1],
+                    rows.append((entry['Path'].replace('\\', '/'), int(entry.get('Size') or 0), attributes.startswith('D') or 'D' in attributes[:1],
                                  'l' in attributes.split(' ')[-1][:1] if ' ' in attributes else False))
                 entry = {}
                 continue

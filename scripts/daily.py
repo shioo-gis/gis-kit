@@ -60,7 +60,7 @@ def clean(value):
 
 def execute(args):
     code_hashes={name:fingerprint(Path(__file__).with_name(name)) for name in ('daily.py','_daily.py','_metric.py','_safe_io.py','_analysis.py','_cartography.py','_conflation.py','_recipe_operations.py','_delivery.py')}
-    params=json.loads(Path(args.params).read_text())
+    params=json.loads(Path(args.params).read_text(encoding='utf-8'))
     if params.pop('schema_version',1) != 1: raise ValueError('Unsupported parameter schema_version')
     destination=Path(args.output)
     if destination.exists() or destination.is_symlink(): raise ValueError('Bundle output must be a new directory; no overwrite')
@@ -128,7 +128,7 @@ def execute(args):
             if rows!=len(result) or columns!=list(result.columns): raise ValueError('Table readback differs')
             record['validation']={'rows':rows,'columns':columns}
         record['artifact']={'name':artifact,'sha256':fingerprint(staging/artifact)}
-        (staging/'record.json').write_text(json.dumps(clean(record),ensure_ascii=False,indent=2,allow_nan=False)+'\n')
+        (staging/'record.json').write_text(json.dumps(clean(record),ensure_ascii=False,indent=2,allow_nan=False)+'\n',encoding='utf-8')
         if hashes != [fingerprint(p) for p in paths]: raise ValueError('Input changed before publication')
         if code_hashes != {name:fingerprint(Path(__file__).with_name(name)) for name in code_hashes}: raise ValueError('Implementation changed during execution')
         # Publish the complete directory in one rename. Cooperative writers share a lock.

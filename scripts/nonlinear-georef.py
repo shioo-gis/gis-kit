@@ -44,7 +44,7 @@ def vector_handoff(pixel_vectors, pixel_manifest, step, base, stage):
     import pyogrio
     from pandas.testing import assert_frame_equal
     manifest_hash=digest(pixel_manifest)
-    meta=json.loads(Path(pixel_manifest).read_text())
+    meta=json.loads(Path(pixel_manifest).read_text(encoding='utf-8'))
     tolerance=meta.get('sampling_tolerance_pixels')
     if (meta.get('source_sha256')!=base['source_sha256'] or
             meta.get('gpkg_sha256')!=digest(pixel_vectors)):
@@ -101,7 +101,7 @@ def execute(image,gcps,p,output,backend=None,pixel_vectors=None,pixel_manifest=N
             raise ValueError('Vector handoff requires sampled GPKG, manifest and positive source-pixel step')
     before=[digest(image),digest(gcps)];started=time.perf_counter()
     with bundle(output) as stage:
-        affine.fit(gcps,stage/'affine.json');base=json.loads((stage/'affine.json').read_text());affine.verify_image(image,base);area=affine.region(base)
+        affine.fit(gcps,stage/'affine.json');base=json.loads((stage/'affine.json').read_text(encoding='utf-8'));affine.verify_image(image,base);area=affine.region(base)
         if base['fit']['count']<6 or base['check']['count']<4:raise ValueError('TPS requires >=6 fit and >=4 frozen check points')
         pixels=np.array([x['pixel'] for x in base['points']]);worlds=np.array([x['target_world'] for x in base['points']]);checks=np.array([x['role']=='check' for x in base['points']])
         with Image.open(image) as im:rgba=np.array(im.convert('RGBA'))
@@ -186,5 +186,5 @@ def execute(image,gcps,p,output,backend=None,pixel_vectors=None,pixel_manifest=N
 
 if __name__=='__main__':
     a=argparse.ArgumentParser(description=__doc__);a.add_argument('image');a.add_argument('gcps');a.add_argument('--backend-gdalwarp');a.add_argument('--params',required=True);a.add_argument('--output',required=True);a.add_argument('--pixel-vectors');a.add_argument('--pixel-manifest');a.add_argument('--vector-step-px',type=float);v=a.parse_args()
-    try:execute(v.image,v.gcps,json.loads(Path(v.params).read_text()),v.output,v.backend_gdalwarp,v.pixel_vectors,v.pixel_manifest,v.vector_step_px)
+    try:execute(v.image,v.gcps,json.loads(Path(v.params).read_text(encoding='utf-8')),v.output,v.backend_gdalwarp,v.pixel_vectors,v.pixel_manifest,v.vector_step_px)
     except (ValueError,KeyError,TypeError,OSError) as e:a.exit(1,f'ERROR: {e}\n')

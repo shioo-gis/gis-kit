@@ -30,7 +30,7 @@ GROUPS = ('nodes', 'edges', 'points', 'faces')
 
 
 def read(path):
-    return json.loads(Path(path).read_text())
+    return json.loads(Path(path).read_text(encoding='utf-8'))
 
 
 def write(path, value):
@@ -797,7 +797,7 @@ def export(run, tolerance=0.25):
     folder.mkdir()
     write(folder/'annotation.json',state)
     write(folder/'diagnostics.json',report)
-    (folder/'curves.svg').write_text(svg_text(state,meta['width'],meta['height']))
+    (folder/'curves.svg').write_text(svg_text(state,meta['width'],meta['height']),encoding='utf-8')
     # GeoPackage with undefined CRS; never emit pixel-space RFC 7946 GeoJSON.
     import geopandas as gpd
     rows = {'points':[], 'edges':[], 'faces':[]}

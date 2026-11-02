@@ -64,5 +64,5 @@ def execute(rivers,streams,p,output):
 
 if __name__=='__main__':
     a=argparse.ArgumentParser(description=__doc__);a.add_argument('rivers');a.add_argument('streams');a.add_argument('--params',required=True);a.add_argument('--output',required=True);v=a.parse_args()
-    try:execute(v.rivers,v.streams,json.loads(Path(v.params).read_text()),v.output)
+    try:execute(v.rivers,v.streams,json.loads(Path(v.params).read_text(encoding='utf-8')),v.output)
     except (ValueError,KeyError,TypeError,OSError) as e:a.exit(1,f'ERROR: {e}\n')

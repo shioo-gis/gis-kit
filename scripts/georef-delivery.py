@@ -19,7 +19,7 @@ G=importlib.util.module_from_spec(spec);spec.loader.exec_module(G)
 
 
 def checked(path):
-    r=json.loads(Path(path).read_text());m=np.asarray(r['matrix'],dtype=float)
+    r=json.loads(Path(path).read_text(encoding='utf-8'));m=np.asarray(r['matrix'],dtype=float)
     if r['method']!='affine' or m.shape!=(2,3) or not np.isfinite(m).all() or abs(np.linalg.det(m[:,:2]))<1e-15:raise ValueError('Invalid affine transform')
     G.region(r)
     if not CRS(r['target_crs']).is_projected:raise ValueError('Projected target CRS required')
@@ -46,7 +46,7 @@ def package(specification,output):
     import pyogrio
     import rasterio
     from shapely import intersects_xy
-    p=json.loads(Path(specification).read_text())
+    p=json.loads(Path(specification).read_text(encoding='utf-8'))
     if p.get('schema_version')!=1 or not p.get('transforms'):raise ValueError('Version 1 and transforms required')
     def check_sidecars():
         fingerprint(p['pixel_gpkg'])
@@ -103,7 +103,7 @@ def package(specification,output):
                 layers.append({'layer':layer,'rows':rows})
             # Replace temporary absolute output references with portable relative references.
             for name in ('raster.tif','vectors.gpkg'):
-                manifest=folder/(name+'.manifest.json');record=json.loads(manifest.read_text());record['output']['path']=name;record['transform']['path']='transform.json';write_json(manifest,record)
+                manifest=folder/(name+'.manifest.json');record=json.loads(manifest.read_text(encoding='utf-8'));record['output']['path']=name;record['transform']['path']='transform.json';write_json(manifest,record)
                 if 'pixel_export' in record:
                     record['pixel_export']['path']='../source/pixels.gpkg'
                     record['pixel_export']['manifest_path']='../source/pixels.manifest.json'

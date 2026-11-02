@@ -49,7 +49,7 @@ def infer(frame,xy,p,stage,backend):
         write_json(temp/'input.json',dict(values=y.tolist(),neighbors=neighbors,permutations=perms,seed=seed))
         result=subprocess.run([backend['python'],str(Path(__file__).with_name('_pysal_worker.py')),str(temp/'input.json'),str(temp/'output.json')],env=env,capture_output=True,text=True)
         if result.returncode:raise ValueError('Explicit PySAL backend failed; no result published')
-        stats=json.loads((temp/'output.json').read_text())
+        stats=json.loads((temp/'output.json').read_text(encoding='utf-8'))
     out=frame.copy()
     for name in ('local_I','local_quadrant','local_p','gi_star','gi_z','gi_p'):out[name]=stats[name]
     for name in ('local_p','gi_p'):
@@ -100,5 +100,5 @@ def execute(source,p,output,backend):
 
 if __name__=='__main__':
     a=argparse.ArgumentParser(description=__doc__);a.add_argument('input');a.add_argument('--params',required=True);a.add_argument('--output',required=True);a.add_argument('--backend-python',default=sys.executable);a.add_argument('--backend-site-packages');a.add_argument('--backend-proj-data');v=a.parse_args()
-    try:execute(v.input,json.loads(Path(v.params).read_text()),v.output,dict(python=v.backend_python,site_packages=v.backend_site_packages,proj_data=v.backend_proj_data))
+    try:execute(v.input,json.loads(Path(v.params).read_text(encoding='utf-8')),v.output,dict(python=v.backend_python,site_packages=v.backend_site_packages,proj_data=v.backend_proj_data))
     except (ValueError,KeyError,TypeError,OSError) as e:a.exit(1,f'ERROR: {e}\n')

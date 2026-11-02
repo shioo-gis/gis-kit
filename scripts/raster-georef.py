@@ -17,7 +17,7 @@ from _budget import check_vector
 
 def write(path,value):
     payload=json.dumps(value,ensure_ascii=False,indent=2,allow_nan=False)
-    with Path(path).open('x') as f:
+    with Path(path).open('x',encoding='utf-8') as f:
         f.write(payload)
 
 
@@ -56,7 +56,7 @@ def handoff(output, transform, report, **extra):
 
 
 def fit(path, output):
-    data=json.loads(Path(path).read_text())
+    data=json.loads(Path(path).read_text(encoding='utf-8'))
     validate_actor(data.get('actor'))
     if not data.get('coordinate_reference') or not data.get('source_sha256'):
         raise ValueError('Coordinate reference evidence and original image SHA256 are required')
@@ -151,7 +151,7 @@ def verify_image(image, report):
 def attach(image, transform, output, allow_hold=False):
     import rasterio
     from affine import Affine
-    report=json.loads(Path(transform).read_text())
+    report=json.loads(Path(transform).read_text(encoding='utf-8'))
     verify_image(image,report)
     export_gate(report,allow_hold)
     if Path(output).exists() or Path(str(output)+'.manifest.json').exists():
@@ -188,7 +188,7 @@ def attach(image, transform, output, allow_hold=False):
 
 def preview(image, transform, output, max_size=1800):
     from PIL import Image, ImageDraw
-    report=json.loads(Path(transform).read_text())
+    report=json.loads(Path(transform).read_text(encoding='utf-8'))
     verify_image(image,report)
     if Path(output).exists() or max_size <= 0:
         raise ValueError('Output exists or max-size is not positive')
@@ -236,10 +236,10 @@ def vectors(pixel_gpkg, transform, output, manifest, allow_hold=False):
     import geopandas as gpd
     import pyogrio
     from shapely import transform as transform_geometry
-    report=json.loads(Path(transform).read_text())
+    report=json.loads(Path(transform).read_text(encoding='utf-8'))
     export_gate(report,allow_hold)
     area=region(report)
-    meta=json.loads(Path(manifest).read_text())
+    meta=json.loads(Path(manifest).read_text(encoding='utf-8'))
     verify_image(pixel_gpkg, {'source_sha256':meta['gpkg_sha256']})
     if meta['source_sha256']!=report['source_sha256']:
         raise ValueError('Vector export and transform source hashes differ')

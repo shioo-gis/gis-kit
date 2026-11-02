@@ -135,7 +135,7 @@ def execute(operation, source, p, output, grass):
                 with rio.open(path) as d:
                     if not band_matches(d,1,a):raise ValueError('Published raster readback mismatch')
                 summaries[name]={'file':path.name,'sha256':digest(path),'summary':summary(a)}
-            resource_report=json.loads((work/'worker.json').read_text())
+            resource_report=json.loads((work/'worker.json').read_text(encoding='utf-8'))
         if before!=digest(source) or code!={n:digest(Path(__file__).with_name(n)) for n in code}:raise ValueError('Input or implementation changed')
         write_json(stage/'record.json',dict(schema_version=1,status='candidate',operation=operation,parameters=p,source_sha256=before,
             source_grid=meta,backend_version=version,implementation=code,backend_grid_roundtrip_error_pixels=grid_errors,artifacts=summaries,resources=dict(cli_work_seconds=time.perf_counter()-started,worker=resource_report),
@@ -148,7 +148,7 @@ def main():
     parser=argparse.ArgumentParser(description=__doc__);parser.add_argument('operation',choices=['hydrology','viewshed']);parser.add_argument('input')
     parser.add_argument('--params',required=True);parser.add_argument('--output',required=True);parser.add_argument('--grass',required=True)
     args=parser.parse_args()
-    try:execute(args.operation,args.input,json.loads(Path(args.params).read_text()),args.output,args.grass)
+    try:execute(args.operation,args.input,json.loads(Path(args.params).read_text(encoding='utf-8')),args.output,args.grass)
     except (ValueError,KeyError,TypeError,OSError,rio.errors.RasterioError) as exc:parser.exit(1,f'ERROR: {exc}\n')
 
 

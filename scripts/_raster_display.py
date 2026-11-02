@@ -114,14 +114,14 @@ def display_values(ds, values, parameters, stage):
     with Image.open(target) as decoded:
         if not np.array_equal(np.asarray(decoded.convert('RGBA')), rgba):
             raise ValueError('Values PNG readback differs')
-    (stage / 'scheme.json').write_text(json.dumps(scheme, ensure_ascii=False, indent=2, allow_nan=False) + '\n')
+    (stage / 'scheme.json').write_text(json.dumps(scheme, ensure_ascii=False, indent=2, allow_nan=False) + '\n', encoding='utf-8')
     contract = {'contract': 'display-raster', 'schema_version': 1, 'image': 'values.png',
                 'image_sha256': hashlib.sha256(target.read_bytes()).hexdigest(), 'width': ds.width, 'height': ds.height,
                 'encoding': encoding, **extra, 'nodata': 'alpha 0', 'sampling': sampling,
                 'coordinates': _corners(ds), 'crs': 'EPSG:3857', 'scheme': 'scheme.json',
                 'scheme_sha256': hashlib.sha256((stage / 'scheme.json').read_bytes()).hexdigest(),
                 'unit': scheme['unit'], 'status': scheme['status'], 'record': 'record.json'}
-    (stage / 'raster.json').write_text(json.dumps(contract, ensure_ascii=False, indent=2, allow_nan=False) + '\n')
+    (stage / 'raster.json').write_text(json.dumps(contract, ensure_ascii=False, indent=2, allow_nan=False) + '\n', encoding='utf-8')
     return {'artifact': 'values.png', 'artifact_sha256': contract['image_sha256'], 'display_raster': 'raster.json',
             'class_scheme': 'scheme.json', 'encoding': encoding, 'coordinates': contract['coordinates'],
             'unit': scheme['unit'], 'status': scheme['status'], 'scheme_kind': scheme['kind'],

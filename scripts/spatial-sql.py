@@ -133,11 +133,11 @@ def run(args):
             if len(names) != len(set(names)):
                 raise ValueError('Duplicate output column names; assign explicit aliases')
             if args.schema:
-                required = json.loads(args.schema.read_text())
+                required = json.loads(args.schema.read_text(encoding='utf-8'))
                 if dict(expected) != required:
                     raise ValueError(f'Query schema differs from --schema: {expected!r}')
             plan = '\n'.join(row[1] for row in con.execute('EXPLAIN ' + query).fetchall())
-            (stage / 'plan.txt').write_text(plan + '\n')
+            (stage / 'plan.txt').write_text(plan + '\n',encoding='utf-8')
             con.execute('CREATE TEMP VIEW _gis_result AS ' + query)
             query_start = time.monotonic()
             con.execute(f'COPY (SELECT * FROM _gis_result) TO {literal(stage / "result.parquet")} (FORMAT PARQUET, COMPRESSION ZSTD)')
@@ -147,7 +147,7 @@ def run(args):
         after = {str(p): fingerprint(p) for p in tracked}
         if before != after or implementation != {p.name: fingerprint(p) for p in sorted(Path(__file__).parent.glob('*.py'))}:
             raise ValueError('Input, SQL or implementation changed during execution; output not published')
-        (stage / 'query.sql').write_text(query + '\n')
+        (stage / 'query.sql').write_text(query + '\n',encoding='utf-8')
         write_json(stage / 'record.json', {
             'status': 'complete', 'status_scope': 'execution_only',
             'engine': {'duckdb': version, 'spatial': extension},
