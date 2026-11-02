@@ -11,7 +11,7 @@ from typing import Optional
 import geopandas as gpd
 import pytest
 from pyproj import CRS, Geod
-from shapely.geometry import Point
+from shapely.geometry import Point, box
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -254,3 +254,14 @@ def test_geojson_output_is_named_after_the_file_and_repeatable(tmp_path: Path) -
     first, second = (output.read_bytes() for output in outputs)
     assert first == second
     assert b'"name": "rings"' in first
+
+
+def test_buffer_crossing_a_utm_zone_names_the_way_out(tmp_path: Path) -> None:
+    source, output = tmp_path / "source.gpkg", tmp_path / "buffer.gpkg"
+    gpd.GeoDataFrame({"id": [0]}, geometry=[box(120.00, 30.00, 120.05, 30.05)], crs="EPSG:4326").to_file(source, driver="GPKG")
+    refused = _run(source, output, "--distance", "500")
+    assert refused.returncode != 0
+    assert "crosses UTM zones" in refused.stderr and "--analysis-crs EPSG:32651" in refused.stderr
+    assert not output.exists()
+    accepted = _run(source, output, "--distance", "500", "--analysis-crs", "EPSG:32651")
+    assert accepted.returncode == 0, accepted.stderr
