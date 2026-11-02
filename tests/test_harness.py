@@ -520,3 +520,13 @@ def test_shared_fingerprint_preserves_sidecar_boundaries(tmp_path, suffix):
             daily.fingerprint(source)
     else:
         assert daily.fingerprint(source) == digest(source)
+
+
+def test_tools_print_utf8_whatever_the_locale(tmp_path):
+    vector = tmp_path / '中文 数据.geojson'
+    vector.write_text('{"type":"FeatureCollection","features":[]}', encoding='utf-8')
+    env = {k: v for k, v in os.environ.items() if k != 'PYTHONIOENCODING'}
+    run = subprocess.run([sys.executable, '-X', 'utf8=0', str(SCRIPTS / 'gis.py'), 'describe', str(vector), '--json'],
+                         capture_output=True, env={**env, 'LC_ALL': 'C', 'LANG': 'C', 'PYTHONCOERCECLOCALE': '0', 'PYTHONUTF8': '0'})
+    assert run.returncode == 0, run.stderr
+    assert '中文 数据' in run.stdout.decode('utf-8')

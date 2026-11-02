@@ -194,3 +194,15 @@ def test_horizontal_epsg_is_inferred_only_when_parameters_match():
     assert crs_card('EPSG:4547+5737')['horizontal']['id'] == 'EPSG:4547'
     assert crs_card(CRS('EPSG:4526+5737').to_wkt('WKT1_ESRI'))['horizontal']['id'] == 'EPSG:4526'
     assert 'horizontal' not in crs_card('+proj=tmerc +lon_0=114.3 +x_0=500000 +ellps=GRS80 +units=m')  # local grid
+
+
+@pytest.mark.skipif(os.name == 'nt', reason='fake tools are shell scripts')
+@pytest.mark.parametrize(('banner', 'accepted'), [('bsdtar 3.7.7 - libarchive 3.7.7', True), ('tar (GNU tar) 1.34', False)])
+def test_tar_counts_as_bsdtar_only_when_it_is_libarchive(tmp_path, monkeypatch, banner, accepted):
+    sys.path.insert(0, str(SCRIPTS))
+    import package
+    fake = tmp_path / 'tar'
+    fake.write_text(f'#!/bin/sh\necho "{banner}"\n', encoding='utf-8')
+    fake.chmod(0o755)
+    monkeypatch.setenv('PATH', str(tmp_path))
+    assert package.bsdtar() == (str(fake) if accepted else None)
