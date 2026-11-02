@@ -150,7 +150,12 @@ def main() -> None:
         if reprojected and args.analysis_crs is None and CRS.from_user_input(original_crs).is_geographic:
             nonempty = gdf.loc[gdf.geometry.notna() & ~gdf.geometry.is_empty]
             if not nonempty.empty:
-                _estimate_utm_crs(nonempty)
+                try:
+                    _estimate_utm_crs(nonempty)
+                except ValueError as exc:
+                    raise ValueError(f"After buffering: {exc}. The input itself fits {analysis_crs.to_string()}: "
+                                     f"pass --analysis-crs {analysis_crs.to_string()} to keep using it, "
+                                     "or name another projected CRS") from None
     except (TypeError, ValueError, OverflowError) as exc:
         parser.error(str(exc))
     except Exception as exc:

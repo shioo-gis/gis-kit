@@ -8,7 +8,7 @@ import time
 
 
 def main():
-    job = json.loads(Path(sys.argv[1]).read_text())
+    job = json.loads(Path(sys.argv[1]).read_text(encoding='utf-8'))
     work = Path(job['work']); p = job['params']; started = time.perf_counter()
     calls = []
     def run(module, *args):
@@ -42,7 +42,7 @@ def main():
     rss = resource.getrusage(resource.RUSAGE_CHILDREN).ru_maxrss
     (work/'worker.json').write_text(json.dumps({'calls': calls, 'wall_seconds': time.perf_counter()-started,
         'child_max_rss_bytes': rss if sys.platform == 'darwin' else rss*1024,
-        'rss_scope': 'maximum of completed module children; not a concurrent process-tree peak'}))
+        'rss_scope': 'maximum of completed module children; not a concurrent process-tree peak'}), encoding='utf-8')
 
 
 if __name__ == '__main__':

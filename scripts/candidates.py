@@ -32,7 +32,7 @@ def execute(run, specification, output):
     meta,_=A.source(run); state=A.load(run); A.validate_structure(state)
     revision=Path(run)/'revisions'/f"{state['revision']:06d}.json"; before=digest(revision)
     specification_hash=digest(specification)
-    p=json.loads(Path(specification).read_text())
+    p=json.loads(Path(specification).read_text(encoding='utf-8'))
     if p.get('schema_version')!=1 or p.get('source_sha256')!=meta['sha256'] or p.get('revision_sha256')!=before:
         raise ValueError('Confirmation must bind current source and revision hashes')
     tolerance=float(p.get('tolerance',.25)); confirmed=p['confirmed_edges']

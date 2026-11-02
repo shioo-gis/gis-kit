@@ -17,7 +17,7 @@ from _budget import check_vector
 
 
 def execute(source,params,output):
-    p=json.loads(Path(params).read_text());before=fingerprint(source)
+    p=json.loads(Path(params).read_text(encoding='utf-8'));before=fingerprint(source)
     check_vector(source,p.get('layer'));data=gpd.read_file(source,layer=p.get('layer'),engine='pyogrio');work,factor=prepare(data,p)
     if p.get('label',p['id']) not in work:raise ValueError('Unknown label field')
     if p.get('label_collision_policy','report') not in ('report','omit'):raise ValueError('Unknown label collision policy')
@@ -49,7 +49,7 @@ def execute(source,params,output):
         if not math.isclose(actual,scale,rel_tol=1e-9):raise ValueError('Rendered scale differs')
         with Image.open(out/'map.png') as image:image.load();size=list(image.size)
         write_json(out/'record.json',{'source_sha256':before,'parameters':p,'scale_denominator':actual,'print_rule':'print PNG at embedded DPI, no fit-to-page; projected linear scale only','label_audit':audit,'clipped_ids':omitted,'status':'hold' if omitted or audit['overlaps'] or any(not x['inside_map'] for x in audit['labels']) else 'complete','visual_review':'required separately','image_size':size,'map_sha256':digest(out/'map.png')})
-        (out/'index.html').write_text('<!doctype html><meta charset="utf-8"><title>Cartographic candidate</title><p>Derived geometry. Display colors are not semantic classes. Print at embedded DPI; no fit-to-page.</p><img src="map.png" alt="Candidate map"><p>Actual label-box audit and source identity: <a href="record.json">record.json</a></p>')
+        (out/'index.html').write_text('<!doctype html><meta charset="utf-8"><title>Cartographic candidate</title><p>Derived geometry. Display colors are not semantic classes. Print at embedded DPI; no fit-to-page.</p><img src="map.png" alt="Candidate map"><p>Actual label-box audit and source identity: <a href="record.json">record.json</a></p>',encoding='utf-8')
         if fingerprint(source)!=before:raise ValueError('Source changed')
     return {'output':str(output),'scale':actual}
 

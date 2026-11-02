@@ -1,0 +1,2 @@
+# Same bytes on every platform: fixtures and templates are hashed and compared, whatever core.autocrlf says.
+* text=auto eol=lf

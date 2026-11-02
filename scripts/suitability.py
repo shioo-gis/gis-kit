@@ -102,5 +102,5 @@ def execute(source,p,output):
 
 if __name__=='__main__':
     a=argparse.ArgumentParser(description=__doc__);a.add_argument('input');a.add_argument('--params',required=True);a.add_argument('--output',required=True);v=a.parse_args()
-    try:execute(v.input,json.loads(Path(v.params).read_text()),v.output)
+    try:execute(v.input,json.loads(Path(v.params).read_text(encoding='utf-8')),v.output)
     except (ValueError,KeyError,TypeError,OSError) as e:a.exit(1,f'ERROR: {e}\n')

@@ -76,10 +76,11 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument('tool', nargs='?', help='list, capabilities, or a public script name without .py')
     parser.add_argument('arguments', nargs=argparse.REMAINDER)
     args = parser.parse_args(argv)
-    env = None
+    # Tools print JSON and Chinese messages: UTF-8 everywhere, not the Windows code page.
+    env = {'PYTHONIOENCODING': 'utf-8', **os.environ}
     if args.memory_budget is not None:
         try:
-            env = {**os.environ, _budget.ENV: str(_budget.parse_size(args.memory_budget))}
+            env[_budget.ENV] = str(_budget.parse_size(args.memory_budget))
         except ValueError as error:
             parser.error(str(error))
     if args.tool is None:
@@ -122,4 +123,6 @@ def main(argv: list[str] | None = None) -> int:
 
 
 if __name__ == '__main__':
+    if hasattr(sys.stdout, 'reconfigure'):
+        sys.stdout.reconfigure(encoding='utf-8', errors='backslashreplace')
     sys.exit(main())

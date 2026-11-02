@@ -14,6 +14,7 @@ PYTHONDONTWRITEBYTECODE=1 python3 gis-kit/scripts/raster.py zonal input.tif --pa
 |---|---|
 | `inspect` | CRS、网格、波段、类型、NoData、掩膜及存储块探查 |
 | `copy` | 单波段 GeoTIFF 或 `format: "COG"`；实际检查 COG 布局 |
+| `display` | 显示派生，只接受 north-up EPSG:3857。`band`、`mode: values/colors`（默认 colors）、`breaks`、`unit`、`status`；`colors` 模式给 `colors`（每个区间一个 `#RRGGBB`）；`encoding: class-index/value-rgb24`（后者配合 `kind: continuous`）。详见 [composer-display.md](composer-display.md) |
 | `clip` | `vector`、可选 `layer`、`all_touched`；以面掩膜裁剪，保留源网格范围，不自动缩小外框 |
 | `warp` | `crs`、可选目标单位 `resolution`；`kind: categorical/continuous`；分类默认 nearest，可显式 mode；连续必须指定 `resampling: nearest/bilinear/cubic/average/mode`；可选 `bounds`（经纬度 `[西, 南, 东, 北]`）只读取覆盖该范围的源窗口（整像元外扩一格），`max_pixels` 按窗口计，用于从全球 DEM 取样区 |
 | `align` | `reference` 栅格；严格复用其 CRS、原点、分辨率、宽高，重采样参数同 warp |

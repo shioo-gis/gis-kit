@@ -53,6 +53,21 @@ RASTER_SUFFIXES = {'.tif', '.tiff', '.img', '.jp2', '.sid', '.ecw', '.dem', '.as
 DEFAULT_MAX_BYTES = 20 * 2**30
 
 
+def bsdtar():
+    """libarchive's tar: `bsdtar`, or a `tar` that is libarchive underneath (Windows' tar.exe); GNU tar reads no 7z."""
+    tool = shutil.which('bsdtar')
+    if tool:
+        return tool
+    tool = shutil.which('tar')
+    if tool is None:
+        return None
+    try:
+        version = subprocess.run([tool, '--version'], capture_output=True, text=True, errors='replace', timeout=10).stdout
+    except (OSError, subprocess.SubprocessError):
+        return None
+    return tool if 'bsdtar' in version else None
+
+
 def archive_kind(path):
     with open(path, 'rb') as stream:
         magic = stream.read(6)
@@ -89,7 +104,7 @@ def list_members(path, kind):
                 mode = info.external_attr >> 16
                 rows.append((info.filename, info.file_size, info.is_dir(), (mode & 0o170000) == 0o120000))
         return rows, 'zipfile'
-    tool = shutil.which('bsdtar')
+    tool = bsdtar()
     if tool:
         run = subprocess.run([tool, '-tvf', str(path)], capture_output=True)
         if run.returncode != 0:
@@ -113,14 +128,14 @@ def list_members(path, kind):
             if not line.strip():
                 if 'Path' in entry:
                     attributes = entry.get('Attributes', '')
-                    rows.append((entry['Path'], int(entry.get('Size') or 0), attributes.startswith('D') or 'D' in attributes[:1],
+                    rows.append((entry['Path'].replace('\\', '/'), int(entry.get('Size') or 0), attributes.startswith('D') or 'D' in attributes[:1],
                                  'l' in attributes.split(' ')[-1][:1] if ' ' in attributes else False))
                 entry = {}
                 continue
             key, _, value = line.partition(' = ')
             entry[key.strip()] = value
         return rows, Path(tool).name
-    raise ValueError('Reading a 7z package needs bsdtar (libarchive) or 7-Zip; neither was found')
+    raise ValueError('Reading a 7z package needs bsdtar (libarchive; tar.exe on Windows) or 7-Zip; neither was found')
 
 
 def check_members(rows, max_bytes):
@@ -147,7 +162,7 @@ def extract(path, kind, tool, target):
             archive.extractall(target)
         return
     if tool == 'bsdtar':
-        command = [shutil.which('bsdtar'), '-xf', str(path), '-C', str(target), '--no-same-owner']
+        command = [bsdtar(), '-xf', str(path), '-C', str(target), '--no-same-owner']
     else:
         command = [shutil.which(tool), 'x', '-y', f'-o{target}', str(path)]
     run = subprocess.run(command, capture_output=True, text=True, errors='replace')
@@ -1095,7 +1110,7 @@ def pack_qgis(ctx, stage, args):
 
 def seven_zip(folder, target, members):
     """Archive members of folder as a 7z file (a .lpk or .lpkx is a 7z archive): bsdtar (libarchive) or 7-Zip."""
-    tool = shutil.which('bsdtar')
+    tool = bsdtar()
     if tool:
         run = subprocess.run([tool, '--format', '7zip', '-cf', str(target), '-C', str(folder), *members], capture_output=True)
         if run.returncode == 0:
@@ -1103,7 +1118,7 @@ def seven_zip(folder, target, members):
         target.unlink(missing_ok=True)  # a libarchive built without the 7z writer: try 7-Zip
     tool = shutil.which('7z') or shutil.which('7za') or shutil.which('7zz')
     if tool is None:
-        raise ValueError('Writing a layer package (a 7z archive) needs bsdtar (libarchive) or 7-Zip; neither could write 7z here')
+        raise ValueError('Writing a layer package (a 7z archive) needs bsdtar (libarchive; tar.exe on Windows) or 7-Zip; neither could write 7z here')
     run = subprocess.run([tool, 'a', '-t7z', str(target), *members], cwd=folder, capture_output=True)
     if run.returncode:
         raise ValueError(f'{Path(tool).name} could not write {target.name}: {run.stderr.decode(errors="replace").strip()[-300:]}')

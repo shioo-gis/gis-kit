@@ -97,7 +97,7 @@ def validate(path, validation, artifact):
     import numpy as np
     from pyproj import CRS
     from raster import inspect
-    record = json.loads((path/'record.json').read_text())
+    record = json.loads((path/'record.json').read_text(encoding='utf-8'))
     # Some original raster records have no status. Absence is not acceptance;
     # an explicit null/unknown/hold is not a successful legacy record.
     if 'status' in record and record['status'] not in ('complete', 'candidate'):
@@ -137,7 +137,7 @@ def validate(path, validation, artifact):
                     if 'crs' in validation and frame.crs != CRS(validation['crs']):
                         raise ValueError('Required CRS differs')
         elif file.suffix == '.json':
-            json.loads(file.read_text())
+            json.loads(file.read_text(encoding='utf-8'))
     if target.suffix != '.tif' and 'min_valid_pixels' in validation:
         raise ValueError('Pixel rule requires raster artifact')
     if target.suffix != '.gpkg' and set(validation) & {'min_rows', 'max_rows', 'columns'}:

@@ -141,7 +141,7 @@ def feature(geometry, properties):
 
 
 def write_geojson(path, features):
-    path.write_text(json.dumps({'type': 'FeatureCollection', 'features': features}, ensure_ascii=False, separators=(',', ':'), allow_nan=False) + '\n')
+    path.write_text(json.dumps({'type': 'FeatureCollection', 'features': features}, ensure_ascii=False, separators=(',', ':'), allow_nan=False) + '\n', encoding='utf-8')
 
 
 def execute(args):

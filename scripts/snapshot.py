@@ -136,7 +136,7 @@ def main():
     parser.add_argument('--dry-run', action='store_true', help='Validate and report the tile count without downloading')
     args = parser.parse_args()
     try:
-        params = json.loads(Path(args.params).read_text())
+        params = json.loads(Path(args.params).read_text(encoding='utf-8'))
         if args.dry_run:
             name, provider, bounds, minzoom, maxzoom, count = validate(params)
             print(json.dumps({'provider': name, 'tiles': count, 'zoom': [minzoom, maxzoom], 'license': provider['license']}, ensure_ascii=False))

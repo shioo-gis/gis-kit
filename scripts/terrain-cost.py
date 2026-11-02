@@ -135,7 +135,7 @@ def execute(source, friction, p, output, grass):
                         raise ValueError('Backend grid mismatch')
                     errors[name] = B.grid_error(ds.transform, profile['transform'], z.shape)
                     arrays[name] = ds.read(1, masked=True).filled(np.nan)
-            worker = json.loads((work/'worker.json').read_text())
+            worker = json.loads((work/'worker.json').read_text(encoding='utf-8'))
         cost = arrays['from_start'][end]
         tolerance = 1e-7  # seconds absolute plus 1e-10 relative, numerical only
         if arrays['from_start'][start] != 0 or arrays['to_end'][end] != 0:
@@ -192,5 +192,5 @@ def execute(source, friction, p, output, grass):
 
 if __name__ == '__main__':
     a = argparse.ArgumentParser(description=__doc__); a.add_argument('input'); a.add_argument('--friction', required=True); a.add_argument('--params', required=True); a.add_argument('--grass', required=True); a.add_argument('--output', required=True); v = a.parse_args()
-    try: execute(v.input, v.friction, json.loads(Path(v.params).read_text()), v.output, v.grass)
+    try: execute(v.input, v.friction, json.loads(Path(v.params).read_text(encoding='utf-8')), v.output, v.grass)
     except (ValueError, KeyError, TypeError, OSError) as e: a.exit(1, f'ERROR: {e}\n')
