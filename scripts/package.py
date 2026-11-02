@@ -25,6 +25,9 @@ queries, Maplex label classes, the label placements as a labelled point layer), 
 the layer file beside the unpacked data. `package.py pack --format arcmap` writes an ArcMap layer package (.lpk) the same way,
 with binary layer files (.lyr, _arcmap_style.py) in place of the CIM one; --lyr keeps one beside the data. Only the style and
 container writer differs between the formats.
+
+`package.py read` goes the other way: a platform style (QGIS .qml, ArcGIS Pro .lyrx, .stylx) into a map-style
+document, reporting what could not be carried; the readers live in _style_read.py and its platform modules.
 """
 from __future__ import annotations
 
@@ -42,6 +45,7 @@ import zipfile
 
 from _delivery import bundle, digest, write_json
 import _map_style
+import _style_read
 
 VERSION = '0.1.0'
 SUFFIXES = {'.lpk', '.lpkx', '.mpk', '.mpkx'}
@@ -1391,8 +1395,12 @@ def main():
                      help='qgis: a GeoPackage with styles and a project (default); arcgis-pro: a layer package (.lpkx); arcmap: a layer package (.lpk)')
     sub.add_argument('--lyrx', action='store_true', help='arcgis-pro: also write the .lyrx beside an unpacked file geodatabase')
     sub.add_argument('--lyr', action='store_true', help='arcmap: also write the .lyr beside an unpacked file geodatabase')
+    _style_read.add_command(commands)
     args = parser.parse_args()
     try:
+        if args.command == 'read':
+            print(json.dumps(_style_read.run(args), ensure_ascii=False))
+            return
         if args.command == 'pack':
             manifest = pack(args)
             package = {'geopackage': manifest['geopackage']['file'], 'project': manifest['project']['name']} if args.format == 'qgis' else \
