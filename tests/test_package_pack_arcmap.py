@@ -491,8 +491,7 @@ def demo(tmp_path_factory):
 
 
 def extract_lpk(lpk, target):
-    target.mkdir()
-    subprocess.run(['bsdtar', '-xf', str(lpk), '-C', str(target)], check=True)
+    package.extract(lpk, '7z', package.list_members(lpk, '7z')[1], target)
     return target
 
 
