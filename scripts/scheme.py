@@ -53,7 +53,7 @@ def main(argv=None):
     parser.add_argument('--params', required=True)
     parser.add_argument('--output', required=True, help='New directory')
     args = parser.parse_args(argv)
-    p = json.loads(Path(args.params).read_text())
+    p = json.loads(Path(args.params).read_text(encoding='utf-8'))
     source = Path(args.input)
     before = fingerprint(source)
     with bundle(args.output) as stage:

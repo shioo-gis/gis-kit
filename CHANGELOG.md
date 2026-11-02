@@ -2,6 +2,8 @@
 
 ## 未发布
 
+- 修复 Windows 上的文件读写：工具读写文本（`--params`、`package.json`、`<id>.map-style.json` 等）都明确用 UTF-8，不再用系统代码页。此前 `package.py read` 遇到中文必然失败。`batch.py`、`recipe.py` 读子工具输出也固定 UTF-8。
+- `package.py` 的 7-Zip 列表在 Windows 上也用 `/` 分隔路径。
 - `raster.py <操作> --help` 列出这个操作的 `--params`，内容直接取自 references，不再只有通用用法。
 - `buffer.py` 缓冲后范围跨 UTM 带时，报错说明可以用 `--analysis-crs` 和具体的 CRS。
 - `references/style-read.md` 写明读出的文档可能没有 `extent`、`pack` 要加 `--full`，以及 `--data` 可以写 `@根名/...`。

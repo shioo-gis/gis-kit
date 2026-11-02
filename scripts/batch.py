@@ -116,7 +116,8 @@ def run_one(task: tuple[int, int, Path, Path, str | None, list[str], str | None,
     artifact_features = None
     before = artifact_fingerprint(output)
     try:
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=3600)
+        result = subprocess.run(cmd, capture_output=True, encoding='utf-8', errors='replace', timeout=3600,
+                                env={**os.environ, 'PYTHONIOENCODING': 'utf-8'})
         process_returncode = result.returncode
         ok = result.returncode == 0
         message = result.stdout.strip() if ok else (result.stderr.strip() or result.stdout.strip() or "process failed")

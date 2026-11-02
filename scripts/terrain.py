@@ -149,7 +149,7 @@ def main():
     parser.add_argument('input'); parser.add_argument('--params', required=True); parser.add_argument('--output', required=True)
     args = parser.parse_args()
     try:
-        execute(args.input, json.loads(Path(args.params).read_text()), args.output)
+        execute(args.input, json.loads(Path(args.params).read_text(encoding='utf-8')), args.output)
     except (ValueError, KeyError, TypeError, IndexError, OSError, rio.errors.RasterioError) as exc:
         parser.exit(1, f'ERROR: {exc}\n')
 

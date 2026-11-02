@@ -107,7 +107,7 @@ def execute(source,p,output):
 def main():
     parser=argparse.ArgumentParser(description=__doc__);parser.add_argument('input');parser.add_argument('--params',required=True);parser.add_argument('--output',required=True)
     args=parser.parse_args()
-    try:execute(args.input,json.loads(Path(args.params).read_text()),args.output)
+    try:execute(args.input,json.loads(Path(args.params).read_text(encoding='utf-8')),args.output)
     except (ValueError,KeyError,TypeError,OSError,rio.errors.RasterioError) as exc:parser.exit(1,f'ERROR: {exc}\n')
 
 

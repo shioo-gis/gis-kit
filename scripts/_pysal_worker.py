@@ -21,7 +21,7 @@ if esda.__version__ == '2.3.1':
 
 
 def main():
-    data=json.loads(Path(sys.argv[1]).read_text());y=np.array(data['values']);neighbors={int(k):v for k,v in data['neighbors'].items()};seed=data['seed'];perms=data['permutations']
+    data=json.loads(Path(sys.argv[1]).read_text(encoding='utf-8'));y=np.array(data['values']);neighbors={int(k):v for k,v in data['neighbors'].items()};seed=data['seed'];perms=data['permutations']
     def w():return libpysal.weights.W(neighbors,id_order=list(range(len(y))),silence_warnings=True)
     np.random.seed(seed);global_m=esda.Moran(y,w(),transformation='r',permutations=perms)
     local=esda.Moran_Local(y,w(),transformation='r',permutations=perms,seed=seed,n_jobs=1)
@@ -33,7 +33,7 @@ def main():
         if isinstance(x,list):return [clean(v) for v in x]
         if isinstance(x,float) and not np.isfinite(x):return None
         return x
-    Path(sys.argv[2]).write_text(json.dumps(clean(result),allow_nan=False))
+    Path(sys.argv[2]).write_text(json.dumps(clean(result),allow_nan=False),encoding='utf-8')
 
 
 if __name__=='__main__':main()

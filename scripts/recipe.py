@@ -4,6 +4,7 @@ import argparse
 import hashlib
 import importlib.metadata
 import json
+import os
 from pathlib import Path
 import re
 import shutil
@@ -35,7 +36,7 @@ def identifier(value):
 
 def validate_step(path, validation):
     from daily import read
-    record = json.loads((path / 'record.json').read_text())
+    record = json.loads((path / 'record.json').read_text(encoding='utf-8'))
     artifact = path / record['artifact']['name']
     if artifact.parent != path or artifact.name not in ('result.gpkg', 'result.csv'):
         raise ValueError('Invalid artifact reference')
@@ -58,7 +59,7 @@ def validate_step(path, validation):
 
 
 def execute(recipe, output, cache, bindings=None):
-    data = json.loads(Path(recipe).read_text())
+    data = json.loads(Path(recipe).read_text(encoding='utf-8'))
     if data.get('schema_version') != 1 or not data.get('steps'):
         raise ValueError('Expected nonempty version 1 recipe')
     if not set(data) <= {'schema_version', 'inputs', 'steps', 'variants'}:
@@ -134,7 +135,7 @@ def execute(recipe, output, cache, bindings=None):
                         shutil.rmtree(entry)
                     if entry.exists():
                         try:
-                            seal=json.loads((entry/'seal.json').read_text())
+                            seal=json.loads((entry/'seal.json').read_text(encoding='utf-8'))
                             if seal['signature'] != signature or seal['record_sha256']!=digest(entry/'record.json'):
                                 raise ValueError('Cache record changed')
                             if seal.get('files') != adapters.inventory(entry):
@@ -147,7 +148,7 @@ def execute(recipe, output, cache, bindings=None):
                             work=Path(temporary); write_json(work/'params.json',resolved)
                             command=adapters.command(step,work/'params.json',refs,work,SCRIPTS) if extended else [sys.executable,str(SCRIPTS/'daily.py'),step['operation'],str(refs[step['input']]),'--params',str(work/'params.json'),'--output',str(work/'result')]
                             if not extended and 'right' in step: command += ['--right',str(refs[step['right']])]
-                            process=subprocess.run(command,text=True,capture_output=True)
+                            process=subprocess.run(command,encoding='utf-8',errors='replace',capture_output=True,env={**os.environ,'PYTHONIOENCODING':'utf-8'})
                             if process.returncode:
                                 raise ValueError(f"Step {step['id']} failed: {process.stderr[-2000:]}")
                             validate(work/'result')
@@ -156,7 +157,7 @@ def execute(recipe, output, cache, bindings=None):
                     target=folder/step['id']; shutil.copytree(entry,target)
                     refs[step['id']]=validate(target)
                     upstream[step['id']]=signature
-                    step_record=json.loads((target/'record.json').read_text())
+                    step_record=json.loads((target/'record.json').read_text(encoding='utf-8'))
                     lineage=roles | {step[r] for r in ('input','right') if r in step}
                     # Keep the legacy (misnamed) source-status alias conservative:
                     # existing readers must not see candidate promoted to complete.
@@ -186,7 +187,7 @@ def main():
     p=argparse.ArgumentParser(description=__doc__,epilog='Create a reviewable draft: recipe.py from-trace --help'); p.add_argument('recipe'); p.add_argument('--output',required=True); p.add_argument('--cache',required=True); p.add_argument('--bindings',help='JSON object of replacement input roles')
     a=p.parse_args()
     try:
-        print(json.dumps(execute(a.recipe,a.output,a.cache,json.loads(Path(a.bindings).read_text()) if a.bindings else None)))
+        print(json.dumps(execute(a.recipe,a.output,a.cache,json.loads(Path(a.bindings).read_text(encoding='utf-8')) if a.bindings else None)))
     except (ValueError,OSError,KeyError,TypeError) as e:p.exit(1,f'ERROR: {e}\n')
 
 if __name__=='__main__':main()

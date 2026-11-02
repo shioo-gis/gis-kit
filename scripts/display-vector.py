@@ -50,7 +50,7 @@ def thresholds(args):
 def parse_view(text):
     """A view object (inline JSON or a file): center [lon, lat], zoom, width, height, optional tileSize (512)."""
     path = Path(text)
-    view = json.loads(path.read_text() if path.is_file() else text)
+    view = json.loads(path.read_text(encoding='utf-8') if path.is_file() else text)
     view = view.get('view', view)
     try:
         lon, lat = (float(value) for value in view['center'])
@@ -214,7 +214,7 @@ def feature(geometry, properties, decimals):
 
 
 def write_geojson(path, features):
-    path.write_text(json.dumps({'type': 'FeatureCollection', 'features': features}, ensure_ascii=False, separators=(',', ':'), allow_nan=False) + '\n')
+    path.write_text(json.dumps({'type': 'FeatureCollection', 'features': features}, ensure_ascii=False, separators=(',', ':'), allow_nan=False) + '\n', encoding='utf-8')
 
 
 def plain(value):
@@ -255,7 +255,7 @@ def execute(args):
         if cached is not None and all((cached / f'{name}.geojson').is_file() for name in FILES) and (cached / 'counts.json').is_file():
             for name in FILES:
                 shutil.copyfile(cached / f'{name}.geojson', stage / f'{name}.geojson')
-            stored = json.loads((cached / 'counts.json').read_text())
+            stored = json.loads((cached / 'counts.json').read_text(encoding='utf-8'))
             counts, warnings, cache_status = stored['counts'], stored['warnings'], 'hit'
         else:
             frame = read_source(str(source), layer, args.id_field, fields, tuple(bbox))
@@ -284,7 +284,7 @@ def execute(args):
                 write_json(partial / 'counts.json', {'counts': counts, 'warnings': warnings})
                 partial.rename(cached) if not cached.exists() else shutil.rmtree(partial)
         files = {name: {'path': f'{name}.geojson', 'sha256': digest(stage / f'{name}.geojson'),
-                        'features': len(json.loads((stage / f'{name}.geojson').read_text())['features'])} for name in FILES}
+                        'features': len(json.loads((stage / f'{name}.geojson').read_text(encoding='utf-8'))['features'])} for name in FILES}
         manifest = {'contract': 'display-vector', 'schema_version': 1,
                     'view': {**view, 'meters_per_pixel': round(mpp, 3), 'bbox': bbox},
                     'display': {'profile': args.profile, **({'dpi': dpi} if dpi else {}), 'tolerance_px': tolerance_px, 'min_area_px': min_area_px,

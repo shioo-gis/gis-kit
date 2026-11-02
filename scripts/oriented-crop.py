@@ -10,7 +10,7 @@ from _delivery import bundle,digest,write_json
 
 
 def execute(source,params,output):
-    p=json.loads(Path(params).read_text());before=digest(source)
+    p=json.loads(Path(params).read_text(encoding='utf-8'));before=digest(source)
     cx,cy=map(float,p['center_xy']);width,height=map(int,p['size_px']);angle=float(p['angle_deg']);scale=float(p.get('source_pixels_per_output_pixel',1))
     if not np.isfinite([cx,cy,angle,scale]).all() or scale<=0 or min(width,height)<=0 or [width,height]!=p['size_px'] or width*height>int(p.get('max_pixels',25000000)):raise ValueError('Invalid crop dimensions or mapping')
     theta=math.radians(angle);c,s=math.cos(theta)*scale,math.sin(theta)*scale

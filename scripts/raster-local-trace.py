@@ -143,7 +143,7 @@ def run(image,output,bounds,preprocess='gray',threshold=None,min_length=8,simpli
             'paths':items,'cli_seconds':time.perf_counter()-t,
             'warning':'Skeleton can follow hatching/text or merge nearby shores. No density closing, hole filling, endpoint bridging or automatic patch adoption.',
             'provenance':'Adapted graph tracing pattern from user atlas extract_boundaries.py; atlas-specific semantic masks and density thresholds excluded'}
-    (out/'candidates.json').write_text(json.dumps(record,ensure_ascii=False,allow_nan=False))
+    (out/'candidates.json').write_text(json.dumps(record,ensure_ascii=False,allow_nan=False),encoding='utf-8')
     return {'directory':str(out.resolve()),'paths':len(items),'threshold':actual,'cli_seconds':record['cli_seconds'],'route':route_info}
 
 

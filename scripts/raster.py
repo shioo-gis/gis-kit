@@ -250,7 +250,7 @@ def process(operation,paths,p,stage):
 
 
 def execute(args):
-    p=json.loads(Path(args.params).read_text())
+    p=json.loads(Path(args.params).read_text(encoding='utf-8'))
     if p.pop('schema_version',1)!=1: raise ValueError('Unsupported schema')
     destination=Path(args.output)
     if destination.exists() or destination.is_symlink(): raise ValueError('Output must be a new directory')
@@ -266,7 +266,7 @@ def execute(args):
         result.update(schema_version=1,operation=args.operation,parameters=p,inputs=[{'name':Path(x).name,'sha256':h} for x,h in zip(inputs,identities)],
                       environment={'rasterio':rio.__version__,'gdal':rio.__gdal_version__,'numpy':np.__version__},implementation_sha256=implementation)
         if (stage/'result.tif').exists(): result['artifact_sha256']=fingerprint(stage/'result.tif')
-        (stage/'record.json').write_text(json.dumps(clean(result),ensure_ascii=False,indent=2,allow_nan=False)+'\n')
+        (stage/'record.json').write_text(json.dumps(clean(result),ensure_ascii=False,indent=2,allow_nan=False)+'\n',encoding='utf-8')
         for path in stage.glob('mosaic-input-*'): path.unlink()
         if implementation!={n:fingerprint(Path(__file__).with_name(n)) for n in implementation}: raise ValueError('Implementation changed during processing')
         if identities!=[fingerprint(x) for x in inputs]: raise ValueError('Inputs changed during processing')
