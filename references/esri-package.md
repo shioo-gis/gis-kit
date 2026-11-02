@@ -8,7 +8,7 @@ python package.py unpack 示例拆除类.lpk --output /work/pkg/chaichu
 
 ## 解包
 
-- **格式**：包实际是 7z 或 zip 压缩包，按文件头判断。7z 用 `bsdtar`（libarchive，macOS 自带）读，没有 `bsdtar` 时改用 7-Zip（`7z` / `7za` / `7zz`）；zip 用 Python 自带的 `zipfile`。
+- **格式**：包实际是 7z 或 zip 压缩包，按文件头判断。7z 用 `bsdtar`（libarchive，macOS 自带；Windows 自带的 `tar.exe` 也是它）读，没有 `bsdtar` 时改用 7-Zip（`7z` / `7za` / `7zz`）；zip 用 Python 自带的 `zipfile`。
 - **先检查后解压**：先列出全部成员，有下列情况时直接拒绝，什么都不解压：
   - 成员路径是绝对路径、带盘符，或者含 `..`；
   - 成员是符号链接或硬链接；
