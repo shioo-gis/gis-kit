@@ -31,8 +31,9 @@ def test_scripts_name_the_encoding_of_every_text_file():
 
 
 def test_written_json_is_utf8_whatever_the_locale(tmp_path):
+    # The command line stays ASCII: under LC_ALL=C on Linux, Python cannot even decode a Chinese -c argument.
     target = tmp_path / 'out.json'
-    code = f"import sys; sys.path.insert(0, {str(SCRIPTS)!r}); from _delivery import write_json; write_json({str(target)!r}, {{'title': '用地分类'}})"
+    code = f"import sys; sys.path.insert(0, {str(SCRIPTS)!r}); from _delivery import write_json; write_json({str(target)!r}, {{'title': {ascii('用地分类')}}})"
     run = subprocess.run([sys.executable, '-B', '-X', 'utf8=0', '-c', code], capture_output=True, env={**os.environ, **ASCII_LOCALE})
     assert run.returncode == 0, run.stderr
     assert json.loads(target.read_bytes().decode('utf-8'))['title'] == '用地分类'
