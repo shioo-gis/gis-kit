@@ -1,7 +1,10 @@
 """Stage F: explicit unknowns, halo equality, instances, areas and sealed recipes."""
 import copy
 import json
+import os
 from pathlib import Path
+import subprocess
+import sys
 from types import SimpleNamespace
 
 import numpy as np
@@ -279,3 +282,17 @@ def test_recipe_terrain_detail_candidate_real_cli(tmp_path):
     recipe.execute(path,tmp_path/'one',tmp_path/'cache')
     assert recipe.execute(path,tmp_path/'two',tmp_path/'cache')['cache_hits']==1
     assert json.loads((tmp_path/'two/default/contours/dossier.json').read_text())['execution_status']=='candidate'
+
+
+def test_every_operation_lists_its_params_in_help():
+    script = Path(__file__).resolve().parents[1] / 'scripts' / 'raster.py'
+    for operation in ['inspect', 'display', 'clip', 'warp', 'align', 'mosaic', 'copy', 'calculate', 'reclassify', 'sample', 'histogram', 'zonal',
+                      'transform', 'combine', 'update', 'rasterize', 'bands', 'allocate', 'redistribute',
+                      'fill_holes', 'focal', 'aggregate', 'regions', 'sieve', 'seed_region', 'morphology', 'class_area', 'transition', 'class_combine', 'zonal_fill']:
+        done = subprocess.run([sys.executable, '-B', str(script), operation, '--help'], capture_output=True, encoding='utf-8',
+                              env={**os.environ, 'PYTHONIOENCODING': 'utf-8'}, timeout=120)
+        assert done.returncode == 0, done.stderr
+        assert f'Parameters of {operation} (' in done.stdout and 'references/' in done.stdout, operation
+    focal = subprocess.run([sys.executable, '-B', str(script), 'focal', '--help'], capture_output=True, encoding='utf-8',
+                           env={**os.environ, 'PYTHONIOENCODING': 'utf-8'}, timeout=120)
+    assert 'statistic:mean' in focal.stdout

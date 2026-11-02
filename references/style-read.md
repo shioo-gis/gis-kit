@@ -25,7 +25,8 @@ map-style 是最小公约数，符号只有 `fill`、`stroke`、`marker` 各一�
 
 ## 数据
 
-- `.qml` 和 `.stylx` 不含数据。`data.path` 是占位的 `data/unbound/<图层>`，记入 `notes`；`pack` 会因为找不到数据而拒绝，不会打出空包。用 `--data` 和 `--data-layer` 指定，或读完后改文档。
+- `.qml` 和 `.stylx` 不含数据。`data.path` 是占位的 `data/unbound/<图层>`，记入 `notes`；`pack` 会因为找不到数据而拒绝，不会打出空包。用 `--data` 和 `--data-layer` 指定，或读完后改文档。`--data` 的路径相对输出目录，或写成 `@根名/...`，再给 `pack --data-root 根名=实际路径`，这样不用复制数据。
+- 读出的文档不一定有 `extent`，`.qml` 和 `.stylx` 没有图幅。这时 `pack` 没有范围可选，会要求加 `--full` 打包整份数据。
 - `.lyrx` 的数据连接是绝对路径或带 `..`，map-style 都不允许。只保留最后的名称（`demo.gdb` 加 `layer`、`a.shp`、`g.tif`），其余路径不进文档，也记入 `notes`，要指回实际位置。
 
 ## `.stylx`
