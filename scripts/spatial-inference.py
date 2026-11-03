@@ -17,11 +17,12 @@ import rasterio as rio
 from rasterio.transform import from_origin
 from _daily import stable,number
 from _metric import analysis_frame
-from _delivery import bundle,digest,write_json
+from _delivery import bundle,digest,implementation_hashes,write_json
 from _peak_rss import peak_rss_bytes
 from _safe_io import iter_vector_chunks, write_vector_atomic
-from raster import band_matches
-from daily import fingerprint,clean
+from _core import clean
+from _delivery import fingerprint
+from _grid import band_matches
 from _budget import check_vector
 
 
@@ -95,7 +96,7 @@ def execute(source,p,output,backend):
         details=infer(frame,xy,p,stage,backend) if p['operation']=='infer' else kde(frame,xy,factor,p,stage)
         resources=dict(self_max_rss_bytes=peak_rss_bytes(),completed_child_max_rss_bytes=peak_rss_bytes(children=True))
         if before!=fingerprint(source):raise ValueError('Input changed')
-        write_json(stage/'record.json',clean(dict(status='candidate',parameters=p,input_sha256=before,details=details,resources=resources,wall_seconds=time.perf_counter()-started,implementation={n:digest(Path(__file__).with_name(n)) for n in ('spatial-inference.py','_pysal_worker.py')},artifacts={f.name:digest(f) for f in stage.iterdir()})))
+        write_json(stage/'record.json',clean(dict(status='candidate',parameters=p,input_sha256=before,details=details,resources=resources,wall_seconds=time.perf_counter()-started,implementation=implementation_hashes(__file__),artifacts={f.name:digest(f) for f in stage.iterdir()})))
 
 
 if __name__=='__main__':

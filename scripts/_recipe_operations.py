@@ -96,7 +96,7 @@ def validate(path, validation, artifact):
     import geopandas as gpd
     import numpy as np
     from pyproj import CRS
-    from raster import inspect
+    from _grid import inspect
     record = json.loads((path/'record.json').read_text(encoding='utf-8'))
     # Some original raster records have no status. Absence is not acceptance;
     # an explicit null/unknown/hold is not a successful legacy record.

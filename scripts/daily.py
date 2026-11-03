@@ -3,12 +3,9 @@
 from __future__ import annotations
 
 import argparse
-import datetime
-import importlib.metadata
 import json
 import os
 from pathlib import Path
-import platform
 import shutil
 import sys
 import tempfile
@@ -24,42 +21,12 @@ from _analysis import compare, profile, distribution, grid_summary, time_slice, 
 from _safe_io import iter_vector_chunks, write_vector_atomic
 from _daily import normalize, update, relations, overlay, allocate, rules, geometry, grid, select, attribute_join
 from _recipe_operations import DAILY_OPERATIONS
-from _delivery import fingerprint
-from _budget import check_vector
-
-
-def read(path, layer=None, encoding='utf-8', sheet=0):
-    suffix = Path(path).suffix.lower()
-    if suffix == '.csv':
-        import csv
-        with open(path,encoding=encoding,newline='') as stream: header=next(csv.reader(stream),[])
-        if len(header)!=len(set(header)): raise ValueError('Duplicate CSV headers')
-        return pd.read_csv(path,dtype=str,keep_default_na=False,encoding=encoding)
-    if suffix in ('.xlsx','.xls'): return pd.read_excel(path,dtype=str,keep_default_na=False,sheet_name=sheet)
-    check_vector(path,layer)
-    return gpd.read_file(path,layer=layer,engine='pyogrio').reset_index(drop=True)
-
-
-def environment():
-    return {'python':platform.python_version(), 'python_executable':sys.executable,
-            'capabilities':{'coverage_simplify':callable(getattr(shapely,'coverage_simplify',None)) and shapely.geos_version >= (3,12,0)},
-            'packages':{p:importlib.metadata.version(p) for p in ('geopandas','shapely','pyogrio','pyproj','pandas','numpy')},
-            'geos':shapely.geos_version_string,'gdal':pyogrio.__gdal_version_string__,
-            'drivers':pyogrio.list_drivers(), 'optional':{p:bool(__import__('importlib.util',fromlist=['find_spec']).find_spec(p)) for p in ('openpyxl','rasterio','qgis','pysal')}}
-
-
-def clean(value):
-    if isinstance(value,dict): return {str(k):clean(v) for k,v in value.items()}
-    if isinstance(value,(list,tuple)): return [clean(v) for v in value]
-    if value is None or value is pd.NA: return None
-    if isinstance(value,(datetime.date,datetime.datetime)): return value.isoformat()
-    if hasattr(value,'item'): value=value.item()
-    if isinstance(value,float) and not __import__('math').isfinite(value): return None
-    return value
+from _delivery import fingerprint, implementation_hashes
+from _core import clean, environment, read
 
 
 def execute(args):
-    code_hashes={name:fingerprint(Path(__file__).with_name(name)) for name in ('daily.py','_daily.py','_metric.py','_safe_io.py','_analysis.py','_cartography.py','_conflation.py','_recipe_operations.py','_delivery.py')}
+    code_hashes=implementation_hashes(__file__)
     params=json.loads(Path(args.params).read_text(encoding='utf-8'))
     if params.pop('schema_version',1) != 1: raise ValueError('Unsupported parameter schema_version')
     destination=Path(args.output)
@@ -130,7 +97,7 @@ def execute(args):
         record['artifact']={'name':artifact,'sha256':fingerprint(staging/artifact)}
         (staging/'record.json').write_text(json.dumps(clean(record),ensure_ascii=False,indent=2,allow_nan=False)+'\n',encoding='utf-8')
         if hashes != [fingerprint(p) for p in paths]: raise ValueError('Input changed before publication')
-        if code_hashes != {name:fingerprint(Path(__file__).with_name(name)) for name in code_hashes}: raise ValueError('Implementation changed during execution')
+        if code_hashes != implementation_hashes(__file__): raise ValueError('Implementation changed during execution')
         # Publish the complete directory in one rename. Cooperative writers share a lock.
         lock=destination.with_name('.'+destination.name+'.publish-lock')
         lock.mkdir()

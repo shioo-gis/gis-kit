@@ -15,8 +15,8 @@ import numpy as np
 import rasterio as rio
 from pyproj import CRS
 from _budget import check_raster
-from _delivery import bundle, digest, write_json
-from raster import inspect, band_data, band_matches, positive_integer
+from _delivery import bundle, digest, implementation_hashes, write_json
+from _grid import inspect, band_data, band_matches, positive_integer
 from terrain import summary
 
 
@@ -88,7 +88,7 @@ def execute(operation, source, p, output, grass):
     if not grass.is_file() or not os.access(grass,os.X_OK): raise ValueError('Explicit executable GRASS launcher required')
     if any(Path(str(source)+s).exists() for s in ('.msk','.ovr','.aux.xml')): raise ValueError('External sidecars unsupported')
     before=digest(source)
-    code={n:digest(Path(__file__).with_name(n)) for n in ('terrain-backend.py','_grass_worker.py','terrain.py','raster.py','_delivery.py')}
+    code=implementation_hashes(__file__)
     with rio.open(source) as ds:
         meta=inspect(ds); validate(operation,p,ds); values=band_data(ds,1)
         if np.ma.getmaskarray(values).any(): raise ValueError('Backend requires complete DEM; missing cells must not silently become drainage or visibility barriers')
@@ -136,7 +136,7 @@ def execute(operation, source, p, output, grass):
                     if not band_matches(d,1,a):raise ValueError('Published raster readback mismatch')
                 summaries[name]={'file':path.name,'sha256':digest(path),'summary':summary(a)}
             resource_report=json.loads((work/'worker.json').read_text(encoding='utf-8'))
-        if before!=digest(source) or code!={n:digest(Path(__file__).with_name(n)) for n in code}:raise ValueError('Input or implementation changed')
+        if before!=digest(source) or code!=implementation_hashes(__file__):raise ValueError('Input or implementation changed')
         write_json(stage/'record.json',dict(schema_version=1,status='candidate',operation=operation,parameters=p,source_sha256=before,
             source_grid=meta,backend_version=version,implementation=code,backend_grid_roundtrip_error_pixels=grid_errors,artifacts=summaries,resources=dict(cli_work_seconds=time.perf_counter()-started,worker=resource_report),
             assumptions=['GRASS AT least-cost routing; no prior sink filling; negative accumulation retains boundary uncertainty; streams and basins are raster candidates' if operation=='hydrology' else 'Planar visibility, no curvature or refraction; DSM surface plus observer/target heights; outside radius is NoData; count is number of observers seeing pixel',

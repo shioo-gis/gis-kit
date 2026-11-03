@@ -14,7 +14,8 @@ from _metric import analysis_frame
 from _delivery import bundle, digest, write_json
 from _peak_rss import peak_rss_bytes
 from _safe_io import iter_vector_chunks, write_vector_atomic
-from daily import fingerprint, clean
+from _core import clean
+from _delivery import fingerprint
 from _budget import check_vector
 
 

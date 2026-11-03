@@ -24,35 +24,11 @@ from rasterio.merge import merge
 from shapely.geometry import box, mapping
 from _budget import check_raster, check_vector, raster_bytes, require
 from _daily import stable
-from daily import fingerprint, clean
+from _core import clean
+from _delivery import fingerprint, implementation_hashes
+from _grid import band_data, band_matches, inspect, positive_integer, windows
 import _raster_numeric as numeric
 import _raster_cleanup as cleanup
-
-
-def positive_integer(value):
-    if isinstance(value,bool) or not isinstance(value,(int,float)) or not math.isfinite(value) or int(value)!=value or int(value)<1: raise ValueError('Expected positive integer')
-    return int(value)
-
-
-def windows(width,height,size):
-    if size<1: raise ValueError('block_size must be positive')
-    for y in range(0,height,size):
-        for x in range(0,width,size): yield Window(x,y,min(size,width-x),min(size,height-y))
-
-
-def band_matches(ds,band,expected,equal_nan=True,size=1024):
-    """Compare one decoded band with an in-memory array window by window, without a second full copy."""
-    if ds.shape!=expected.shape: return False
-    return all(np.array_equal(ds.read(band,window=w),expected[w.toslices()],equal_nan=equal_nan) for w in windows(ds.width,ds.height,size))
-
-
-def inspect(ds):
-    if ds.crs is None: raise ValueError('Raster requires known CRS')
-    if not np.isfinite(list(ds.transform)).all() or ds.transform.determinant==0: raise ValueError('Invalid raster transform')
-    return {'crs':str(ds.crs),'transform':list(ds.transform)[:6],'width':ds.width,'height':ds.height,'count':ds.count,
-            'dtypes':list(ds.dtypes),'nodata':str(ds.nodata) if ds.nodata is not None and not np.isfinite(ds.nodata) else ds.nodata,
-            'scales':ds.scales,'offsets':ds.offsets,'units':ds.units,'descriptions':ds.descriptions,'mask_flags':[[x.name for x in v] for v in ds.mask_flag_enums],
-            'bounds':list(ds.bounds),'block_shapes':ds.block_shapes}
 
 
 def warp_window(ds, bounds):
@@ -67,15 +43,6 @@ def warp_window(ds, bounds):
     col1,row1=min(ds.width,int(win.col_off+win.width)+1),min(ds.height,int(win.row_off+win.height)+1)
     if col1<=col0 or row1<=row0: raise ValueError('bounds do not intersect the raster')
     return Window(col0,row0,col1-col0,row1-row0)
-
-
-def band_data(ds, band, window=None):
-    if not 1<=band<=ds.count: raise ValueError('Band outside dataset')
-    if ds.scales[band-1]!=1 or ds.offsets[band-1]!=0: raise ValueError('Calibrated band scale/offset unsupported; normalize explicitly before analysis')
-    raw=ds.read(band,window=window,masked=True)
-    if raw.dtype.kind in 'iu' and np.any(np.abs(raw.compressed().astype('longdouble'))>2**53): raise ValueError('Integer values exceed exact float64 range')
-    a=raw.astype('float64')
-    return np.ma.masked_invalid(a)
 
 
 def zonal(ds,zones,p):
@@ -258,7 +225,7 @@ def execute(args):
     for x in args.input+[p[k] for k in ('reference','protected','scope') if k in p]:
         if any(Path(str(x)+suffix).exists() for suffix in ('.msk','.aux.xml','.ovr')): raise ValueError('External raster sidecars unsupported; prepare self-contained input')
     identities=[fingerprint(x) for x in inputs]
-    implementation={n:fingerprint(Path(__file__).with_name(n)) for n in ('raster.py','_raster_display.py','_scheme.py','_raster_numeric.py','_raster_cleanup.py','daily.py','_daily.py','_analysis.py','_metric.py','_safe_io.py')}
+    implementation=implementation_hashes(__file__)
     destination.parent.mkdir(parents=True,exist_ok=True)
     stage=Path(tempfile.mkdtemp(prefix='.raster-',dir=destination.parent))
     try:
@@ -268,7 +235,7 @@ def execute(args):
         if (stage/'result.tif').exists(): result['artifact_sha256']=fingerprint(stage/'result.tif')
         (stage/'record.json').write_text(json.dumps(clean(result),ensure_ascii=False,indent=2,allow_nan=False)+'\n',encoding='utf-8')
         for path in stage.glob('mosaic-input-*'): path.unlink()
-        if implementation!={n:fingerprint(Path(__file__).with_name(n)) for n in implementation}: raise ValueError('Implementation changed during processing')
+        if implementation!=implementation_hashes(__file__): raise ValueError('Implementation changed during processing')
         if identities!=[fingerprint(x) for x in inputs]: raise ValueError('Inputs changed during processing')
         lock=destination.with_name('.'+destination.name+'.publish-lock'); lock.mkdir()
         try:

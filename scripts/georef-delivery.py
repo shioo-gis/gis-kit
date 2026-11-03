@@ -11,7 +11,7 @@ from pyproj import CRS
 from shapely.geometry import Point
 from _delivery import bundle, digest, write_json
 from _safe_io import iter_vector_chunks
-from daily import fingerprint
+from _delivery import fingerprint
 
 spec=importlib.util.spec_from_file_location('georef',Path(__file__).with_name('raster-georef.py'))
 from _budget import check_vector

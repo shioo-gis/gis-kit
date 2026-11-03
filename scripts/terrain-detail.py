@@ -13,10 +13,10 @@ from pyproj import CRS
 from shapely.geometry import LineString
 from _daily import geometry
 from _budget import check_raster, check_vector
-from _delivery import bundle, digest, write_json
+from _delivery import bundle, digest, implementation_hashes, write_json
 from _peak_rss import peak_rss_bytes
 from _safe_io import iter_vector_chunks, write_vector_atomic
-from raster import inspect, band_data, positive_integer
+from _grid import inspect, band_data, positive_integer
 
 
 def contours(z, transform, crs, levels, limit):
@@ -67,7 +67,7 @@ def execute(source,p,output):
     for f in inputs:
         if any(Path(str(f)+s).exists() for s in ('.msk','.aux.xml','.ovr','-wal','-shm')):raise ValueError('External sidecars unsupported')
     hashes=[digest(f) for f in inputs]
-    code={n:digest(Path(__file__).with_name(n)) for n in ('terrain-detail.py','_daily.py','_metric.py','_safe_io.py','_delivery.py','raster.py')}
+    code=implementation_hashes(__file__)
     with rio.open(source) as ds:
         meta=inspect(ds);t=ds.transform;c=CRS(ds.crs)
         if not c.is_projected or t.b or t.d or t.a<=0 or t.e>=0:raise ValueError('North-up projected grid required')
@@ -93,7 +93,7 @@ def execute(source,p,output):
                 count+=len(decoded)
             if count!=len(points):raise ValueError('Profile status readback differs')
             artifacts['profile']={'file':'profile.gpkg','rows':len(points),'sha256':digest(stage/'profile.gpkg'),'status_counts':points['sample_status'].value_counts().to_dict()}
-        if hashes!=[digest(f) for f in inputs] or code!={n:digest(Path(__file__).with_name(n)) for n in code}:raise ValueError('Input or implementation changed')
+        if hashes!=[digest(f) for f in inputs] or code!=implementation_hashes(__file__):raise ValueError('Input or implementation changed')
         write_json(stage/'record.json',dict(schema_version=1,status='candidate',source_grid=meta,inputs=[dict(name=f.name,sha256=h) for f,h in zip(inputs,hashes)],parameters=p,
             implementation=code,environment={'contourpy':contourpy.__version__,'rasterio':rio.__version__},artifacts=artifacts,reports=reports,
             assumptions=['Contours interpolate pixel centres; masked corners exclude whole quad; no extrapolation to outer raster boundary',

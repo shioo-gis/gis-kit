@@ -15,6 +15,8 @@ from shapely.geometry import box, mapping
 from shapely.ops import unary_union
 
 from _budget import check_raster, check_vector
+from _delivery import fingerprint
+from _grid import band_data, inspect, positive_integer, windows
 
 OPERATIONS = ('transform', 'combine', 'update', 'rasterize', 'bands', 'allocate', 'redistribute')
 
@@ -124,7 +126,6 @@ def transform(data, p):
     if method == 'auto_class':
         if not len(v):
             raise ValueError('Automatic classes require valid values')
-        from raster import positive_integer
         count = positive_integer(p['classes'])
         if count > 10000:
             raise ValueError('Too many classes')
@@ -178,7 +179,6 @@ def combine(arrays, p):
     policy = choice(p.get('nodata', 'propagate'), ('propagate', 'ignore'))
     count = valid.sum(axis=0)
     mask = (count == len(a)) if policy == 'propagate' else (count >= p.get('min_valid', 1))
-    from raster import positive_integer
     minimum = positive_integer(p.get('min_valid', 1))
     if minimum > len(a):
         raise ValueError('min_valid exceeds operand count')
@@ -267,8 +267,6 @@ def band_fsum(ds, band, pixels=1 << 20):
 
 def write(stage, filename, data, ds, p, descriptions=None):
     """Typed output, explicit rounding and full decoded readback before publication."""
-    from raster import inspect, positive_integer, windows
-    from daily import fingerprint
     encoded, valid, nodata, error = encode(data, p)
     dtype = encoded.dtype
     data = encoded
@@ -475,7 +473,6 @@ def is_local(operation, p):
 
 
 def read_operand(datasets, item, p, operation, window=None):
-    from raster import band_data, positive_integer
     index = item['input']
     if isinstance(index, bool) or not isinstance(index, int) or not 0 <= index < len(datasets):
         raise ValueError('Invalid input index')
@@ -540,9 +537,7 @@ def process_windows(operation, datasets, selectors, p, stage):
     No per-window metadata is retained. Output is still published by execute().
     """
     from contextlib import ExitStack
-    from raster import inspect, positive_integer, windows
     from rasterio.windows import Window, transform as window_transform
-    from daily import fingerprint
     ds = datasets[0]
     size = positive_integer(p.get('block_size', 256))
     capacity = min(size, ds.width)*min(size, ds.height)
@@ -639,7 +634,6 @@ def process_windows(operation, datasets, selectors, p, stage):
 
 
 def process(operation, datasets, p, stage, stack):
-    from raster import band_data, inspect, positive_integer
     ds = datasets[0]
     budget = [positive_integer(p.get('max_intersections', 2000000))]
     selectors = p.get('operands', [{'input': i, 'band': p.get('band', 1)} for i in range(len(datasets))])

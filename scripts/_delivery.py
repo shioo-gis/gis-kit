@@ -1,4 +1,5 @@
 """Small publication helpers for complete, immutable delivery directories."""
+import ast
 from contextlib import contextmanager
 import hashlib
 import json
@@ -29,6 +30,35 @@ def fingerprint(path, *, raster_sidecars=False):
     if any(Path(str(path) + suffix).exists() for suffix in ('-wal', '-shm', '-journal')):
         raise ValueError('Input has active SQLite sidecars')
     return digest(path)
+
+
+def implementation_modules(entry):
+    """The script and every sibling it imports or names through with_name(), transitively."""
+    entry = Path(entry).resolve()
+    found = {}
+    pending = [entry]
+    while pending:
+        path = pending.pop()
+        if path.name in found:
+            continue
+        found[path.name] = path
+        for node in ast.walk(ast.parse(path.read_text(encoding='utf-8'), filename=path.name)):
+            if isinstance(node, ast.Import):
+                names = [alias.name + '.py' for alias in node.names]
+            elif isinstance(node, ast.ImportFrom) and node.module and not node.level:
+                names = [node.module + '.py']
+            elif isinstance(node, ast.Call) and getattr(node.func, 'attr', None) == 'with_name' \
+                    and node.args and isinstance(node.args[0], ast.Constant) and isinstance(node.args[0].value, str):
+                names = [node.args[0].value]
+            else:
+                continue
+            pending += [entry.with_name(name) for name in names if entry.with_name(name).is_file()]
+    return dict(sorted(found.items()))
+
+
+def implementation_hashes(entry):
+    """Hash what actually runs, so a new shared module cannot fall out of a record unnoticed."""
+    return {name: digest(path) for name, path in implementation_modules(entry).items()}
 
 
 def write_json(path, value):

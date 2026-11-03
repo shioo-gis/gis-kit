@@ -13,9 +13,9 @@ import scipy
 from scipy.ndimage import correlate, minimum_filter, maximum_filter
 
 from _budget import check_raster
-from _delivery import bundle, digest, write_json
+from _delivery import bundle, digest, implementation_hashes, write_json
 from _peak_rss import peak_rss_bytes
-from raster import inspect, band_data, positive_integer
+from _grid import inspect, band_data, positive_integer
 
 
 def derivatives(z, dx, dy):
@@ -81,7 +81,7 @@ def execute(source, params, output):
     if any(Path(str(source)+s).exists() for s in ('.msk', '.aux.xml', '.ovr')):
         raise ValueError('External sidecars unsupported; prepare self-contained raster')
     identity = digest(source)
-    implementation = {n: digest(Path(__file__).with_name(n)) for n in ('terrain.py', 'raster.py', '_delivery.py')}
+    implementation = implementation_hashes(__file__)
     with bundle(output) as stage:
         with rio.open(source) as ds:
             meta = inspect(ds)
@@ -125,7 +125,7 @@ def execute(source, params, output):
                 if check.crs != profile['crs'] or check.transform != t or check.units != (unit,) or not np.array_equal(decoded, values, equal_nan=True):
                     raise ValueError('Raster readback mismatch')
             artifacts[name] = {'file': path.name, 'sha256': digest(path), 'summary': summary(values), 'unit': unit}
-        if digest(source) != identity or implementation != {n: digest(Path(__file__).with_name(n)) for n in implementation}:
+        if digest(source) != identity or implementation != implementation_hashes(__file__):
             raise ValueError('Source or implementation changed during execution')
         write_json(stage/'record.json', {'schema_version': 1, 'status': 'complete',
             'source': {'name': source.name, 'sha256': identity, 'grid': meta}, 'parameters': params,

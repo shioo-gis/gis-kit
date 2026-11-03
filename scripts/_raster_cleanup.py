@@ -8,6 +8,7 @@ from scipy.spatial import cKDTree
 
 import _raster_numeric as n
 from _daily import stable
+from _grid import band_data, inspect, positive_integer, windows
 
 OPERATIONS = ('fill_holes', 'focal', 'aggregate', 'regions', 'sieve', 'seed_region',
               'morphology', 'class_area', 'transition', 'class_combine', 'zonal_fill')
@@ -50,7 +51,6 @@ def reduce_values(values, method):
 
 
 def footprint(ds, p):
-    from raster import positive_integer
     if 'radius_m' in p:
         radius = n.finite(p['radius_m'])
         if radius <= 0:
@@ -69,7 +69,6 @@ def footprint(ds, p):
 
 
 def focal(a, ds, p):
-    from raster import positive_integer, windows
     method = n.choice(p.get('statistic', 'mean'), ('mean', 'sum', 'min', 'max', 'median', 'std', 'mode'))
     if p.get('kind') == 'categorical':
         categories(a)
@@ -103,7 +102,6 @@ def focal(a, ds, p):
 
 
 def fill(a, ds, p, protected, allowed):
-    from raster import positive_integer
     kind = n.choice(p['kind'], ('continuous', 'categorical'))
     method = n.choice(p['method'], ('nearest', 'idw'))
     if kind == 'categorical':
@@ -151,7 +149,6 @@ def fill(a, ds, p, protected, allowed):
 
 
 def process(operation, datasets, p, stage, stack):
-    from raster import band_data, inspect, positive_integer
     import rasterio as rio
     from _delivery import write_json
     from _budget import check_raster

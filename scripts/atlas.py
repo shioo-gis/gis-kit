@@ -15,7 +15,8 @@ from shapely.ops import orient
 from _daily import stable, relations
 from _metric import analysis_frame
 from _delivery import bundle, digest, write_json
-from daily import fingerprint, clean, environment
+from _core import clean, environment
+from _delivery import fingerprint
 from _budget import check_vector
 
 
