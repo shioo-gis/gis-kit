@@ -14,6 +14,7 @@ from shapely.geometry import Polygon, box
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = ROOT / "scripts/topo.py"
+sys.path.insert(0, str(ROOT / "scripts"))
 SPEC = importlib.util.spec_from_file_location("topology_script", SCRIPT)
 TOPO = importlib.util.module_from_spec(SPEC)
 sys.modules[SPEC.name] = TOPO

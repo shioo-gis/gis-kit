@@ -736,6 +736,7 @@ def run_convert(source, out, *extra, path, oda='', success=True):
     return json.loads((out/'manifest.json').read_text(encoding='utf-8')) if success else result.stderr
 
 
+@pytest.mark.skipif(os.name == 'nt', reason='fake tools are shell scripts')
 def test_convert_runs_the_converter_on_a_copy_and_reads_back(tmp_path):
     prepared = dxf(tmp_path/'prepared.dxf', site(39_500_000, 3_400_000))
     tool = fake_dwg2dxf(tmp_path/'bin', f"print('Warning: Unknown object, skipping eed/reactors/xdic', file=sys.stderr)\n"
@@ -753,6 +754,7 @@ def test_convert_runs_the_converter_on_a_copy_and_reads_back(tmp_path):
     assert (tmp_path/'out'/'plan.dxf').read_bytes() == prepared.read_bytes() and source.read_bytes() == before
 
 
+@pytest.mark.skipif(os.name == 'nt', reason='fake tools are shell scripts')
 def test_convert_refusals(tmp_path):
     source = tmp_path/'plan.dwg'
     source.write_bytes(b'AC1032' + bytes(200))
@@ -784,6 +786,7 @@ def fake_oda(folder, prepared):
     return script
 
 
+@pytest.mark.skipif(os.name == 'nt', reason='fake tools are shell scripts')
 def test_convert_with_oda_takes_names_with_brackets(tmp_path):
     prepared = dxf(tmp_path/'prepared.dxf', site(39_500_000, 3_400_000))
     oda = fake_oda(tmp_path/'oda', prepared)
@@ -1108,8 +1111,8 @@ def test_xiangyuan_reads_embedded_workbooks_tables_and_block_fields(tmp_path):
 
 def test_xiangyuan_lists_ole_frames_without_olefile(tmp_path):
     source, _ = embedded_drawing(tmp_path/'xy.dxf')
-    hide = ("import runpy, sys; sys.modules['olefile'] = None; sys.argv = sys.argv[1:]; "
-            "sys.path.insert(0, sys.argv[0].rsplit('/', 1)[0]); runpy.run_path(sys.argv[0], run_name='__main__')")
+    hide = ("import os, runpy, sys; sys.modules['olefile'] = None; sys.argv = sys.argv[1:]; "
+            "sys.path.insert(0, os.path.dirname(sys.argv[0])); runpy.run_path(sys.argv[0], run_name='__main__')")
     result = subprocess.run([sys.executable, '-c', hide, str(SCRIPTS/'cad.py'), 'xiangyuan', str(source), '--units', 'm',
                              '--output', str(tmp_path/'out')], capture_output=True, encoding='utf-8', errors='replace')
     assert result.returncode == 0, result.stderr
