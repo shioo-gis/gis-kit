@@ -2,6 +2,7 @@
 import math
 
 import numpy as np
+from pyproj import CRS, Transformer
 from rasterio.windows import Window
 
 
@@ -29,6 +30,28 @@ def inspect(ds):
             'dtypes':list(ds.dtypes),'nodata':str(ds.nodata) if ds.nodata is not None and not np.isfinite(ds.nodata) else ds.nodata,
             'scales':ds.scales,'offsets':ds.offsets,'units':ds.units,'descriptions':ds.descriptions,'mask_flags':[[x.name for x in v] for v in ds.mask_flag_enums],
             'bounds':list(ds.bounds),'block_shapes':ds.block_shapes}
+
+
+def right_handed(crs, bounds):
+    """True when +x lies clockwise of +y on the ground, as aspect and light directions assume.
+
+    rasterio's x and y are the data axes whatever order the CRS declares, so the CRS axis names say nothing here.
+    """
+    crs=CRS.from_user_input(crs); to_lonlat=Transformer.from_crs(crs,crs.geodetic_crs,always_xy=True)
+    x,y=(bounds[0]+bounds[2])/2,(bounds[1]+bounds[3])/2; step=max(abs(bounds[2]-bounds[0]),abs(bounds[3]-bounds[1]))/100 or 1.
+    centre=to_lonlat.transform(x,y); geod=crs.get_geod()
+    towards_x=geod.inv(*centre,*to_lonlat.transform(x+step,y))[0]; towards_y=geod.inv(*centre,*to_lonlat.transform(x,y+step))[0]
+    return 0<(towards_x-towards_y)%360<180
+
+
+def planar_metres_per_unit(crs, bounds):
+    """Metres per coordinate unit of a projected grid, or an error naming what stops planar derivatives."""
+    from _metric import _horizontal_meters_per_unit
+    crs=CRS.from_user_input(crs)
+    if not crs.is_projected or len(crs.axis_info)!=2: raise ValueError('Two-dimensional projected CRS required; warp explicitly first')
+    factor=_horizontal_meters_per_unit(crs)
+    if not right_handed(crs,bounds): raise ValueError(f'{crs.name}: x and y form a left-handed system, so aspect and hillshade would be mirrored; warp explicitly to a CRS with x clockwise of y first')
+    return factor
 
 
 def band_data(ds, band, window=None):

@@ -16,7 +16,7 @@ import rasterio as rio
 from pyproj import CRS
 from _budget import check_raster
 from _delivery import bundle, digest, implementation_hashes, write_json
-from _grid import inspect, band_data, band_matches, positive_integer
+from _grid import inspect, band_data, band_matches, planar_metres_per_unit, positive_integer
 from terrain import summary
 
 
@@ -35,8 +35,7 @@ def validate(operation, p, ds):
     for field in ('vertical_datum','source_description'):
         if not isinstance(p.get(field),str) or not p[field].strip(): raise ValueError(f'Explicit {field} required')
     c=CRS(ds.crs); t=ds.transform
-    if not c.is_projected or len(c.axis_info)!=2 or [a.direction for a in c.axis_info]!=['east','north'] or any(a.unit_conversion_factor!=1 for a in c.axis_info):
-        raise ValueError('Projected east/north metre CRS required')
+    if planar_metres_per_unit(c,ds.bounds)!=1: raise ValueError('Projected metre CRS required')
     if t.b or t.d or t.a<=0 or t.e>=0: raise ValueError('North-up grid required')
     if ds.count!=1 or min(ds.shape)<3 or ds.width*ds.height>positive_integer(p.get('max_pixels',1000000)):
         raise ValueError('Requires single-band bounded grid of at least 3x3')

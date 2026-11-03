@@ -551,7 +551,7 @@ def check_topology(
     report.meters_per_unit = float(factor_m)
     report.analysis_method = (
         "caller-specified projected CRS" if analysis_crs else
-        "local UTM for bounded joint analysis extent" if source_crs.is_geographic else
+        "local UTM for bounded joint analysis extent" if source_crs.is_geographic or not source_crs.equals(projected.crs) else
         "input projected CRS with verified horizontal units"
     )
     if expected_index is not None:

@@ -95,7 +95,7 @@ def _write_result(
 def _emit_table(rows: list[dict], args: argparse.Namespace, analysis_crs: object, factor: float, source_crs: object) -> None:
     print(tabulate(rows, headers="keys", tablefmt="simple", floatfmt=".4f"))
     assignment = getattr(args, "assignment", "area")
-    print(f"analysis_crs={analysis_crs}; method={analysis_method(source_crs, args.analysis_crs)}; meters_per_unit={factor:.12g}; assignment={assignment}")
+    print(f"analysis_crs={analysis_crs}; method={analysis_method(source_crs, args.analysis_crs, used=analysis_crs)}; meters_per_unit={factor:.12g}; assignment={assignment}")
 
 
 def _emit_assignment_report(report: dict[str, object], args: argparse.Namespace) -> None:
@@ -257,7 +257,7 @@ def cmd_far(args: argparse.Namespace) -> None:
     rows = result[[args.parcel_id, "parcel_area_m2", "total_floor_area_m2", "FAR"]].to_dict("records")
     _emit_table(rows, args, parcels.crs, factor, parcels_source.crs)
     assignment_report["analysis_crs"] = str(parcels.crs)
-    assignment_report["analysis_method"] = analysis_method(parcels_source.crs, args.analysis_crs)
+    assignment_report["analysis_method"] = analysis_method(parcels_source.crs, args.analysis_crs, used=parcels.crs)
     _emit_assignment_report(assignment_report, args)
     _write_result(result, args.output, overwrite=args.overwrite, protected_paths=(args.parcels, args.buildings))
 
@@ -271,7 +271,7 @@ def cmd_density(args: argparse.Namespace) -> None:
     result["density"] = result["building_area_m2"] / result["parcel_area_m2"]
     _emit_table(result[[args.parcel_id, "parcel_area_m2", "building_area_m2", "density"]].to_dict("records"), args, parcels.crs, factor, parcels_source.crs)
     assignment_report["analysis_crs"] = str(parcels.crs)
-    assignment_report["analysis_method"] = analysis_method(parcels_source.crs, args.analysis_crs)
+    assignment_report["analysis_method"] = analysis_method(parcels_source.crs, args.analysis_crs, used=parcels.crs)
     _emit_assignment_report(assignment_report, args)
     _write_result(result, args.output, overwrite=args.overwrite, protected_paths=(args.parcels, args.buildings))
 
@@ -302,7 +302,7 @@ def cmd_coverage(args: argparse.Namespace) -> None:
         {"metric": "study_area_m2", "value": study_area_m2},
         {"metric": "coverage_ratio", "value": ratio},
     ], headers="keys", tablefmt="simple", floatfmt=".6f"))
-    print(f"analysis_crs={boundary.crs}; projection_method={analysis_method(boundary_source.crs, args.analysis_crs)}; measurement_method=union area; meters_per_unit={factor:.12g}")
+    print(f"analysis_crs={boundary.crs}; projection_method={analysis_method(boundary_source.crs, args.analysis_crs, used=boundary.crs)}; measurement_method=union area; meters_per_unit={factor:.12g}")
     if args.output:
         output = boundary_source.copy()
         output["green_area_m2"] = green_area_m2
@@ -334,7 +334,7 @@ def cmd_summary(args: argparse.Namespace) -> None:
         columns.append("green_ratio")
     _emit_table(result[columns].to_dict("records"), args, parcels.crs, factor, parcels_source.crs)
     assignment_report["analysis_crs"] = str(parcels.crs)
-    assignment_report["analysis_method"] = analysis_method(parcels_source.crs, args.analysis_crs)
+    assignment_report["analysis_method"] = analysis_method(parcels_source.crs, args.analysis_crs, used=parcels.crs)
     _emit_assignment_report(assignment_report, args)
     protected = (args.parcels, args.buildings) + ((args.green,) if args.green else ())
     _write_result(result, args.output, overwrite=args.overwrite, protected_paths=protected)

@@ -149,7 +149,7 @@ def cmd_spatial(args):
         ("study area method", area_method),
         ("feature density per km2", f"{n / study_area_m2 * 1_000_000:.6f}" if study_area_m2 > 0 else "N/A: zero-area denominator"),
         ("analysis CRS", str(gdf.crs)),
-        ("analysis CRS method", analysis_method(source.crs, args.analysis_crs)),
+        ("analysis CRS method", analysis_method(source.crs, args.analysis_crs, used=gdf.crs)),
     ]
 
     if n > 1:
@@ -222,7 +222,7 @@ def cmd_cross(args):
         "match_pairs": len(pairs),
         "predicate": args.predicate,
         "analysis_crs": str(zones.crs),
-        "analysis_method": analysis_method(zones_source.crs, args.analysis_crs),
+        "analysis_method": analysis_method(zones_source.crs, args.analysis_crs, used=zones.crs),
         "meters_per_unit": factor,
         "boundary_policy": "within excludes boundary-only features" if args.predicate == "within" else "intersects includes boundary contacts and may match multiple zones",
     }

@@ -25,7 +25,7 @@
 
 ## 缓冲距离
 
-`buffer.py` 的 `--distance`、`--field` 与 `--distances` 均以米为单位；投影 CRS 按水平轴单位换算，输出保留输入 CRS。经纬度数据会使用局部 UTM 近似后再投回原 CRS；跨 UTM 带、超出可靠局部范围、缺失或无法识别的 CRS 会失败，不写缓冲结果。
+`buffer.py` 的 `--distance`、`--field` 与 `--distances` 均以米为单位；投影 CRS 按水平轴单位换算，输出保留输入 CRS。经纬度数据，以及尺度在范围内偏离 1 太多的投影（EPSG:3857 等），会使用局部 UTM 近似后再投回原 CRS；跨 UTM 带、超出可靠局部范围、缺失或无法识别的 CRS 会失败，不写缓冲结果。
 
 同心圈（服务范围、步行圈）用 `--distances 400,800,1200`：每个输入要素按距离各出一个完整圆面，带 `buffer_m`（米）和 `ring`（1 为最内圈），按输入顺序、由内到外排列；`--dissolve` 时按圈合并，多个中心的重叠范围逐圈并成一片。输入已有 `buffer_m` 或 `ring` 字段时拒绝。圈内要素的距离用 `join.py --predicate nearest --max-distance <最大圈> --distance-field distance_m` 标注，交给 Composer 的 `rings` 编码块按距离过滤高亮。
 

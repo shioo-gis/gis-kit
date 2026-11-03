@@ -125,7 +125,7 @@ def main() -> None:
     try:
         gdf, meters_per_unit = analysis_frame(gdf, args.analysis_crs)
         analysis_crs = gdf.crs
-        method = analysis_method(original_crs, args.analysis_crs)
+        method = analysis_method(original_crs, args.analysis_crs, used=analysis_crs)
         coordinate_units_per_meter = 1 / meters_per_unit
         reprojected = CRS.from_user_input(gdf.crs) != CRS.from_user_input(original_crs)
 
@@ -150,7 +150,7 @@ def main() -> None:
             cap_style=CAP_STYLES[args.cap_style],
             join_style=JOIN_STYLES[args.join_style],
         )
-        if reprojected and args.analysis_crs is None and CRS.from_user_input(original_crs).is_geographic:
+        if reprojected and args.analysis_crs is None:
             nonempty = gdf.loc[gdf.geometry.notna() & ~gdf.geometry.is_empty]
             if not nonempty.empty:
                 try:

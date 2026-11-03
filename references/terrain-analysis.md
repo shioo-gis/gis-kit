@@ -12,7 +12,7 @@ python terrain.py projected-dem.tif --params terrain.json --output new-result-di
 {"schema_version":1,"band":1,"vertical_unit":"metre","vertical_datum":"unknown","source_description":"来源与处理链说明","max_pixels":5000000}
 ```
 
-垂直单位必须声明为 `metre`、`foot` 或 `us_survey_foot`；不自动猜测。垂直基准和来源必须有文本说明，未知写 `unknown`。需要已知的二维 east/north 投影 CRS 和北向上网格，水平轴单位转为米；经纬度或旋转数据先显式调用 `raster.py warp`，连续数据明确重采样方法。投影适用性由调用项目核实，未作投影比例尺改正；坡向以**格网北**为零，顺时针，表示下坡方向。
+垂直单位必须声明为 `metre`、`foot` 或 `us_survey_foot`；不自动猜测。垂直基准和来源必须有文本说明，未知写 `unknown`。需要二维投影 CRS（两轴同一已知线性单位，x 在 y 的顺时针方向；与 CRS 声明的轴序无关，EPSG:4547、3031 都可以）和北向上网格，水平轴单位转为米。坡向和光照方向相对格网北；地面尺度不做改正，范围内的尺度因子写在记录的 `ground_scale`（EPSG:3857 在 60 度约为 2，坡度正切相应偏小）；经纬度或旋转数据先显式调用 `raster.py warp`，连续数据明确重采样方法。投影适用性由调用项目核实，未作投影比例尺改正；坡向以**格网北**为零，顺时针，表示下坡方向。
 
 坡度单位为度，起伏度为邻域最大高程减最小高程（米）；支持非方形像元。平地坡向为 NoData。任何 3×3 邻点缺失或落在图像外均不计算，不插值、不填洼；源高程统计仍包含全部有效源像元。拒绝校准 scale/offset、外部栅格 sidecar、未知参数与超出像元上限；当前全量数组路径不声称流式计算。`max_pixels` 仅限制像元数，非精确内存配额。
 
