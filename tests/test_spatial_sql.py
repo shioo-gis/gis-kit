@@ -35,7 +35,7 @@ def source(con, tmp_path, query=None):
 
 def cli(tmp_path, p, query=None, *extra, geom=True):
     script = tmp_path / 'query.sql'
-    script.write_text(query or f'SELECT * FROM read_parquet({sql.literal(p)}); -- final comment\n')
+    script.write_text(query or f'SELECT * FROM read_parquet({sql.literal(p)}); -- final comment\n', encoding='utf-8')
     command = [sys.executable, str(SCRIPTS / 'gis.py'), '--trace', str(tmp_path/'trace'),
                'spatial-sql', str(script), '--input', str(p), '--output', str(tmp_path/'out'), '--id', 'id']
     if geom:
@@ -54,10 +54,10 @@ def test_roundtrip_trace_and_immutability(con, tmp_path):
     out = tmp_path/'out/result.parquet'
     assert pq.read_table(out, columns=['id', 'state']).to_pydict() == {'id': [1], 'state': ['candidate']}
     assert sql.fingerprint(p) == before
-    record = json.loads((tmp_path/'out/record.json').read_text())
+    record = json.loads((tmp_path/'out/record.json').read_text(encoding='utf-8'))
     assert record['validation']['bbox'] == [1, 2, 1, 2]
     assert record['source_unchanged'] and record['status_scope'] == 'execution_only'
-    trace = json.loads(next((tmp_path/'trace').glob('*.json')).read_text())
+    trace = json.loads(next((tmp_path/'trace').glob('*.json')).read_text(encoding='utf-8'))
     assert trace['returncode'] == 0 and not trace['recipe_eligible']
     assert cli(tmp_path, p).returncode != 0  # no overwrite
 
@@ -107,12 +107,12 @@ def test_empty_geometry_table(con, tmp_path):
 def test_native_aggregation_schema_and_no_python_rows(con, tmp_path):
     p = source(con, tmp_path)
     schema = tmp_path/'expected.json'
-    schema.write_text(json.dumps({'id': 'VARCHAR', 'n': 'BIGINT'}))
+    schema.write_text(json.dumps({'id': 'VARCHAR', 'n': 'BIGINT'}), encoding='utf-8')
     r = cli(tmp_path, p, f"SELECT state AS id, count(*) AS n FROM read_parquet({sql.literal(p)}) GROUP BY state",
             '--schema', str(schema), geom=False)
     assert r.returncode == 0, r.stderr
     assert json.loads(r.stdout)['schema'] == [['id', 'VARCHAR'], ['n', 'BIGINT']]
-    text = (SCRIPTS/'spatial-sql.py').read_text()
+    text = (SCRIPTS/'spatial-sql.py').read_text(encoding='utf-8')
     assert 'import geopandas' not in text and '.fetchdf(' not in text and '.to_pandas(' not in text
 
 
@@ -127,7 +127,7 @@ def test_undeclared_read(con, tmp_path):
 def test_schema_and_sidecar_refusal(con, tmp_path):
     p = source(con, tmp_path)
     schema = tmp_path/'expected.json'
-    schema.write_text('{"id":"VARCHAR"}')
+    schema.write_text('{"id":"VARCHAR"}', encoding='utf-8')
     assert 'schema differs' in cli(tmp_path, p, None, '--schema', str(schema)).stderr
     Path(str(p)+'-wal').touch()
     assert 'SQLite sidecars' in cli(tmp_path, p).stderr
@@ -149,14 +149,14 @@ def test_spatial_join_boundary_aggregation(con, tmp_path):
     r = cli(tmp_path, p, query, '--input', str(zones), geom=False)
     assert r.returncode == 0, r.stderr
     assert con.execute(f"SELECT * FROM read_parquet({sql.literal(tmp_path/'out/result.parquet')})").fetchall() == [(10, 2)]
-    assert 'SPATIAL_JOIN' in (tmp_path/'out/plan.txt').read_text()
+    assert 'SPATIAL_JOIN' in (tmp_path/'out/plan.txt').read_text(encoding='utf-8')
 
 
 def test_source_mutation_blocks_publication(con, tmp_path, monkeypatch):
     from types import SimpleNamespace
     p = source(con, tmp_path)
     query = tmp_path/'query.sql'
-    query.write_text(f'SELECT id FROM read_parquet({sql.literal(p)})')
+    query.write_text(f'SELECT id FROM read_parquet({sql.literal(p)})', encoding='utf-8')
     original = sql.fingerprint
     calls = 0
     def changed(path):

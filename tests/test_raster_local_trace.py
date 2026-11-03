@@ -44,7 +44,7 @@ class Trace(unittest.TestCase):
             im.save(image);raw=image.read_bytes()
             result=T.run(image,root/'output',[20,20,50,80],threshold=128,min_length=0,simplify=0)
             self.assertEqual(result['paths'],2)
-            record=json.loads((root/'output/candidates.json').read_text())
+            record=json.loads((root/'output/candidates.json').read_text(encoding='utf-8'))
             xs={p[0] for item in record['paths'] for p in item['geometry']['coordinates']}
             self.assertEqual(xs,{30,35});self.assertEqual(image.read_bytes(),raw)
             self.assertTrue((root/'output/labels-3x.png').exists())

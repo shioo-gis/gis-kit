@@ -150,7 +150,7 @@ def test_late_and_early_cli_failures_leave_no_bundle(tmp_path, case):
 @pytest.mark.parametrize('failure', ['write', 'cog', 'readback'])
 def test_injected_failure_no_publication(tmp_path, monkeypatch, failure):
     source = tif(tmp_path/'a.tif', np.ones((5, 7)))
-    spec = tmp_path/'params.json'; spec.write_text(json.dumps({'block_size': 3, 'format': 'COG' if failure == 'cog' else 'GTiff'}))
+    spec = tmp_path/'params.json'; spec.write_text(json.dumps({'block_size': 3, 'format': 'COG' if failure == 'cog' else 'GTiff'}), encoding='utf-8')
     if failure == 'cog':
         import rasterio.shutil
         def broken(src, dst, **kw):

@@ -31,14 +31,14 @@ def cli(script,*args,success=True):
 
 
 def run(root,name,operation,source,params,right=None,success=True):
-    spec=root/(name+'.json');spec.write_text(json.dumps(params))
+    spec=root/(name+'.json');spec.write_text(json.dumps(params), encoding='utf-8')
     output=root/name
     args=[operation,source,'--params',spec,'--output',output]
     if right is not None: args+=['--right',right]
     cli('daily.py',*args,success=success)
     if not success:
         assert not output.exists();return
-    record=json.loads((output/'record.json').read_text())
+    record=json.loads((output/'record.json').read_text(encoding='utf-8'))
     artifact=output/record['artifact']['name']
     assert hashlib.sha256(artifact.read_bytes()).hexdigest()==record['artifact']['sha256']
     return artifact,record
@@ -231,7 +231,7 @@ def test_three_end_to_end_cases(tmp_path):
     pd.DataFrame({'code':['001','003'],'shape':['POLYGON ((0 0, 10 0, 10 10, 0 10, 0 0))','POLYGON ((20 0, 30 0, 30 10, 20 10, 20 0))'],'population':['120','300']}).to_excel(excel,index=False)
     restrictions=write(tmp_path,'restriction',frame([box(0,0,2,10)],id=['r']))
     zones=write(tmp_path,'zones',frame([box(0,0,15,10),box(15,0,30,10)],id=['west','east']))
-    points=tmp_path/'points.csv';points.write_text('code,x,y\n001,0,0\n002,10,0\n')
+    points=tmp_path/'points.csv';points.write_text('code,x,y\n001,0,0\n002,10,0\n', encoding='utf-8')
     facilities=write(tmp_path,'facilities',frame([Point(3,0),Point(7,0)],id=['f1','f2']))
     before={p:hashlib.sha256(p.read_bytes()).hexdigest() for p in (source,excel,restrictions,zones,points,facilities)}
     results=[]
@@ -276,7 +276,7 @@ def test_attribute_join_cardinality_and_collisions():
 
 
 def test_empty_normalization_bundle_and_failed_publication(tmp_path):
-    source=tmp_path/'bad.csv';source.write_text('id,x,y\na,bad,0\n')
+    source=tmp_path/'bad.csv';source.write_text('id,x,y\na,bad,0\n', encoding='utf-8')
     artifact,record=run(tmp_path,'empty','normalize',source,{'id':'id','x':'x','y':'y','crs':4326})
     assert len(gpd.read_file(artifact))==0;assert record['details']['rejected_rows']==1
     spec=tmp_path/'empty.json'
@@ -334,8 +334,8 @@ def test_table_export_and_encoding(tmp_path):
 def test_bundle_publication_failure(tmp_path,monkeypatch):
     import daily
     from types import SimpleNamespace
-    source=tmp_path/'source.csv';source.write_text('id,x,y\n001,1,2\n')
-    spec=tmp_path/'params.json';spec.write_text(json.dumps({'id':'id','x':'x','y':'y','crs':26918}))
+    source=tmp_path/'source.csv';source.write_text('id,x,y\n001,1,2\n', encoding='utf-8')
+    spec=tmp_path/'params.json';spec.write_text(json.dumps({'id':'id','x':'x','y':'y','crs':26918}), encoding='utf-8')
     before=source.read_bytes()
     def fail(*args,**kwargs): raise OSError('injected rename failure')
     monkeypatch.setattr(daily.os,'rename',fail)

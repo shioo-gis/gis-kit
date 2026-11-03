@@ -43,7 +43,7 @@ def run(style, output, *extra, success=True):
     result = subprocess.run(command, capture_output=True, text=True,
                             env={**os.environ, 'PYTHONDONTWRITEBYTECODE': '1', 'GIS_COMPOSER_CONFIG_DIR': str(output.parent / 'no-config')})
     assert (result.returncode == 0) == success, result.stdout + result.stderr
-    return json.loads((output / 'package.json').read_text()) if success else result.stderr
+    return json.loads((output / 'package.json').read_text(encoding='utf-8')) if success else result.stderr
 
 
 # --- container -----------------------------------------------------------------------------------------------------
@@ -515,7 +515,7 @@ def test_layer_package_layout(demo, tmp_path):
     assert arcmap.text_slot('.\\demo-map.gdb') in newest and arcmap.text_slot('..\\v107\\demo-map.gdb') in older
     assert (out / 'demo-map.lyr').read_bytes() == (tree / 'v107' / '0000demo-map.lyr').read_bytes()
     assert not (out / '_lpk').exists()
-    record = json.loads((out / 'record.json').read_text())
+    record = json.loads((out / 'record.json').read_text(encoding='utf-8'))
     assert {'demo-map.lpk', 'demo-map.lyr', 'package.json'} <= set(record['files'])
 
 
@@ -575,7 +575,7 @@ def test_unpack_reads_the_package_back(demo, tmp_path):
     result = subprocess.run([sys.executable, str(SCRIPTS / 'package.py'), 'unpack', str(out / 'demo-map.lpk'), '--output', str(tmp_path / 'u')],
                             capture_output=True, text=True, env={**os.environ, 'PYTHONDONTWRITEBYTECODE': '1'})
     assert result.returncode == 0, result.stderr
-    manifest = json.loads((tmp_path / 'u' / 'package.json').read_text())
+    manifest = json.loads((tmp_path / 'u' / 'package.json').read_text(encoding='utf-8'))
     assert manifest['package']['type'] == 'Layer Package' and manifest['item']['title'] == 'Demo map'
     assert any(row['path'].endswith('demo-map.gdb') or 'demo-map.gdb' in row['path'] for row in manifest['datasets'])
 

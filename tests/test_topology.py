@@ -54,7 +54,7 @@ def test_geographic_overlap_threshold_is_square_metres_and_json_errors_keep_inpu
     )
 
     assert result.returncode == 2
-    report = json.loads(report_path.read_text())
+    report = json.loads(report_path.read_text(encoding="utf-8"))
     assert report["summary"]["issues_by_check"]["overlaps"] == 1
     issue = report["issues"][0]
     assert issue["area_m2"] == pytest.approx(1233.3, rel=0.03)
@@ -128,7 +128,7 @@ def test_cli_checks_combined_source_and_expected_coverage_extent(tmp_path: Path)
     assert automatic_exclusion.returncode == 2
     assert "too broad" in automatic_exclusion.stderr or "UTM" in automatic_exclusion.stderr
     assert explicit.returncode == 0, explicit.stderr
-    report = json.loads(report_path.read_text())
+    report = json.loads(report_path.read_text(encoding="utf-8"))
     assert report["analysis"]["crs"] == "EPSG:3857"
 
 
@@ -271,7 +271,7 @@ def test_candidate_truncation_fails_closed_when_requested(tmp_path: Path) -> Non
         "--output", str(report_path),
     )
 
-    report = json.loads(report_path.read_text())
+    report = json.loads(report_path.read_text(encoding="utf-8"))
     assert report["summary"]["error_count"] == 0
     assert report["status"] == "incomplete"
     assert result.returncode == 2

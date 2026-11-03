@@ -25,7 +25,7 @@ def main():
     started=time.perf_counter()
     out=Path(v.output);out.mkdir(exist_ok=False,parents=True);root=Path(v.terrain_delivery);rivers=gpd.read_file(root/'inputs/reaches.gpkg')
     # Reuse the already frozen two-cell tolerance; no threshold chosen from new traces.
-    p=json.loads((Path(v.professional_delivery)/'inputs/hydro-review.json').read_text());policy=dict(proximity=p,endpoint_identity_tolerance_m=1,flow_method='GRASS D8',direction_rule='Only a unique endpoint meeting the catalogued Next_down line identifies downstream; otherwise hold',exit_rule='All three reaches must pass proximity and directed upstream-to-downstream endpoint approach within frozen 900m; unknown, sink, cycle or missing holds')
+    p=json.loads((Path(v.professional_delivery)/'inputs/hydro-review.json').read_text(encoding='utf-8'));policy=dict(proximity=p,endpoint_identity_tolerance_m=1,flow_method='GRASS D8',direction_rule='Only a unique endpoint meeting the catalogued Next_down line identifies downstream; otherwise hold',exit_rule='All three reaches must pass proximity and directed upstream-to-downstream endpoint approach within frozen 900m; unknown, sink, cycle or missing holds')
     write_json(out/'policy.json',policy)
     # Read original local catalogue with a spatial filter, preserving Next_down source IDs.
     b=rivers.to_crs(4326).total_bounds+np.array([-.03,-.03,.03,.03]);down=gpd.read_file(v.gloric,bbox=tuple(b)).to_crs(rivers.crs);down=down[down.Reach_ID.isin(rivers.Next_down)].copy();down.to_file(out/'downstream-reference.gpkg',driver='GPKG',index=False)
@@ -34,7 +34,7 @@ def main():
     with rio.open(drain_path) as d:
         assert d.transform==t and d.crs==crs and d.shape==s.shape;drain=d.read(1,masked=True)
     rr,cc=np.where((~np.ma.getmaskarray(s))&(s.data>0));x,y=rio.transform.xy(t,rr,cc);tree=cKDTree(np.column_stack((x,y)));records=[];paths=[]
-    proximity=json.loads((Path(v.professional_delivery)/'run0/hydro-review/record.json').read_text());pr={q['source_id']:q for q in proximity['reaches']}
+    proximity=json.loads((Path(v.professional_delivery)/'run0/hydro-review/record.json').read_text(encoding='utf-8'));pr={q['source_id']:q for q in proximity['reaches']}
     for row in rivers.itertuples():
         ends=[Point(row.geometry.coords[0]),Point(row.geometry.coords[-1])];following=down[down.Reach_ID==row.Next_down];key=str(row.Reach_ID)
         matches=[i for i,e in enumerate(ends) if not following.empty and following.distance(e).min()<=1]

@@ -35,7 +35,7 @@ def run(fixture, output, *extra, success=True):
     result = subprocess.run(command, capture_output=True, text=True,
                             env={**os.environ, 'PYTHONDONTWRITEBYTECODE': '1', 'GIS_COMPOSER_CONFIG_DIR': str(output.parent / 'no-config')})
     assert (result.returncode == 0) == success, result.stdout + result.stderr
-    return json.loads((output / 'package.json').read_text()) if success else result.stderr
+    return json.loads((output / 'package.json').read_text(encoding='utf-8')) if success else result.stderr
 
 
 @pytest.fixture(scope='module')
@@ -72,7 +72,7 @@ def test_layer_package_layout(pro):
     assert any(m.startswith('commondata/demo-map.gdb/a0000000') for m in members)
     assert manifest['manifest'] == 'arcgis-pro-package' and manifest['layer_package']['layer_file'] == 'p30/demo-map.lyrx'
     assert manifest['layer_file'] == {'file': 'demo-map.lyrx', 'geodatabase': 'demo-map.gdb', 'rasters': 'rasters'}
-    record = json.loads((out / 'record.json').read_text())
+    record = json.loads((out / 'record.json').read_text(encoding='utf-8'))
     assert {'demo-map.lpkx', 'demo-map.lyrx', 'package.json', 'rasters/height.tif'} <= set(record['files'])
     assert not (out / '_lpkx').exists()
     tables = {row[0] for row in pyogrio.list_layers(out / 'demo-map.gdb')}
@@ -87,7 +87,7 @@ def test_unpack_reads_the_package_back(pro, tmp_path):
     result = subprocess.run([sys.executable, str(SCRIPTS / 'package.py'), 'unpack', str(out / 'demo-map.lpkx'), '--output', str(tmp_path / 'u')],
                             capture_output=True, text=True, env={**os.environ, 'PYTHONDONTWRITEBYTECODE': '1'})
     assert result.returncode == 0, result.stderr
-    manifest = json.loads((tmp_path / 'u' / 'package.json').read_text())
+    manifest = json.loads((tmp_path / 'u' / 'package.json').read_text(encoding='utf-8'))
     assert manifest['package']['type'] == 'Layer Package' and manifest['item']['title'] == 'Demo map'
     assert manifest['warnings'] == []
     layer = manifest['layers'][0]
@@ -313,13 +313,13 @@ def test_renamed_fields_follow_into_the_layer_file(tmp_path):
     fixture = pack_fixture.build(tmp_path / 'data', with_raster=False)
     gpd.GeoDataFrame({'select': ['a', 'b'], 'big': [2**40, 3]}, geometry=[box(10.01, 0.41, 10.02, 0.42), box(10.03, 0.41, 10.04, 0.42)],
                      crs='EPSG:4326').to_file(fixture['project'] / 'inputs' / 'kw.geojson', driver='GeoJSON')
-    document = json.loads(fixture['style'].read_text())
+    document = json.loads(fixture['style'].read_text(encoding='utf-8'))
     document['layers'] = [{'id': 'kw', 'geometry': 'polygon', 'data': {'path': 'inputs/kw.geojson'}, 'filter': {'field': 'select', 'op': '!=', 'value': 'z'},
                            'renderer': {'type': 'categorized', 'field': 'select', 'classes': [{'value': 'a', 'symbol': {'fill': {'color': '#123456'}}}]},
                            'labels': {'field': 'select', 'text': {'size': 10, 'color': '#000000'}}}]
     document.pop('labelPlacements')
     document.pop('background')
-    fixture['style'].write_text(json.dumps(document))
+    fixture['style'].write_text(json.dumps(document), encoding='utf-8')
     manifest = run(fixture, tmp_path / 'out', '--clip')
     assert manifest['datasets'][0]['renamed_fields'] == {'select': 'select_'} and manifest['layer_file'] is None
     assert any('renamed' in w for w in manifest['warnings']) and any('Integer64' in w and 'Pro before 3.2' in w for w in manifest['warnings'])
@@ -336,7 +336,7 @@ def round_two(tmp_path_factory):
     result = subprocess.run(command, capture_output=True, text=True, env={**os.environ, 'PYTHONDONTWRITEBYTECODE': '1'})
     assert result.returncode == 0, result.stdout + result.stderr
     document = json.loads((root / 'out' / 'round-two.lyrx').read_text(encoding='utf-8'))
-    return root / 'out', json.loads((root / 'out' / 'package.json').read_text()), {d['uRI']: d for d in document['layerDefinitions']}, document
+    return root / 'out', json.loads((root / 'out' / 'package.json').read_text(encoding='utf-8')), {d['uRI']: d for d in document['layerDefinitions']}, document
 
 
 def named(found, name, query=None):
@@ -451,11 +451,11 @@ def test_new_content_gets_a_new_package_id(tmp_path):
         run(fixture, tmp_path / name)
         lpkx = tmp_path / name / 'demo-map.lpkx'
         package.extract(lpkx, '7z', package.list_members(lpkx, '7z')[1], tmp_path / f'{name}-x')
-        return re.search('<ID>(.+)</ID>', (tmp_path / f'{name}-x' / 'esriinfo' / 'item.pkinfo').read_text()).group(1)
+        return re.search('<ID>(.+)</ID>', (tmp_path / f'{name}-x' / 'esriinfo' / 'item.pkinfo').read_text(encoding='utf-8')).group(1)
     first = package_id('a')
-    document = json.loads(fixture['style'].read_text())
+    document = json.loads(fixture['style'].read_text(encoding='utf-8'))
     document['layers'][1]['renderer']['symbol'] = {'fill': {'color': '#123456'}}
-    fixture['style'].write_text(json.dumps(document))
+    fixture['style'].write_text(json.dumps(document), encoding='utf-8')
     assert package_id('b') != first
 
 

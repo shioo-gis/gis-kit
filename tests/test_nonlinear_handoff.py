@@ -17,27 +17,27 @@ def backend():
 
 @pytest.mark.parametrize('gate',['world','inverse','roundtrip','coverage','fold'])
 def test_tps_independent_gates(tmp_path,gate):
-    image,gcps,p=gcp_fixture(tmp_path);data=json.loads(gcps.read_text())
+    image,gcps,p=gcp_fixture(tmp_path);data=json.loads(gcps.read_text(encoding='utf-8'))
     if gate=='world':data['acceptance_policy']['max_check_rmse']=0
     elif gate=='inverse':p['max_inverse_error_px']=1e-12
     elif gate=='roundtrip':p['max_roundtrip_px']=1e-12
     elif gate=='coverage':data['frame']['pixel_region']=box(0,0,49,49).__geo_interface__
     else:
         data['points'][3]['world'][0]-=80
-    gcps.write_text(json.dumps(data));r=G.execute(image,gcps,p,tmp_path/'held')
+    gcps.write_text(json.dumps(data), encoding='utf-8');r=G.execute(image,gcps,p,tmp_path/'held')
     assert r['status']=='hold' and not (tmp_path/'held/warped.tif').exists()
     expected=dict(world='Frozen world',inverse='Frozen inverse',roundtrip='Inverse roundtrip',coverage='Fit hull',fold='Sampled fold')[gate]
     assert any(expected in reason for reason in r['reasons'])
 
 @pytest.mark.parametrize('resampling',['nearest','bilinear'])
 def test_tps_holes_transparent_alpha(tmp_path,resampling):
-    image,gcps,p=gcp_fixture(tmp_path);data=json.loads(gcps.read_text())
+    image,gcps,p=gcp_fixture(tmp_path);data=json.loads(gcps.read_text(encoding='utf-8'))
     a=np.array(Image.open(image).convert('RGBA'));a[18:23,4:9,3]=0;Image.fromarray(a).save(image)
     data['source_sha256']=G.digest(image)
     data['frame']['pixel_region']=Polygon(box(2,2,47,47).exterior.coords,[box(20,20,30,30).exterior.coords]).__geo_interface__
-    gcps.write_text(json.dumps(data));p['resampling']=resampling
+    gcps.write_text(json.dumps(data), encoding='utf-8');p['resampling']=resampling
     r=G.execute(image,gcps,p,tmp_path/'out');assert r['status']=='pass'
-    base=json.loads((tmp_path/'out/affine.json').read_text())
+    base=json.loads((tmp_path/'out/affine.json').read_text(encoding='utf-8'))
     with G.transformer(base) as tr:world=G.forward(tr,[[25,25],[6,20],[35,25]])
     with rio.open(tmp_path/'out/warped.tif') as d:
         alpha=[list(d.sample([xy],indexes=4))[0][0] for xy in world]
@@ -65,7 +65,7 @@ def export_curve(tmp_path,image):
     coords=annotate.edge_coords(edge,nodes,.01)
     frame=gpd.GeoDataFrame({'id':['cubic','crossing','hole'], 'note':['synthetic']*3},geometry=[LineString(coords),LineString([(1,1),(15,15)]),Polygon(box(7,7,42,42).exterior.coords,[box(20,20,30,30).exterior.coords])])
     path=tmp_path/'pixels.gpkg';frame.to_file(path,layer='objects',driver='GPKG')
-    manifest=tmp_path/'pixels.json';manifest.write_text(json.dumps(dict(source_sha256=G.digest(image),gpkg_sha256=G.digest(path),sampling_tolerance_pixels=.01,coordinate_system='UNREFERENCED PIXEL ENGINEERING SPACE; y down; units pixels',issues=[],omitted_faces=[])))
+    manifest=tmp_path/'pixels.json';manifest.write_text(json.dumps(dict(source_sha256=G.digest(image),gpkg_sha256=G.digest(path),sampling_tolerance_pixels=.01,coordinate_system='UNREFERENCED PIXEL ENGINEERING SPACE; y down; units pixels',issues=[],omitted_faces=[])), encoding='utf-8')
     return path,manifest,coords
 
 
@@ -74,7 +74,7 @@ def test_sampled_cubic_handoff_readback_and_relocation(tmp_path):
     original=G.digest(path);r=G.execute(image,gcps,p,tmp_path/'out',pixel_vectors=path,pixel_manifest=manifest,vector_step_px=.5)
     assert r['status']=='pass';v=r['vector_handoff'];assert len(v['omitted_objects'])==1
     assert G.digest(path)==original and v['original_curve_sampling_tolerance_px']==.01
-    base=json.loads((tmp_path/'out/affine.json').read_text())
+    base=json.loads((tmp_path/'out/affine.json').read_text(encoding='utf-8'))
     out=gpd.read_file(tmp_path/'out/vectors.gpkg');assert list(out.id)==['cubic','hole']
     assert len(out.geometry.iloc[1].interiors)==1
     from shapely import segmentize
@@ -90,7 +90,7 @@ def test_sampled_cubic_handoff_readback_and_relocation(tmp_path):
     assert G.digest(root/v['source_pixels'])==original
     assert G.digest(root/r['transform_record'])==r['transform_record_sha256']
     # A different export is rejected, not silently rebound to an image.
-    meta=json.loads(manifest.read_text());meta['source_sha256']='0'*64;manifest.write_text(json.dumps(meta))
+    meta=json.loads(manifest.read_text(encoding='utf-8'));meta['source_sha256']='0'*64;manifest.write_text(json.dumps(meta), encoding='utf-8')
     with pytest.raises(ValueError,match='source or GPKG hash'):
         G.execute(image,gcps,p,tmp_path/'bad',pixel_vectors=path,pixel_manifest=manifest,vector_step_px=.5)
     assert not (tmp_path/'bad').exists()

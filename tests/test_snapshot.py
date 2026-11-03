@@ -42,13 +42,13 @@ def server(tmp_path):
     registry.write_text(json.dumps({'schema_version': 1, 'providers': {
         'local': {**entry, 'name': 'Local', 'url': base + '/{z}/{x}/{y}.png', 'cache': 'allowed'},
         'gaps': {**entry, 'name': 'Gaps', 'url': base + '/missing/{z}/{x}/{y}.png', 'cache': 'allowed'},
-        'closed': {'name': 'Closed', 'url': base + '/{z}/{x}/{y}.png', 'kind': 'raster', 'cache': 'forbidden', 'reason': 'terms forbid caching'}}}))
+        'closed': {'name': 'Closed', 'url': base + '/{z}/{x}/{y}.png', 'kind': 'raster', 'cache': 'forbidden', 'reason': 'terms forbid caching'}}}), encoding='utf-8')
     yield registry, hits
     httpd.shutdown()
 
 
 def run(tmp_path, registry, params, *extra):
-    (tmp_path/'p.json').write_text(json.dumps(params))
+    (tmp_path/'p.json').write_text(json.dumps(params), encoding='utf-8')
     return subprocess.run([sys.executable, str(SCRIPTS/'snapshot.py'), '--params', str(tmp_path/'p.json'), '--output', str(tmp_path/'snap'), *extra],
                           capture_output=True, text=True, env={**os.environ, S.REGISTRY_ENV: str(registry)})
 
@@ -64,7 +64,7 @@ def test_snapshot_writes_tiles_and_manifest(tmp_path, server):
     registry, hits = server
     result = run(tmp_path, registry, {'provider': 'local', 'bounds': [6.0, 45.8, 10.5, 47.8], 'minzoom': 5, 'maxzoom': 7, 'delay_seconds': 0})
     assert result.returncode == 0, result.stderr
-    manifest = json.loads((tmp_path/'snap'/'snapshot.json').read_text())
+    manifest = json.loads((tmp_path/'snap'/'snapshot.json').read_text(encoding='utf-8'))
     assert manifest['contract'] == 'tile-snapshot' and manifest['schema_version'] == 1
     assert manifest['tile_count'] == len(hits) == 1 + 1 + 4
     assert manifest['provider']['attribution'] == 'Local test tiles' and manifest['template'] == 'tiles/{z}/{x}/{y}.png'
@@ -73,7 +73,7 @@ def test_snapshot_writes_tiles_and_manifest(tmp_path, server):
         assert hashlib.sha256(data).hexdigest() == tile['sha256'] and data == f'tile /{tile["z"]}/{tile["x"]}/{tile["y"]}.png'.encode()
     lines = '\n'.join(f'{t["path"]} {t["sha256"]}' for t in manifest['tiles'])
     assert manifest['tiles_sha256'] == hashlib.sha256(lines.encode()).hexdigest()
-    assert json.loads((tmp_path/'snap'/'record.json').read_text())['expected_tiles'] == 6
+    assert json.loads((tmp_path/'snap'/'record.json').read_text(encoding='utf-8'))['expected_tiles'] == 6
 
 
 def test_forbidden_provider_oversized_request_and_missing_tiles_fail_without_output(tmp_path, server):

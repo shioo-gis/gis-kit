@@ -32,8 +32,8 @@ def main():
     parser=argparse.ArgumentParser(description=__doc__);parser.add_argument('run');parser.add_argument('output');parser.add_argument('--pysal-python',required=True);parser.add_argument('--pysal-site',required=True);parser.add_argument('--pysal-proj',required=True);parser.add_argument('--places',required=True,type=Path);parser.add_argument('--terrain-root',required=True,type=Path);v=parser.parse_args()
     root=Path(v.run);out=Path(v.output).resolve();out.mkdir(exist_ok=False,parents=True);inp=out/'inputs';inp.mkdir();times=[];started=time.perf_counter()
     def cli(script,argv,tag):
-        start=time.perf_counter();p=subprocess.run([sys.executable,str(S/script),*map(str,argv)],capture_output=True,text=True,env=dict(os.environ,PYTHONDONTWRITEBYTECODE='1'));(out/f'{tag}.log').write_text(p.stdout+p.stderr);p.check_returncode();times.append(dict(task=tag,seconds=time.perf_counter()-start))
-    roads=json.loads((root/'osm-roads.json').read_text());nodes={e['id']:(e['lon'],e['lat']) for e in roads['elements'] if e['type']=='node'};rows=[];excluded=[]
+        start=time.perf_counter();p=subprocess.run([sys.executable,str(S/script),*map(str,argv)],capture_output=True,text=True,env=dict(os.environ,PYTHONDONTWRITEBYTECODE='1'));(out/f'{tag}.log').write_text(p.stdout+p.stderr, encoding='utf-8');p.check_returncode();times.append(dict(task=tag,seconds=time.perf_counter()-start))
+    roads=json.loads((root/'osm-roads.json').read_text(encoding='utf-8'));nodes={e['id']:(e['lon'],e['lat']) for e in roads['elements'] if e['type']=='node'};rows=[];excluded=[]
     for e in roads['elements']:
         if e['type']!='way':continue
         tags=e.get('tags',{});direction=tags.get('oneway','yes' if tags.get('junction')=='roundabout' else 'no')
@@ -43,7 +43,7 @@ def main():
             if a==b or nodes[a]==nodes[b]:continue
             rows.append(dict(id=f"{e['id']}:{i}",u=str(a),v=str(b),direction='forward' if direction in ('yes','1','true') else 'reverse' if direction=='-1' else 'both',speed_kmh=30,osm_way=str(e['id']),geometry=LineString([nodes[a],nodes[b]])))
     edges=gpd.GeoDataFrame(rows,geometry='geometry',crs=4326).to_crs(32645);edges.to_file(inp/'edges.gpkg',driver='GPKG',index=False)
-    raw=json.loads((root/'osm-facilities.json').read_text());rows=[]
+    raw=json.loads((root/'osm-facilities.json').read_text(encoding='utf-8'));rows=[]
     for e in raw['elements']:
         if e.get('tags',{}).get('amenity') not in ('hospital','clinic'):continue
         loc=e.get('center',e)
@@ -82,7 +82,7 @@ def main():
             g=gpd.read_file(f);attrs=g.drop(columns='geometry').fillna('NULL').astype(str).to_dict('records');h[str(f.relative_to(run))]=hashlib.sha256(json.dumps(attrs,sort_keys=True).encode()+b''.join(g.geometry.normalize().to_wkb())).hexdigest()
         for f in sorted(run.glob('*/*.tif')):
             with rio.open(f) as d:a=d.read();h[str(f.relative_to(run))]=hashlib.sha256(a.tobytes()).hexdigest()
-        hashes.append(h);records.append({f.parent.name:json.loads(f.read_text()) for f in run.glob('*/record.json')})
+        hashes.append(h);records.append({f.parent.name:json.loads(f.read_text(encoding='utf-8')) for f in run.glob('*/record.json')})
     assert hashes[0]==hashes[1] and code_before=={f.name:digest(f) for f in S.glob('*.py')}
     # Route costs independently checked with Bellman-Ford, not the routing algorithm.
     data=records[0]['network']['details'];snaps={a['source_id']:a['node'] for a in data['origin_snaps']};targets={a['source_id']:a['node'] for a in data['facility_snaps']}

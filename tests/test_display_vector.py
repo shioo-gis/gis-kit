@@ -28,7 +28,7 @@ def run(*args):
 
 
 def read(directory, name):
-    return json.loads((directory/name).read_text())
+    return json.loads((directory/name).read_text(encoding='utf-8'))
 
 
 def test_areas_boundaries_coast_and_manifest(units, tmp_path):

@@ -54,7 +54,7 @@ FIT = ('--target-crs', 'EPSG:4547', '--basis', '6 个道路中线交点，取自
 
 def test_fit_helmert4_recovers_the_transform(tmp_path):
     cli('fit', '--gcp', control(tmp_path/'gcp.csv'), *FIT, '--max-check-rmse', 0.5, '--output', tmp_path/'t')
-    report = json.loads((tmp_path/'t'/'transform.json').read_text())
+    report = json.loads((tmp_path/'t'/'transform.json').read_text(encoding='utf-8'))
     assert report['model'] == 'helmert4' and report['origin'] == 'fitted' and report['target_crs'] == 'EPSG:4547'
     assert report['parameters']['rotation_deg'] == pytest.approx(1.5, abs=2e-3)  # 2 cm noise over a 2 km baseline
     assert report['parameters']['scale_x'] == pytest.approx(SCALE, abs=1e-5) == report['parameters']['scale_y']
@@ -66,13 +66,13 @@ def test_fit_helmert4_recovers_the_transform(tmp_path):
 
 def test_fit_holds_on_threshold_and_apply_needs_allow_hold(tmp_path):
     cli('fit', '--gcp', control(tmp_path/'gcp.csv', noise=0.3), *FIT, '--max-check-rmse', 0.05, '--output', tmp_path/'t')
-    report = json.loads((tmp_path/'t'/'transform.json').read_text())
+    report = json.loads((tmp_path/'t'/'transform.json').read_text(encoding='utf-8'))
     assert report['acceptance']['status'] == 'hold' and 'Check RMSE' in report['acceptance']['reasons'][0]
     data = tmp_path/'data.gpkg'
     gpd.GeoDataFrame({'n': [1]}, geometry=[box(100, 100, 200, 200)]).to_file(data, layer='faces')
     assert 'on hold' in cli('apply', data, '--transform', tmp_path/'t'/'transform.json', '--output', tmp_path/'a', success=False).stderr
     cli('apply', data, '--transform', tmp_path/'t'/'transform.json', '--allow-hold', '--output', tmp_path/'b')
-    assert json.loads((tmp_path/'b'/'manifest.json').read_text())['allow_hold'] is True
+    assert json.loads((tmp_path/'b'/'manifest.json').read_text(encoding='utf-8'))['allow_hold'] is True
 
 
 def test_apply_moves_every_layer_and_marks_extrapolation(tmp_path):
@@ -83,7 +83,7 @@ def test_apply_moves_every_layer_and_marks_extrapolation(tmp_path):
     with pytest.warns(UserWarning):
         gpd.GeoDataFrame({'kind': ['gap']}, geometry=[LineString([(500, 500), (500.3, 500)])]).to_file(data, layer='qa_gaps')
     cli('apply', data, '--transform', tmp_path/'t'/'transform.json', '--output', tmp_path/'out')
-    manifest = json.loads((tmp_path/'out'/'manifest.json').read_text())
+    manifest = json.loads((tmp_path/'out'/'manifest.json').read_text(encoding='utf-8'))
     assert manifest['layers'] == {'faces': 2, 'qa_gaps': 1} and manifest['extrapolated'] == {'faces': 1, 'qa_gaps': 0}
     faces = gpd.read_file(tmp_path/'out'/'faces.gpkg', layer='faces')
     assert faces.crs.to_epsg() == 4547 and list(faces['extrapolated']) == [False, True]
@@ -97,17 +97,17 @@ def test_apply_moves_every_layer_and_marks_extrapolation(tmp_path):
 def test_define_official_parameters(tmp_path):
     official = ('define', '--origin', 'official', '--tx', SHIFT[0], '--ty', SHIFT[1], '--scale', SCALE, '--rotation', 1.5, *FIT)
     cli(*official, '--output', tmp_path/'unchecked')
-    report = json.loads((tmp_path/'unchecked'/'transform.json').read_text())
+    report = json.loads((tmp_path/'unchecked'/'transform.json').read_text(encoding='utf-8'))
     assert report['origin'] == 'official' and report['acceptance']['status'] == 'hold'
     assert np.allclose(report['matrix'], TRUTH)
     checks = control(tmp_path/'gcp.csv', noise=0.01)
     cli(*official, '--gcp', checks, '--max-check-rmse', 0.05, '--output', tmp_path/'checked')
-    report = json.loads((tmp_path/'checked'/'transform.json').read_text())
+    report = json.loads((tmp_path/'checked'/'transform.json').read_text(encoding='utf-8'))
     assert report['acceptance']['status'] == 'pass' and report['check']['count'] == 6 and report['fit']['count'] == 0
     assert report['fit_hull'] is None
     matrix = ','.join(str(v) for v in TRUTH.ravel())
     cli('define', '--origin', 'user', '--model', 'affine6', '--matrix', matrix, *FIT, '--output', tmp_path/'affine')
-    assert np.allclose(json.loads((tmp_path/'affine'/'transform.json').read_text())['matrix'], TRUTH)
+    assert np.allclose(json.loads((tmp_path/'affine'/'transform.json').read_text(encoding='utf-8'))['matrix'], TRUTH)
 
 
 def test_refusals(tmp_path):

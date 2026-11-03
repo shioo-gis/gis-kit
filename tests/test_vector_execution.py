@@ -252,7 +252,7 @@ def test_batch_structured_artifact_report(work: Path) -> None:
         "scripts/batch.py", "--input-dir", str(inputs), "--output-dir", str(outputs),
         "--command", template, "--workers", "1", "--report", str(report),
     )
-    report_data = json.loads(report.read_text())
+    report_data = json.loads(report.read_text(encoding="utf-8"))
     assert report_data["succeeded"] == 1
     item = report_data["results"][0]
     assert item["status"] == "succeeded"
@@ -265,7 +265,7 @@ def test_batch_structured_artifact_report(work: Path) -> None:
         "scripts/batch.py", "--input-dir", str(inputs), "--output-dir", str(outputs),
         "--command", no_op_template, "--workers", "1", "--report", str(stale_report), expected=1,
     )
-    stale_item = json.loads(stale_report.read_text())["results"][0]
+    stale_item = json.loads(stale_report.read_text(encoding="utf-8"))["results"][0]
     assert stale_item["status"] == "artifact_failed"
     assert stale_item["artifact_status"] == "output artifact was not updated"
 
@@ -275,7 +275,7 @@ def test_batch_structured_artifact_report(work: Path) -> None:
         "scripts/batch.py", "--input-dir", str(inputs), "--output-dir", str(missing_output),
         "--command", no_op_template, "--workers", "1", "--report", str(missing_report), expected=1,
     )
-    missing_item = json.loads(missing_report.read_text())["results"][0]
+    missing_item = json.loads(missing_report.read_text(encoding="utf-8"))["results"][0]
     assert missing_item["status"] == "artifact_failed"
     assert missing_item["artifact_status"] == "output artifact is missing"
 
@@ -287,7 +287,7 @@ def test_benchmark_repeats_and_rss_reporting(work: Path) -> None:
         "--case", f"ok={sys.executable} -c 'pass'",
         "--gate", "ok", "--report", str(report), "--repeat", "3",
     )
-    result = json.loads(report.read_text())
+    result = json.loads(report.read_text(encoding="utf-8"))
     assert result["repeat"] == 3
     case = result["results"][0]
     assert case["status"] == "passed"
@@ -313,7 +313,7 @@ def test_batch_rejects_unchanged_gdb_directory(work: Path) -> None:
     command("scripts/batch.py", "--input-dir", str(inputs), "--output-dir", str(outputs),
             "--pattern", "*.gdb", "--command", f'{sys.executable} -c "pass"',
             "--workers", "1", "--report", str(report), expected=1)
-    result = json.loads(report.read_text())
+    result = json.loads(report.read_text(encoding="utf-8"))
     assert result["failed"] == 1 and result["succeeded"] == 0
     assert result["results"][0]["artifact_status"] == "output artifact was not updated"
     assert before == {str(p.relative_to(target)): p.read_bytes() for p in target.rglob("*") if p.is_file()}

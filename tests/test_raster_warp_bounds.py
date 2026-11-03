@@ -20,7 +20,7 @@ def world(path):
 
 
 def warp(tmp_path, src, **params):
-    (tmp_path/'p.json').write_text(json.dumps({'kind': 'continuous', 'resampling': 'nearest', **params}))
+    (tmp_path/'p.json').write_text(json.dumps({'kind': 'continuous', 'resampling': 'nearest', **params}), encoding='utf-8')
     out = tmp_path/'out'
     result = subprocess.run([sys.executable, str(SCRIPTS/'raster.py'), 'warp', str(src), '--params', str(tmp_path/'p.json'), '--output', str(out)],
                             capture_output=True, text=True)

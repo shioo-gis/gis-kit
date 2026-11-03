@@ -54,7 +54,7 @@ def test_display_band_boundaries_zero_nodata_and_readback(tmp_path):
 def test_display_rejects_and_does_not_publish(tmp_path, update):
     source = fixture(tmp_path)
     p = params(); p.update(update)
-    settings = tmp_path / 'params.json'; settings.write_text(json.dumps(p))
+    settings = tmp_path / 'params.json'; settings.write_text(json.dumps(p), encoding='utf-8')
     output = tmp_path / 'published'
     from argparse import Namespace
     with pytest.raises(ValueError):
@@ -71,7 +71,7 @@ def test_display_rejects_unwarped_or_uncalibrated(tmp_path, crs, scale):
 
 def test_injected_png_write_failure_never_publishes(tmp_path, monkeypatch):
     source = fixture(tmp_path)
-    settings = tmp_path / 'params.json'; settings.write_text(json.dumps(params()))
+    settings = tmp_path / 'params.json'; settings.write_text(json.dumps(params()), encoding='utf-8')
     def broken(self, path, *a, **kw):
         Path(path).write_bytes(b'partial')
         raise OSError('injected partial write')
@@ -87,7 +87,7 @@ def test_complete_bundle_failure_preserves_source(tmp_path):
     source = fixture(tmp_path); before = source.read_bytes()
     with pytest.raises(OSError):
         with bundle(tmp_path / 'delivery') as stage:
-            (stage / 'analysis.json').write_text('{}')
+            (stage / 'analysis.json').write_text('{}', encoding='utf-8')
             raise OSError('render failed after analysis')
     assert not (tmp_path / 'delivery').exists()
     assert not list(tmp_path.glob('.delivery-*'))
@@ -132,8 +132,8 @@ def test_values_mode_encodes_class_ids_and_writes_contracts(tmp_path):
     # [[0, 10, 20], [NoData, 9, 19]] with breaks [10, 20]: lower inclusive, upper exclusive.
     assert a[..., 0].tolist() == [[0, 1, 2], [0, 0, 1]] and a[..., 1].max() == 0
     assert a[..., 3].tolist() == [[255, 255, 255], [0, 255, 255]]
-    contract = json.loads((tmp_path / 'raster.json').read_text())
-    scheme = json.loads((tmp_path / 'scheme.json').read_text())
+    contract = json.loads((tmp_path / 'raster.json').read_text(encoding='utf-8'))
+    scheme = json.loads((tmp_path / 'scheme.json').read_text(encoding='utf-8'))
     assert contract['contract'] == 'display-raster' and contract['schema_version'] == 1
     assert contract['encoding'] == 'class-index' and contract['sampling'] == 'nearest' and contract['scheme'] == 'scheme.json'
     assert scheme['contract'] == 'class-scheme' and scheme['kind'] == 'sequential'
@@ -147,13 +147,13 @@ def test_values_mode_continuous_rgb24_round_trips_within_quantization(tmp_path):
     source = fixture(tmp_path)
     p = values_params(encoding='value-rgb24', kind='continuous'); p.pop('breaks')
     raster.process('display', [source], p, tmp_path)
-    contract = json.loads((tmp_path / 'raster.json').read_text())
+    contract = json.loads((tmp_path / 'raster.json').read_text(encoding='utf-8'))
     a = np.asarray(Image.open(tmp_path / 'values.png')).astype('int64')
     decoded = contract['offset'] + contract['scale'] * (a[..., 0] * 65536 + a[..., 1] * 256 + a[..., 2])
     expected = np.array([[0., 10., 20.], [0., 9., 19.]])
     valid = a[..., 3] == 255
     assert np.all(np.abs(decoded[valid] - expected[valid]) <= contract['quantization'] + 1e-12)
-    assert contract['sampling'] == 'linear' and json.loads((tmp_path / 'scheme.json').read_text())['domain'] == [0, 20]
+    assert contract['sampling'] == 'linear' and json.loads((tmp_path / 'scheme.json').read_text(encoding='utf-8'))['domain'] == [0, 20]
 
 
 def test_values_mode_categories_and_refusals(tmp_path):
@@ -163,7 +163,7 @@ def test_values_mode_categories_and_refusals(tmp_path):
     raster.process('display', [source], p, tmp_path)
     a = np.asarray(Image.open(tmp_path / 'values.png'))
     assert a[..., 0].tolist() == [[0, 2, 4], [0, 1, 3]]
-    scheme = json.loads((tmp_path / 'scheme.json').read_text())
+    scheme = json.loads((tmp_path / 'scheme.json').read_text(encoding='utf-8'))
     assert scheme['kind'] == 'categorical' and scheme['classes'][0]['group'] == '自然' and scheme['unlisted'] == 0
     with pytest.raises(ValueError, match='no listed category'):
         raster.process('display', [source], {**p, 'categories': p['categories'][:2]}, tmp_path)
@@ -178,10 +178,10 @@ def test_vector_scheme_cli_methods_counts_and_nodata(tmp_path):
                              geometry=[box(i, 0, i + 1, 1) for i in range(5)], crs=3857)
     data = tmp_path / 'zones.gpkg'; frame.to_file(data, layer='z')
     def run(field, p, name):
-        settings = tmp_path / f'{name}.json'; settings.write_text(json.dumps(p))
+        settings = tmp_path / f'{name}.json'; settings.write_text(json.dumps(p), encoding='utf-8')
         result = subprocess.run([sys.executable, SCRIPTS / 'scheme.py', data, '--layer', 'z', '--field', field, '--params', settings, '--output', tmp_path / name],
                                 capture_output=True, text=True)
-        return result, (json.loads((tmp_path / name / 'scheme.json').read_text()) if result.returncode == 0 else None)
+        return result, (json.loads((tmp_path / name / 'scheme.json').read_text(encoding='utf-8')) if result.returncode == 0 else None)
     _, quantile = run('v', {'unit': '人', 'status': 'candidate', 'method': 'quantile', 'classes': 2}, 'q')
     assert quantile['method'] == 'quantile' and quantile['breaks'] == [2.5] and quantile['counts'] == [2, 2]
     assert quantile['nodata']['count'] == 1 and quantile['classes'][0]['label'] == '< 2.5 人'

@@ -212,7 +212,7 @@ def test_recipe_raster_cache_auxiliary_corruption_source_params(tmp_path):
     path=tmp_path/'recipe.json'; cache=tmp_path/'cache'
     assert recipe.execute(path,tmp_path/'one',cache)['cache_hits']==0
     assert recipe.execute(path,tmp_path/'two',cache)['cache_hits']==3
-    entries=json.loads((tmp_path/'one/record.json').read_text())['steps']
+    entries=json.loads((tmp_path/'one/record.json').read_text(encoding='utf-8'))['steps']
     (cache/entries[0]['signature']/'modified.tif').write_bytes(b'corrupt')
     assert recipe.execute(path,tmp_path/'three',cache)['cache_hits']==2
     data['steps'][0]['params']['size']=1; write_json(path,data)
@@ -234,7 +234,7 @@ def test_recipe_terrain_candidate_failure_resume_and_untracked(tmp_path):
     assert recipe.execute(path,tmp_path/'resumed',tmp_path/'cache')['cache_hits']==3
     # Candidate gates survive the adapter; no implicit acceptance.
     record=tmp_path/'resumed/default/terrain/record.json'
-    r=json.loads(record.read_text());r['status']='candidate';write_json(record,r)
+    r=json.loads(record.read_text(encoding='utf-8'));r['status']='candidate';write_json(record,r)
     with pytest.raises(ValueError,match='Candidate'):adapters.validate(record.parent,{},'slope.tif')
     adapters.validate(record.parent,{'allow_candidate':True},'slope.tif')
     r['status']='hold';write_json(record,r)
@@ -269,7 +269,7 @@ def test_recipe_zone_binding_and_variants(tmp_path):
     result=recipe.execute(path,tmp_path/'two',tmp_path/'cache',{'zones':str(zones)})
     assert result['cache_hits']==4
     for variant in ('small','large'):
-        row=json.loads((tmp_path/'two'/variant/'area/table.json').read_text())[0]
+        row=json.loads((tmp_path/'two'/variant/'area/table.json').read_text(encoding='utf-8'))[0]
         assert row['zone_id']=='other'
 
 
@@ -281,7 +281,7 @@ def test_recipe_terrain_detail_candidate_real_cli(tmp_path):
     path=tmp_path/'recipe.json';write_json(path,data)
     recipe.execute(path,tmp_path/'one',tmp_path/'cache')
     assert recipe.execute(path,tmp_path/'two',tmp_path/'cache')['cache_hits']==1
-    assert json.loads((tmp_path/'two/default/contours/dossier.json').read_text())['execution_status']=='candidate'
+    assert json.loads((tmp_path/'two/default/contours/dossier.json').read_text(encoding='utf-8'))['execution_status']=='candidate'
 
 
 def test_every_operation_lists_its_params_in_help():

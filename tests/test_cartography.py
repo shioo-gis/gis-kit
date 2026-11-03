@@ -142,7 +142,7 @@ def test_color_shared_and_point_contact():
 def test_real_cli_bundles_and_no_overwrite(tmp_path):
     a=tmp_path/'a.gpkg';b=tmp_path/'b.gpkg';frame([Point(0,0)]).to_file(a);frame([Point(1,0)]).to_file(b)
     run(tmp_path,'match','match',a,params(),b)
-    rec=json.loads((tmp_path/'match/record.json').read_text());assert rec['status']=='hold'
+    rec=json.loads((tmp_path/'match/record.json').read_text(encoding='utf-8'));assert rec['status']=='hold'
     assert '_conflation.py' in rec['implementation_sha256']
     cli('daily.py','match',a,'--right',b,'--params',tmp_path/'match.json','--output',tmp_path/'match',success=False)
     assert (tmp_path/'match/record.json').exists()
@@ -150,20 +150,20 @@ def test_real_cli_bundles_and_no_overwrite(tmp_path):
 
 def test_crop_mapping_pixels_and_bounds(tmp_path):
     src=tmp_path/'source.png';data=np.arange(12*12*3,dtype='uint8').reshape(12,12,3);Image.fromarray(data).save(src)
-    spec=tmp_path/'p.json';spec.write_text(json.dumps({'center_xy':[6,6],'size_px':[4,4],'angle_deg':0}))
+    spec=tmp_path/'p.json';spec.write_text(json.dumps({'center_xy':[6,6],'size_px':[4,4],'angle_deg':0}), encoding='utf-8')
     crop=module('oriented-crop');crop.execute(src,spec,tmp_path/'out')
     assert np.array_equal(np.asarray(Image.open(tmp_path/'out/crop.png')),data[4:8,4:8])
-    rec=json.loads((tmp_path/'out/record.json').read_text());assert np.allclose(np.array(rec['output_to_source'])@rec['source_to_output'],np.eye(3))
-    spec.write_text(json.dumps({'center_xy':[0,0],'size_px':[4,4],'angle_deg':45}))
+    rec=json.loads((tmp_path/'out/record.json').read_text(encoding='utf-8'));assert np.allclose(np.array(rec['output_to_source'])@rec['source_to_output'],np.eye(3))
+    spec.write_text(json.dumps({'center_xy':[0,0],'size_px':[4,4],'angle_deg':45}), encoding='utf-8')
     with pytest.raises(ValueError):crop.execute(src,spec,tmp_path/'bad')
     assert not (tmp_path/'bad').exists()
 
 
 def test_render_scale_and_collision(tmp_path):
     src=tmp_path/'data.gpkg';frame([Point(0,0),Point(.01,0)],id=['LONG_LABEL_A','LONG_LABEL_B']).to_file(src)
-    p=tmp_path/'p.json';p.write_text(json.dumps({'id':'id','scale':1000,'map_width_mm':100,'map_height_mm':100,'dpi':100}))
+    p=tmp_path/'p.json';p.write_text(json.dumps({'id':'id','scale':1000,'map_width_mm':100,'map_height_mm':100,'dpi':100}), encoding='utf-8')
     module('cartographic-map').execute(src,p,tmp_path/'map')
-    rec=json.loads((tmp_path/'map/record.json').read_text());assert rec['scale_denominator']==pytest.approx(1000);assert rec['label_audit']['overlaps'] and rec['status']=='hold'
+    rec=json.loads((tmp_path/'map/record.json').read_text(encoding='utf-8'));assert rec['scale_denominator']==pytest.approx(1000);assert rec['label_audit']['overlaps'] and rec['status']=='hold'
 
 
 def test_cli_attribute_transfer_readback(tmp_path):
@@ -180,7 +180,7 @@ def test_write_failure_does_not_publish(tmp_path,monkeypatch):
     import daily
     from types import SimpleNamespace
     a=tmp_path/'a.gpkg';frame([box(0,0,1,1)]).to_file(a)
-    spec=tmp_path/'p.json';spec.write_text(json.dumps({'id':'id','method':'metrics'}))
+    spec=tmp_path/'p.json';spec.write_text(json.dumps({'id':'id','method':'metrics'}), encoding='utf-8')
     real=daily.write_vector_atomic
     def fail(*args,**kwargs):real(*args,**kwargs);raise ValueError('injected after write')
     monkeypatch.setattr(daily,'write_vector_atomic',fail)
@@ -190,13 +190,13 @@ def test_write_failure_does_not_publish(tmp_path,monkeypatch):
 
 def test_rotated_crop_exact(tmp_path):
     src=tmp_path/'image.png';a=np.arange(8*8*3,dtype='uint8').reshape(8,8,3);Image.fromarray(a).save(src)
-    p=tmp_path/'p.json';p.write_text(json.dumps({'center_xy':[4,4],'size_px':[4,4],'angle_deg':90}))
+    p=tmp_path/'p.json';p.write_text(json.dumps({'center_xy':[4,4],'size_px':[4,4],'angle_deg':90}), encoding='utf-8')
     module('oriented-crop').execute(src,p,tmp_path/'out')
     assert np.array_equal(np.asarray(Image.open(tmp_path/'out/crop.png')),np.rot90(a[2:6,2:6]))
 
 
 def test_label_omissions_are_recorded(tmp_path):
     src=tmp_path/'data.gpkg';frame([Point(0,0),Point(.01,0)],id=['LONG_LABEL_A','LONG_LABEL_B']).to_file(src)
-    p=tmp_path/'p.json';p.write_text(json.dumps({'id':'id','scale':1000,'map_width_mm':100,'map_height_mm':100,'dpi':100,'label_collision_policy':'omit'}))
-    module('cartographic-map').execute(src,p,tmp_path/'out');r=json.loads((tmp_path/'out/record.json').read_text())
+    p=tmp_path/'p.json';p.write_text(json.dumps({'id':'id','scale':1000,'map_width_mm':100,'map_height_mm':100,'dpi':100,'label_collision_policy':'omit'}), encoding='utf-8')
+    module('cartographic-map').execute(src,p,tmp_path/'out');r=json.loads((tmp_path/'out/record.json').read_text(encoding='utf-8'))
     assert not r['label_audit']['overlaps'] and len(r['label_audit']['suppressed'])==1 and r['status']=='complete'

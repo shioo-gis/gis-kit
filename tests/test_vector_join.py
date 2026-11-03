@@ -45,7 +45,7 @@ def test_all_keeps_every_pair_unmatched_rows_stable_ids_and_report(tmp_path: Pat
     assert actual["name_right"].iloc[1] == "second"
     assert actual["match_count"].tolist() == [2, 2, 0]
     assert json.loads(actual["matched_source_ids"].iloc[0]) == ["right:0", "right:1"]
-    report = json.loads(report_path.read_text())
+    report = json.loads(report_path.read_text(encoding="utf-8"))
     assert report["left_matched"] == 1 and report["left_unmatched"] == 1
     assert report["right_matched"] == 2 and report["right_unmatched"] == 0
     assert report["analysis_crs"] == "EPSG:26918"

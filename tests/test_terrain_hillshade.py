@@ -24,7 +24,7 @@ def plane(path, east=0., north=0., size=12):
 
 
 def run(tmp_path, dem, **params):
-    (tmp_path/'p.json').write_text(json.dumps({**P, **params}))
+    (tmp_path/'p.json').write_text(json.dumps({**P, **params}), encoding='utf-8')
     out = tmp_path/'out'
     result = subprocess.run([sys.executable, str(SCRIPTS/'terrain.py'), str(dem), '--params', str(tmp_path/'p.json'), '--output', str(out)],
                             capture_output=True, text=True)
@@ -44,7 +44,7 @@ def test_flat_ground_receives_sin_altitude(tmp_path):
     assert unit == 'ratio'
     assert np.isnan(shade[0, 0]) and np.isnan(shade[-1, -1]), 'incomplete 3x3 neighbourhoods stay NoData'
     assert np.allclose(shade[1:-1, 1:-1], 0.5)
-    record = json.loads((out/'record.json').read_text())
+    record = json.loads((out/'record.json').read_text(encoding='utf-8'))
     assert record['hillshade'] == {'azimuth': 315., 'altitude': 30, 'z_factor': 1.}
     assert record['artifacts']['hillshade']['unit'] == 'ratio'
 

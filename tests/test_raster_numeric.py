@@ -43,7 +43,7 @@ def test_rules_table_endpoints_unmapped_and_overlap(tmp_path):
         n.classify(data, p)
     source = tif(tmp_path/'input.tif', [[0, 1, 2, 3, -99]])
     table = tmp_path/'lookup.csv'
-    table.write_text('value,output\n0,0\n1,10\n2,20\n')
+    table.write_text('value,output\n0,0\n1,10\n2,20\n', encoding='utf-8')
     record = rcli(tmp_path, 'classes', 'reclassify', [source], {'table': str(table), 'unmapped': 'keep', 'block_size': 1})
     np.testing.assert_equal(read(tmp_path, 'classes'), [[0, 10, 20, 3, np.nan]])
     assert len(record['inputs']) == 2
@@ -278,7 +278,7 @@ def test_atomic_late_failure_and_source_change(tmp_path, monkeypatch, writer, me
     from argparse import Namespace
     source = tif(tmp_path/'source.tif', [[0, 1]])
     spec = tmp_path/'params.json'
-    spec.write_text(json.dumps({'method': method}))
+    spec.write_text(json.dumps({'method': method}), encoding='utf-8')
     args = Namespace(input=[str(source)], params=str(spec), output=str(tmp_path/'output'), operation='transform')
     original = getattr(raster.numeric, writer)
     def fail(*a, **kw):

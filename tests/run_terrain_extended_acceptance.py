@@ -31,7 +31,7 @@ def main():
     (out/'inputs').mkdir();run_times=[]
     def cli(script,argv,tag):
         start=time.perf_counter();result=subprocess.run([sys.executable,str(SCRIPTS/script),*map(str,argv)],capture_output=True,text=True,env=dict(os.environ,PYTHONDONTWRITEBYTECODE='1'))
-        (out/f'{tag}.log').write_text(result.stdout+result.stderr);result.check_returncode();run_times.append({'task':tag,'seconds':time.perf_counter()-start})
+        (out/f'{tag}.log').write_text(result.stdout+result.stderr, encoding='utf-8');result.check_returncode();run_times.append({'task':tag,'seconds':time.perf_counter()-start})
     src=assets/'datasets/terrain/gebco/2023/curated/gebco_2023_Global.tif'
     before=digest(src)
     manifest=assets/'datasets/terrain/gebco/2023/manifest.json';shutil.copy2(manifest,out/'inputs/gebco-manifest.json')
@@ -89,7 +89,7 @@ def main():
             g=gpd.read_file(f);assert g.crs==crs and g.geometry.is_valid.all()
             canonical=g.drop(columns=g.geometry.name).fillna('NULL').astype(str).to_dict('records')
             current[f.name]=hashlib.sha256(json.dumps(canonical,sort_keys=True).encode()+b''.join(g.geometry.normalize().to_wkb())).hexdigest()
-        hashes.append(current);reports.extend(json.loads(f.read_text())['resources'] for f in run.glob('*/record.json'))
+        hashes.append(current);reports.extend(json.loads(f.read_text(encoding='utf-8'))['resources'] for f in run.glob('*/record.json'))
     assert hashes[0]==hashes[1]
     points=gpd.read_file(out/'run0/detail/profile.gpkg')
     for row in points.itertuples():

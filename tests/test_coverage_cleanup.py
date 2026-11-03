@@ -34,7 +34,7 @@ def params(**extra):
 
 
 def cli(root, name, operation, source, parameters, right=None, success=True):
-    spec = root / (name + '.json'); spec.write_text(json.dumps(parameters))
+    spec = root / (name + '.json'); spec.write_text(json.dumps(parameters), encoding='utf-8')
     dest = root / name
     command = [sys.executable, str(SCRIPTS / 'daily.py'), operation, str(source), '--params', str(spec), '--output', str(dest)]
     if right is not None: command += ['--right', str(right)]
@@ -43,7 +43,7 @@ def cli(root, name, operation, source, parameters, right=None, success=True):
     if not success:
         if dest.exists(): raise AssertionError('Failed operation published a bundle')
         return proc.stderr
-    return dest, json.loads((dest / 'record.json').read_text())
+    return dest, json.loads((dest / 'record.json').read_text(encoding='utf-8'))
 
 
 @unittest.skipUnless(AVAILABLE, 'Requires Shapely 2.1 / GEOS 3.12; execute with the coverage runtime')

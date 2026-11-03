@@ -220,7 +220,7 @@ def fingerprint(item):
     """Names, sizes and digests of a dataset's files (a geodatabase folder, or a shapefile and its sidecars)."""
     files = (sorted(p for p in item.rglob('*') if p.is_file()) if item.is_dir()
              else sorted(p for p in item.parent.iterdir() if p.is_file() and (p == item or p.name.startswith(item.stem + '.'))))
-    return [(str(p.relative_to(item if item.is_dir() else item.parent)), p.stat().st_size, digest(p)) for p in files]
+    return [(p.relative_to(item if item.is_dir() else item.parent).as_posix(), p.stat().st_size, digest(p)) for p in files]
 
 
 def datasets(root, versions=()):
@@ -326,7 +326,7 @@ def layer_files(root):
             files.append((path, {'format': 'lyrx', 'error': str(error)}))
     for path in sorted(root.rglob('*.mxd')) + sorted(root.rglob('*.mapx')):
         files.append((path, {'format': path.suffix.lower().lstrip('.'), 'note': 'map document; layers not read'}))
-    return files, [str(p.relative_to(root)) for p in lyr_folders]
+    return files, [p.relative_to(root).as_posix() for p in lyr_folders]
 
 
 def source_key(text):
@@ -400,7 +400,7 @@ def unpack(args):
             name = re.sub(r'^\d{4}', '', path.stem)
             linked = match(summary, data, name, versions, path.parent.relative_to(root).as_posix()) if 'error' not in summary and summary['format'][:3] in ('lyr',) else []
             used.update(p.split(':')[0] for p in linked)
-            layers.append({'file': str(path.relative_to(root)), 'name': name, **summary, 'data': linked,
+            layers.append({'file': path.relative_to(root).as_posix(), 'name': name, **summary, 'data': linked,
                            'data_in_package': bool(linked) if summary['format'][:3] == 'lyr' else None})
             layers[-1].pop('strings', None)
         missing = [layer['name'] for layer in layers if layer['data_in_package'] is False]
@@ -422,7 +422,7 @@ def unpack(args):
                     'source': {'name': source.name, 'bytes': stat.st_size, 'sha256': digest(source), 'archive': kind,
                                'reader': tool, 'unpacked_bytes': total, 'members': len(rows)},
                     'package': info, 'item': item, 'layer_versions': versions, 'datasets': data, 'layers': layers,
-                    'thumbnail': str(thumbnail.relative_to(stage)) if thumbnail else None,
+                    'thumbnail': thumbnail.relative_to(stage).as_posix() if thumbnail else None,
                     'warnings': warnings, 'unpacked_to': 'package/'}
         write_json(stage / 'package.json', manifest)
         write_json(stage / 'record.json', {'schema_version': 1, 'status': 'complete', 'tool': 'package unpack', 'version': VERSION,

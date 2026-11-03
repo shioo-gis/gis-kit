@@ -93,7 +93,7 @@ def gcp_fixture(tmp_path):
     def world(x,y):return [400000+2*x+.002*y*y,3000000-2*y]
     fit=[(2,2),(25,2),(47,2),(47,25),(47,47),(25,47),(2,47),(2,25)];check=[(12,12),(37,12),(12,37),(37,37)]
     data=dict(actor={'model':'gpt-6-astra','reasoning_effort':'low'},source_sha256=G.digest(image),source_crs='EPSG:32645',target_crs='EPSG:32645',coordinate_reference='SYNTHETIC regression, no real model observation',frame=dict(id='test',pixel_region=box(2,2,47,47).__geo_interface__),acceptance_policy=dict(max_check_rmse=2,max_check_error=3,min_fit_coverage=.95,rationale='Synthetic bounded polynomial test'),points=[dict(id=str(i),pixel=list(p),world=world(*p),role='fit' if i<len(fit) else 'check') for i,p in enumerate(fit+check)])
-    gcps=tmp_path/'gcps.json';gcps.write_text(json.dumps(data));policy=dict(grid_step_px=4,max_inverse_error_px=2,max_roundtrip_px=1,max_condition=10,resolution=1.7,resampling='nearest',rationale='Synthetic regression')
+    gcps=tmp_path/'gcps.json';gcps.write_text(json.dumps(data), encoding='utf-8');policy=dict(grid_step_px=4,max_inverse_error_px=2,max_roundtrip_px=1,max_condition=10,resolution=1.7,resampling='nearest',rationale='Synthetic regression')
     return image,gcps,policy
 
 
@@ -104,14 +104,14 @@ def test_tps_frozen_checks_mask_and_source(tmp_path):
         a=d.read();assert d.count==4 and np.any(a[3]==0) and np.any(a[3]>0)
         # Independent nearest-pixel check using GDAL inverse and stored target pixel centres.
         rr,cc=np.where(a[3]>0);rr,cc=rr[::20],cc[::20];xx,yy=rio.transform.xy(d.transform,rr,cc)
-        base=json.loads((tmp_path/'out/affine.json').read_text())
+        base=json.loads((tmp_path/'out/affine.json').read_text(encoding='utf-8'))
         with G.transformer(base) as tr:pixel=G.inverse(tr,np.column_stack((xx,yy)))
         keep=(np.abs(pixel+.5-np.round(pixel+.5)).min(axis=1)>1e-6);assert keep.sum()>20
         pixel=pixel[keep];rr=rr[keep];cc=cc[keep]
         expected=np.array(Image.open(image));rc=np.floor(pixel+.5).astype(int)
         np.testing.assert_allclose(a[:3,rr,cc].T,expected[rc[:,1],rc[:,0]],atol=0)
     p['max_condition']=.5;held=G.execute(image,gcps,p,tmp_path/'held');assert held['status']=='hold' and not (tmp_path/'held/warped.tif').exists()
-    data=json.loads(gcps.read_text());data['points'][-1]['pixel']=data['points'][0]['pixel'];gcps.write_text(json.dumps(data))
+    data=json.loads(gcps.read_text(encoding='utf-8'));data['points'][-1]['pixel']=data['points'][0]['pixel'];gcps.write_text(json.dumps(data), encoding='utf-8')
     with pytest.raises(ValueError,match='Duplicate pixel'):G.execute(image,gcps,p,tmp_path/'bad')
 
 
@@ -125,7 +125,7 @@ def test_hydro_frozen_tolerance_and_outside(tmp_path):
     rivers.to_file(source,driver='GPKG');a=np.zeros((4,4),dtype='uint8');a[:,0]=1
     with rio.open(streams,'w',driver='GTiff',width=4,height=4,count=1,dtype='uint8',transform=rio.transform.from_origin(0,40,10,10),crs=32645) as d:d.write(a,1)
     p=dict(id='id',spacing_m=10,tolerance_m=0,min_matched_fraction=1,rationale='Exact synthetic stream centres')
-    H.execute(source,streams,p,tmp_path/'out');r=json.loads((tmp_path/'out/record.json').read_text());by={v['source_id']:v for v in r['reaches']}
+    H.execute(source,streams,p,tmp_path/'out');r=json.loads((tmp_path/'out/record.json').read_text(encoding='utf-8'));by={v['source_id']:v for v in r['reaches']}
     assert r['status']=='hold' and by['match']['status']=='pass' and by['far']['matched_fraction']==0 and by['outside']['outside']>0
     p['tolerance_m']=-1
     with pytest.raises(ValueError):H.execute(source,streams,p,tmp_path/'invalid')

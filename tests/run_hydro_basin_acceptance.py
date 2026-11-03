@@ -68,7 +68,7 @@ def main():
     ap=argparse.ArgumentParser(description=__doc__)
     for k in ('dem','basin','next_basin','rivers','old_reaches','policy','output'):ap.add_argument(k)
     ap.add_argument('--grass',required=True);a=ap.parse_args();out=Path(a.output);out.mkdir(parents=True,exist_ok=False);started=time.perf_counter();implementation_before=digest(__file__)
-    policy=json.loads(Path(a.policy).read_text());write_json(out/'policy.json',policy)
+    policy=json.loads(Path(a.policy).read_text(encoding='utf-8'));write_json(out/'policy.json',policy)
     inputs={k:digest(getattr(a,k)) for k in ('dem','basin','next_basin','rivers','old_reaches','policy')};basin=gpd.read_file(a.basin).to_crs(32645);rivers=gpd.read_file(a.rivers).to_crs(32645);old=gpd.read_file(a.old_reaches).to_crs(32645)
     next_basin=gpd.read_file(a.next_basin).to_crs(32645);identity=reference_identity(basin,next_basin,rivers,policy);write_json(out/'reference-identity.json',identity);shared_boundary=basin.geometry.iloc[0].boundary.intersection(next_basin.geometry.iloc[0].boundary)
     if shared_boundary.is_empty:raise ValueError('Reference NEXT_DOWN basin has no shared boundary')

@@ -50,7 +50,7 @@ def main():
             command=[sys.executable,str(S/'terrain-cost.py'),str(source),'--friction',str(inputs/f'{name}.tif'),'--params',str(inputs/f'{name}.json'),'--grass',v.grass,'--output',str(dest)]
             result=subprocess.run(command,capture_output=True,text=True,env=dict(os.environ,PYTHONDONTWRITEBYTECODE='1'))
             if result.returncode:raise RuntimeError(f'CLI failed: {result.stderr}')
-            record=json.loads((dest/'record.json').read_text());records[f'{repeat}/{name}']=record
+            record=json.loads((dest/'record.json').read_text(encoding='utf-8'));records[f'{repeat}/{name}']=record
             routes=gpd.read_file(dest/'routes.gpkg')
             signature=dict(rasters={f.name:decoded(f) for f in dest.glob('*.tif')},routes=[dict(wkb=g.wkb_hex,cost=float(c)) for g,c in zip(routes.geometry,routes.cost_seconds)])
             if repeat:assert signatures[name]==signature

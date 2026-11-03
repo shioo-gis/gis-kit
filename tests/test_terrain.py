@@ -80,7 +80,7 @@ def test_rotated_and_sidecar(tmp_path):
     from affine import Affine
     p = raster(tmp_path/'in.tif', transform=Affine(2,.1,500000,0,-3,3100000))
     with pytest.raises(ValueError,match='North-up'): terrain.execute(p,P,tmp_path/'out')
-    Path(str(p)+'.aux.xml').write_text('<PAMDataset/>')
+    Path(str(p)+'.aux.xml').write_text('<PAMDataset/>', encoding='utf-8')
     with pytest.raises(ValueError,match='sidecars'): terrain.execute(p,P,tmp_path/'out')
 
 

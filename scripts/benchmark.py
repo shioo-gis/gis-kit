@@ -8,18 +8,19 @@ from __future__ import annotations
 import argparse
 import json
 from pathlib import Path
-import shlex
 import statistics
 import subprocess
 import sys
 import time
+
+from _command import split_command
 
 
 def parse_case(value: str) -> tuple[str, list[str]]:
     name, separator, command = value.partition("=")
     if not separator or not name or not command:
         raise argparse.ArgumentTypeError("--case must be NAME=COMMAND")
-    return name, shlex.split(command)
+    return name, split_command(command)
 
 
 def rss_mb(pid: int) -> float | None:

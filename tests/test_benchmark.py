@@ -19,7 +19,7 @@ def main() -> None:
             text=True,
         )
         assert passed.returncode == 0, passed.stderr
-        assert json.loads(report.read_text())["decision"] == "TIER0_SUFFICIENT"
+        assert json.loads(report.read_text(encoding="utf-8"))["decision"] == "TIER0_SUFFICIENT"
 
         timed_out = subprocess.run(
             [sys.executable, str(BENCHMARK), "--case", f"slow={sys.executable} -c 'import time; time.sleep(1)'", "--gate", "slow", "--max-seconds", "0.1"],

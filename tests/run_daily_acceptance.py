@@ -65,7 +65,7 @@ def main():
             'reproducibility':'normalized geometry + attributes; PNG decoded pixels; no claim of GPKG byte equality',
             'visual':fingerprints[0],'cases':['multi-source normalization/update','parcel selection/allocation/summary/rules','nearest relationships'],
             'visual_review':'requires explicit human/agent image inspection, not inferred from successful rendering'}
-    (root/'acceptance.json').write_text(json.dumps(report,indent=2)+'\n')
+    (root/'acceptance.json').write_text(json.dumps(report,indent=2)+'\n', encoding='utf-8')
     print(json.dumps(report,indent=2))
 
 

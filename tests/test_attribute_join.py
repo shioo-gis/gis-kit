@@ -47,7 +47,7 @@ def test_normalised_parcel_numbers_join_an_excel_table(tmp_path):
     assert out.loc['01-01', '建筑量'] == 12000 and out.loc['01-02', '容积率'] == 3.0
     assert out.loc['01-03', '建筑量'] == 3000 and out.loc['01-03', 'match_count'] == 2  # first of two rows
     assert pd.isna(out.loc['01-10', '建筑量']) and out.crs is None
-    report = json.loads((tmp_path/'first.json').read_text())
+    report = json.loads((tmp_path/'first.json').read_text(encoding='utf-8'))
     assert report['predicate'] == 'attribute' and report['key'] == {'left': 'parcel_id', 'right': '地块编号', 'normalize': 'id'}
     assert report['left_unmatched_keys'] == ['01-10'] and report['right_unmatched_keys'] == ['09-09']
     assert report['left_without_key'] == 1 and report['right_duplicate_keys'] == {'1-3': ['01—03', '01-03']}
@@ -68,7 +68,7 @@ def test_keys_as_given_and_a_gbk_csv_with_a_title_row(tmp_path):
         '--output', tmp_path/'out.gpkg', '--report-json', tmp_path/'out.json')
     out = gpd.read_file(tmp_path/'out.gpkg').set_index('编号')
     assert out.loc['007', '容积率'] == 2.5 and pd.isna(out.loc['7', '容积率'])  # leading zeros kept without --normalize id
-    assert json.loads((tmp_path/'out.json').read_text())['left_unmatched_keys'] == ['7']
+    assert json.loads((tmp_path/'out.json').read_text(encoding='utf-8'))['left_unmatched_keys'] == ['7']
 
 
 def test_vector_on_the_right_and_refusals(tmp_path):

@@ -35,10 +35,10 @@ def tif(path,values=None,transform=None,mask=None,crs='EPSG:26918'):
 
 
 def rcli(root,name,op,inputs,params,success=True):
-    spec=root/(name+'.json');spec.write_text(json.dumps(params));output=root/name
+    spec=root/(name+'.json');spec.write_text(json.dumps(params), encoding='utf-8');output=root/name
     cli('raster.py',op,*inputs,'--params',spec,'--output',output,success=success)
     if not success: assert not output.exists();return
-    return json.loads((output/'record.json').read_text())
+    return json.loads((output/'record.json').read_text(encoding='utf-8'))
 
 
 def test_version_order_split_merge():
@@ -167,9 +167,9 @@ def test_coverage_cli_inset_pending_and_source(tmp_path):
     run,ledger=ledger_fixture(tmp_path)
     ledger['regions'].append({'id':'inset','kind':'inset','bounds':[0,0,2,2],'categories':['border']})
     ledger['observations'][0].update(review='accepted',reviewer='fixture')
-    path=tmp_path/'ledger.json';path.write_text(json.dumps(ledger));out=tmp_path/'coverage.json'
+    path=tmp_path/'ledger.json';path.write_text(json.dumps(ledger), encoding='utf-8');out=tmp_path/'coverage.json'
     cli('coverage.py',run,'--ledger',path,'--output',out)
-    assert json.loads(out.read_text())['status']=='hold'
+    assert json.loads(out.read_text(encoding='utf-8'))['status']=='hold'
     Image.new('RGB',(10,10),'black').save(run/'source.png')
     with pytest.raises(ValueError,match='hash'): coverage.audit(run,ledger)
 

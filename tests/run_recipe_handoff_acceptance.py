@@ -50,24 +50,24 @@ def execute(root):
         assert json.loads(changed.stdout)['cache_hits']==0
         objects=atlas_fixture(work);original=digest(objects)
         cli('atlas.py',objects,'--params',work/'atlas.json','--output',work/'atlas')
-        atlas_record=json.loads((work/'atlas/record.json').read_text());assert len(atlas_record['objects'])==3
+        atlas_record=json.loads((work/'atlas/record.json').read_text(encoding='utf-8'));assert len(atlas_record['objects'])==3
         assert sum(o['status']=='omitted' for o in atlas_record['objects'])==1
         assert digest(objects)==original
         run,state,p=network_fixture(work)
         cli('candidates.py',run,'--confirmed',work/'confirmed.json','--output',work/'candidates')
-        report=json.loads((work/'candidates/candidates.json').read_text());assert len(report['candidates'])==5 and report['status']=='hold'
+        report=json.loads((work/'candidates/candidates.json').read_text(encoding='utf-8'));assert len(report['candidates'])==5 and report['status']=='hold'
         overview=A.view(run,max_size=1000,overlay=True,labels=True)
-        (work/'annotation-view.json').write_text(json.dumps(overview,indent=2))
+        (work/'annotation-view.json').write_text(json.dumps(overview,indent=2), encoding='utf-8')
         geo=georef_fixture(work)
         cli('georef-delivery.py','package',work/'package.json','--output',work/'spatial')
         # A separately fitted transform uses identical check points, not a modified report.
-        gcps=json.loads((work/'main-gcps.json').read_text())
+        gcps=json.loads((work/'main-gcps.json').read_text(encoding='utf-8'))
         for point in gcps['points']:
             if point['role']=='fit':point['world'][0]+=3;point['world'][1]+=4
         write_json(work/'shifted-gcps.json',gcps)
         cli('raster-georef.py','fit',work/'shifted-gcps.json',work/'shifted.json')
         cli('georef-delivery.py','compare',work/'main.json',work/'shifted.json','--output',work/'displacement')
-        comparison=json.loads((work/'displacement/comparison.json').read_text())
+        comparison=json.loads((work/'displacement/comparison.json').read_text(encoding='utf-8'))
         assert abs(comparison['maximum_frame_displacement']-5)<1e-7 and comparison['acceptance_after']['status']=='hold'
         maps={p.name:pixels(p) for p in (work/'atlas').glob('*.png')}
         results.append({'grid':canonical(work/'recipe-first/fine/grid/result.gpkg'),'maps_rgba':maps,'candidate_geometry':[c['geometry'] for c in report['candidates']],'displacement':comparison['maximum_frame_displacement']})

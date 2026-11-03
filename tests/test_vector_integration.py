@@ -24,7 +24,7 @@ def test_vector_cli_chain(tmp_path):
         commands.append({'script': script, 'arguments': list(map(str, args)),
                          'returncode': result.returncode, 'stdout': result.stdout,
                          'stderr': result.stderr})
-        (work / 'commands.json').write_text(json.dumps(commands, indent=2))
+        (work / 'commands.json').write_text(json.dumps(commands, indent=2), encoding='utf-8')
         assert result.returncode == 0, result.stderr
         return result
 
@@ -66,10 +66,10 @@ def test_vector_cli_chain(tmp_path):
     assert merged.crs.to_epsg() == 32650
     run('topo.py', dissolved, '--expected-coverage', boundary,
         '--fail-on-error', '--output', work/'topology.txt')
-    assert 'Issues: 0 (0 errors)' in (work/'topology.txt').read_text()
+    assert 'Issues: 0 (0 errors)' in (work/'topology.txt').read_text(encoding='utf-8')
     run('topo.py', dissolved, '--expected-coverage', boundary, '--format', 'json',
         '--fail-on-error', '--output', work/'topology.json')
-    assert json.loads((work/'topology.json').read_text())['summary']['error_count'] == 0
+    assert json.loads((work/'topology.json').read_text(encoding='utf-8'))['summary']['error_count'] == 0
 
 
 @pytest.mark.parametrize('script', ['test_large_data_paths.py', 'test_benchmark.py'])

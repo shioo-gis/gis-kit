@@ -66,13 +66,13 @@ def main():
         with rio.open(inputs/f'{name}.tif', 'w', driver='GTiff', width=w, height=h, count=1,
                       dtype='float64', crs=crs, transform=from_origin(x, y, pixel, pixel), nodata=np.nan) as out:
             out.write(np.zeros((h, w)), 1)
-    (inputs/'lookup.csv').write_text('value,output\n1,1\n2,2\n3,4\n4,8\n')
+    (inputs/'lookup.csv').write_text('value,output\n1,1\n2,2\n3,4\n4,8\n', encoding='utf-8')
     frozen = {'source_description': args.source_description, 'source_sha256': before,
               'source_path': str(original), 'data_scope': 'Real stored elevation; diagnostic regions/totals and weights are synthetic assumptions, not observed population or suitability.',
               'intervals': [0, 2000, 4000, 6000, 10000], 'totals': dict(zip(regions.id, regions.total)),
               'tolerance': {'absolute': 1e-9, 'relative': 1e-12}, 'repeats_block_size': [1, 256],
               'no_performance_claim': True, 'original_evidence_modified': False}
-    (inputs/'frozen-policy.json').write_text(json.dumps(frozen, indent=2))
+    (inputs/'frozen-policy.json').write_text(json.dumps(frozen, indent=2), encoding='utf-8')
     input_hashes = {p.name: digest(p) for p in inputs.iterdir()}
     runs, signatures = [], []
     for repeat, block in enumerate((1, 256)):
@@ -82,18 +82,18 @@ def main():
         def cli(name, op, sources, p, success=True):
             p = dict(p, block_size=block)
             spec = work/(name+'.json')
-            spec.write_text(json.dumps(p))
+            spec.write_text(json.dumps(p), encoding='utf-8')
             command = [sys.executable, str(SCRIPTS/'raster.py'), op, *map(str, sources), '--params', str(spec), '--output', str(work/name)]
             started = time.perf_counter()
             result = subprocess.run(command, capture_output=True, text=True, env=dict(os.environ, PYTHONDONTWRITEBYTECODE='1'))
-            (work/(name+'.log')).write_text(result.stdout+result.stderr)
+            (work/(name+'.log')).write_text(result.stdout+result.stderr, encoding='utf-8')
             operations.append({'name': name, 'operation': op, 'seconds': time.perf_counter()-started, 'returncode': result.returncode})
             if not success:
                 assert result.returncode != 0 and not (work/name).exists()
                 return
             if result.returncode:
                 raise RuntimeError(result.stderr)
-            return json.loads((work/name/'record.json').read_text())
+            return json.loads((work/name/'record.json').read_text(encoding='utf-8'))
         rules = [{'min': lo, 'max': hi, 'output': i+1, 'closed': 'both' if i == 3 else 'left'} for i, (lo, hi) in enumerate(zip(frozen['intervals'], frozen['intervals'][1:]))]
         cli('classes', 'reclassify', [inputs/'source.tif'], {'rules': rules, 'unmapped': 'error'})
         cli('lookup', 'reclassify', [work/'classes/result.tif'], {'table': str(inputs/'lookup.csv'), 'unmapped': 'error'})
@@ -176,7 +176,7 @@ def main():
                'children_max_rss': resource.getrusage(resource.RUSAGE_CHILDREN).ru_maxrss,
                'rss_unit': 'bytes on macOS, KiB on Linux; separate maxima, not process-tree sum',
                'performance_claim': False, 'visual_review': 'pending actual inspection'}
-    (root/'acceptance.json').write_text(json.dumps(summary, indent=2))
+    (root/'acceptance.json').write_text(json.dumps(summary, indent=2), encoding='utf-8')
     print(root)
 
 

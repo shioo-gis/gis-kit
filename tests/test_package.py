@@ -1,6 +1,7 @@
 """package.py unpack: safe unpacking and inventory of ArcGIS layer / map packages."""
 from __future__ import annotations
 
+import ast
 import json
 import os
 from pathlib import Path
@@ -22,7 +23,7 @@ def cli(*args, success=True):
     result = subprocess.run([sys.executable, str(SCRIPTS/'package.py'), *map(str, args)], capture_output=True, text=True,
                             env={**os.environ, 'PYTHONDONTWRITEBYTECODE': '1'})
     assert (result.returncode == 0) == success, result.stdout+result.stderr
-    return json.loads((Path(args[args.index('--output') + 1])/'package.json').read_text()) if success else result.stderr
+    return json.loads((Path(args[args.index('--output') + 1])/'package.json').read_text(encoding='utf-8')) if success else result.stderr
 
 
 def fake_lyr(folder_name, dataset, label):
@@ -89,6 +90,31 @@ def test_unpack_lists_data_and_links_layers(tmp_path):
     assert gpd.read_file(tmp_path/'out'/'package'/'commondata'/'示例规划'/'拆除类.shp')['项目名'].tolist() == ['示例工业区']
 
 
+def test_unpack_manifest_paths_use_forward_slashes(tmp_path):
+    tree = package_tree(tmp_path/'tree')
+    (tree/'esriinfo'/'thumbnail').mkdir(parents=True)
+    (tree/'esriinfo'/'thumbnail'/'thumbnail.png').write_bytes(b'png')
+    (tree/'extra'/'v107').mkdir(parents=True)
+    shutil.copy(next((tree/'v105').glob('*.lyr')), tree/'extra'/'v107')
+    zip_tree(tree, tmp_path/'nested.lpk')  # a zip, so this runs on Windows too, where only tar.exe may be installed
+    manifest = cli('unpack', tmp_path/'nested.lpk', '--output', tmp_path/'out')
+    assert manifest['thumbnail'] == 'package/esriinfo/thumbnail/thumbnail.png'
+    assert manifest['layer_versions'] == ['v10', 'v105', 'extra/v107']
+    assert next(l for l in manifest['layers'] if l['file'].endswith('.lyr'))['file'] == 'extra/v107/0000拆除类.lyr'
+    assert not [l['file'] for l in manifest['layers'] if '\\' in l['file']]
+
+
+def test_package_paths_never_take_the_native_separator():
+    """str() of a real path is backslashed on Windows, which no test on another platform can see; PurePosixPath is fine."""
+    tree = ast.parse((SCRIPTS/'package.py').read_text(encoding='utf-8'))
+    allowed = {'posix'}  # the PurePosixPath in dataset_key
+    found = [node.lineno for node in ast.walk(tree)
+             if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id == 'str' and node.args
+             and isinstance(node.args[0], ast.Call) and isinstance(node.args[0].func, ast.Attribute) and node.args[0].func.attr == 'relative_to'
+             and getattr(node.args[0].func.value, 'id', None) not in allowed]
+    assert not found, found
+
+
 @needs_bsdtar
 def test_unpack_reports_layers_without_data(tmp_path):
     package = seven_zip(package_tree(tmp_path/'tree', with_data=False), tmp_path/'ref.lpk')
@@ -120,7 +146,7 @@ def test_unpack_a_zip_package_and_refusals(tmp_path):
         archive.writestr(info, '/etc/passwd')
     assert '(link)' in cli('unpack', linked, '--output', tmp_path/'l', success=False)
     text = tmp_path/'plain.lpk'
-    text.write_text('not an archive')
+    text.write_text('not an archive', encoding='utf-8')
     assert 'neither a 7z nor a zip' in cli('unpack', text, '--output', tmp_path/'t', success=False)
     assert 'Source must be' in cli('unpack', tmp_path/'tree'/'esriinfo'/'item.pkinfo', '--output', tmp_path/'s', success=False)
     assert not any((tmp_path/n).exists() for n in ('small', 'e', 'l', 't', 's'))
@@ -160,7 +186,7 @@ def test_unpack_lists_data_in_version_folders_and_compound_crs(tmp_path):
     sea = tree/'commondata'/'sea'
     sea.mkdir(parents=True)
     gpd.GeoDataFrame({'k': [1]}, geometry=[box(38489000, 2490000, 38489100, 2490100)], crs='EPSG:4526').to_file(sea/'sea.shp')
-    (sea/'sea.prj').write_text(CRS('EPSG:4526+5737').to_wkt('WKT1_ESRI'))  # zone-prefixed Gauss-Kruger + height
+    (sea/'sea.prj').write_text(CRS('EPSG:4526+5737').to_wkt('WKT1_ESRI'), encoding='utf-8')  # zone-prefixed Gauss-Kruger + height
 
     manifest = cli('unpack', zip_tree(tree, tmp_path/'base.lpk'), '--output', tmp_path/'out')
     rows = {d['path']: d for d in manifest['datasets']}
