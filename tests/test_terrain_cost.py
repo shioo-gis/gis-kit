@@ -46,7 +46,7 @@ def test_real_grass_up_down_and_transpose(tmp_path, grass, delta):
     W.execute(dem,friction,P,tmp_path/'up',grass)
     p=dict(P,start=P['end'],end=P['start'])
     W.execute(dem,friction,p,tmp_path/'down',grass)
-    up=json.loads((tmp_path/'up/record.json').read_text()); down=json.loads((tmp_path/'down/record.json').read_text())
+    up=json.loads((tmp_path/'up/record.json').read_text(encoding='utf-8')); down=json.loads((tmp_path/'down/record.json').read_text(encoding='utf-8'))
     assert up['cost_seconds']==pytest.approx(4*(7.2+6*delta))
     expected=4*(7.2-(1.9998 if delta==1 else -1.9998)*delta)
     assert down['cost_seconds']==pytest.approx(expected)
@@ -61,12 +61,12 @@ def test_barrier_unreachable_and_same_cell(tmp_path,grass):
     z=np.zeros((5,5));f=np.zeros_like(z);f[:,2]=np.nan
     dem=raster(tmp_path/'dem.tif',z);friction=raster(tmp_path/'friction.tif',f)
     W.execute(dem,friction,P,tmp_path/'blocked',grass)
-    record=json.loads((tmp_path/'blocked/record.json').read_text())
+    record=json.loads((tmp_path/'blocked/record.json').read_text(encoding='utf-8'))
     assert record['reachable'] is False and record['cost_seconds'] is None
     assert gpd.read_file(tmp_path/'blocked/routes.gpkg').empty
     assert np.isnan(read(tmp_path/'blocked/corridor.tif')).all()
     W.execute(dem,friction,dict(P,end=P['start']),tmp_path/'same',grass)
-    assert json.loads((tmp_path/'same/record.json').read_text())['cost_seconds']==0
+    assert json.loads((tmp_path/'same/record.json').read_text(encoding='utf-8'))['cost_seconds']==0
     assert gpd.read_file(tmp_path/'same/routes.gpkg').empty
 
 

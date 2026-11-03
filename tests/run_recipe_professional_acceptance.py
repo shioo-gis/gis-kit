@@ -45,7 +45,7 @@ def main():
         s=dict(id=ident,runner=runner,operation=operation,files={k:ref(v) for k,v in files.items()},params=params,artifact=artifact,validate=dict(allow_candidate=True))
         if backend:s['backend']=backend
         steps.append(s)
-    def params(n):return json.loads((inputs/(n+'.json')).read_text())
+    def params(n):return json.loads((inputs/(n+'.json')).read_text(encoding='utf-8'))
     step('network','network',dict(input='edges',origins='origins',facilities='facilities'),params('network'),'routes.gpkg')
     step('suitability','suitability',dict(input='sites'),params('suitability'),'scores.gpkg')
     step('kde','spatial-inference',dict(input='cities'),params('kde'),'density.tif')
@@ -57,7 +57,7 @@ def main():
     for index in (0,1):
         start_time=time.perf_counter()
         proc=subprocess.run([sys.executable,str(SCRIPTS/'recipe.py'),str(root/'recipe.json'),'--output',str(root/f'run{index}'),'--cache',str(root/'cache')],capture_output=True,text=True,env={**os.environ,'PYTHONDONTWRITEBYTECODE':'1'})
-        (root/f'run{index}.log').write_text(proc.stdout+proc.stderr)
+        (root/f'run{index}.log').write_text(proc.stdout+proc.stderr, encoding='utf-8')
         if proc.returncode:raise RuntimeError(proc.stderr)
         result=json.loads(proc.stdout);runs.append(dict(seconds=time.perf_counter()-start_time,**result))
         assert result['cache_hits']==(0 if index==0 else 3)

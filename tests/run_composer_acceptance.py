@@ -104,7 +104,7 @@ def main():
     def raster(operation,input,params,dest):
         settings=output/f'params-{dest.name}.json'; write_json(settings,params)
         gis('raster.py',operation,input,'--params',settings,'--output',dest)
-        return json.loads((dest/'record.json').read_text())
+        return json.loads((dest/'record.json').read_text(encoding='utf-8'))
     command(['node',entry,'project','init',project,'--name','gis-kit composer acceptance'])
     analysis=project/'inputs'/INPUT
     scheme_params={'breaks':BREAKS,'labels':LABELS,'unit':'m','status':'candidate','nodata_label':UNKNOWN}
@@ -146,7 +146,7 @@ def main():
         settings=output/'params-scheme.json'; write_json(settings,scheme_params)
         gis('scheme.py',stage/'analysis.gpkg','--layer','means','--field','mean','--params',settings,'--output',stage/'scheme')
         display=raster('display',stage/'warp/result.tif',{'band':1,'mode':'values',**scheme_params},stage/'display')
-        vector_scheme=json.loads((stage/'scheme/scheme.json').read_text()); raster_scheme=json.loads((stage/'display/scheme.json').read_text())
+        vector_scheme=json.loads((stage/'scheme/scheme.json').read_text(encoding='utf-8')); raster_scheme=json.loads((stage/'display/scheme.json').read_text(encoding='utf-8'))
         assert vector_scheme['breaks']==raster_scheme['breaks']==BREAKS and [c['label'] for c in vector_scheme['classes']]==[c['label'] for c in raster_scheme['classes']]==LABELS
         assert 'colors' not in vector_scheme and 'colors' not in raster_scheme and display['encoding']=='class-index'
         bounds=list(transform_bounds('EPSG:3857','EPSG:4326',left,bottom,right+dx,top))
@@ -167,7 +167,7 @@ def main():
                 controls.append({'id':str(i),'coordinates':[lon[0],lat[0]],'class':int(np.searchsorted(BREAKS,values[row,col],side='right'))})
         write_json(stage/'record.json',{'delivery':'complete','consumer':'gis-composer project inputs','analysis_status':'candidate','analysis':semantics,
                   'files':{str(f.relative_to(stage)):digest(f) for f in stage.rglob('*') if f.is_file()}})
-    published=json.loads((analysis/'record.json').read_text())['files']
+    published=json.loads((analysis/'record.json').read_text(encoding='utf-8'))['files']
     runs={}; palettes={}
     for theme in THEMES:
         for kind in ('vector','raster'):
@@ -181,13 +181,13 @@ def main():
             run_dir=Path(result['run']['dir'])
             # Provenance: Composer hashed every file it read from inputs/<name>/ with the SHA-256 gis-kit published.
             prefix=f'inputs/{INPUT}/'
-            used={i['ref'][len(prefix):]:i['sha256'] for i in json.loads(Path(result['run']['record']).read_text())['inputs'] if i['ref'].startswith(prefix)}
+            used={i['ref'][len(prefix):]:i['sha256'] for i in json.loads(Path(result['run']['record']).read_text(encoding='utf-8'))['inputs'] if i['ref'].startswith(prefix)}
             assert used and all(published[n]==sha for n,sha in used.items()), used
             assert ('display/values.png' in used and 'display/scheme.json' in used) if kind=='raster' else 'scheme/scheme.json' in used
-            metrics=json.loads(Path(result['metrics']).read_text())
+            metrics=json.loads(Path(result['metrics']).read_text(encoding='utf-8'))
             assert metrics['render']['resourceUrls']
             assert all(url.startswith(('http://127.0.0.1:','data:','blob:')) for url in metrics['render']['resourceUrls'])
-            resolved=json.loads((run_dir/'scene.resolved.json').read_text())
+            resolved=json.loads((run_dir/'scene.resolved.json').read_text(encoding='utf-8'))
             ramp=resolved['palette']['dataRamp']; assert len(ramp)==len(LABELS)  # a ramp of the class count is used as is
             legend=resolved['overlay']['legend']['items']
             scheme_item=next(item for item in legend if item.get('model')=='classified')
@@ -212,7 +212,7 @@ def main():
         result=composer_json(command(['node',entry,'--project',moved,'rerun',runs[name]['run']],cwd=moved/'inputs'))
         assert result['rerun']['identical'] and not result['rerun']['mismatched'] and not result['rerun']['missing'], result
         comparisons[name]={'rerun':result['run']['id'],'byte_identical':True,'png_sha256':runs[name]['png_sha256']}
-    styled=json.loads((moved/'scenes/vector-research.scene.json').read_text()); styled['layers'][1]['paint']['line-color']='#263238'
+    styled=json.loads((moved/'scenes/vector-research.scene.json').read_text(encoding='utf-8')); styled['layers'][1]['paint']['line-color']='#263238'
     write_json(moved/'scenes/style-only.scene.json',styled)
     assert digest(composer_json(composer_cmd('qa','scenes/style-only.scene.json','--name','style-only',root=moved))['image'])!=runs['vector-research']['png_sha256']
     failures={}
@@ -228,7 +228,7 @@ def main():
         result=composer_cmd('qa','scenes/failure.scene.json','--name',case,*extra,root=moved,success=False)
         assert expected_codes[case] in result.stdout+result.stderr, (case,result.stdout[-600:],result.stderr[-600:])
         # A refused command leaves no run, or a run whose record is not ok.
-        statuses=[json.loads((r/'run.json').read_text())['status'] for r in (moved/'runs').iterdir() if r.is_dir() and r.name not in existing]
+        statuses=[json.loads((r/'run.json').read_text(encoding='utf-8'))['status'] for r in (moved/'runs').iterdir() if r.is_dir() and r.name not in existing]
         assert all(status!='ok' for status in statuses), (case,statuses)
         failures[case]=statuses or ['refused before a run was created']
     (moved/'scenes/failure.scene.json').unlink()

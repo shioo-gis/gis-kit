@@ -749,7 +749,7 @@ def test_command_errors_and_the_output_folder(tmp_path):
     assert run_cli('read', source, '--output', tmp_path / 'b', '--data', '/abs/path.gpkg').returncode != 0
     record = run_cli('read', source, '--output', tmp_path / 'c')
     assert record.returncode == 0
-    saved = json.loads((tmp_path / 'c' / 'record.json').read_text())
+    saved = json.loads((tmp_path / 'c' / 'record.json').read_text(encoding='utf-8'))
     assert saved['tool'] == 'package read' and 's.map-style.json' in saved['files'] and saved['status'] == 'complete'
 
 

@@ -37,7 +37,7 @@ def run(fixture, output, *extra, success=True, env=None):
                             env={**os.environ, 'PYTHONDONTWRITEBYTECODE': '1', 'GIS_COMPOSER_CONFIG_DIR': str(output.parent / 'no-config'),
                                  **(env or {})})
     assert (result.returncode == 0) == success, result.stdout + result.stderr
-    return json.loads((output / 'package.json').read_text()) if success else result.stderr
+    return json.loads((output / 'package.json').read_text(encoding='utf-8')) if success else result.stderr
 
 
 @pytest.fixture(scope='module')
@@ -80,7 +80,7 @@ def test_default_scope_keeps_whole_features_that_touch_the_extent(packs):
     with sqlite3.connect(gpkg) as db:
         assert db.execute('PRAGMA user_version').fetchone()[0] == 10200
     db.close()
-    record = json.loads((out['extent'] / 'record.json').read_text())
+    record = json.loads((out['extent'] / 'record.json').read_text(encoding='utf-8'))
     assert record['tool'] == 'package pack' and set(record['files']) == {'demo-map.gpkg', 'package.json', 'rasters/cover.tif'}
 
 
@@ -308,7 +308,7 @@ def run_plain(fixture, output, *extra, success=True):
     command = [sys.executable, str(SCRIPTS / 'package.py'), 'pack', str(fixture['style']), '--output', str(output), *map(str, extra)]
     result = subprocess.run(command, capture_output=True, text=True, env={**os.environ, 'PYTHONDONTWRITEBYTECODE': '1'})
     assert (result.returncode == 0) == success, result.stdout + result.stderr
-    return json.loads((output / 'package.json').read_text()) if success else result.stderr
+    return json.loads((output / 'package.json').read_text(encoding='utf-8')) if success else result.stderr
 
 
 def layer_options(node):
@@ -488,7 +488,7 @@ def test_a_panel_only_labels_name_still_gets_its_layer(tmp_path):
         layer.pop('panel', None)
     document['layers'] = document['layers'][:1]
     document['labelPlacements'] = [{'panel': 'side', 'text': 'alone', 'position': [10.05, 0.45], 'style': {'size': 10, 'color': '#000000'}}]
-    fixture['style'].write_text(json.dumps(document))
+    fixture['style'].write_text(json.dumps(document), encoding='utf-8')
     manifest = run_plain(fixture, tmp_path / 'out')
     assert [row['id'] for row in manifest['panels']] == ['side']
     assert [row['features'] for row in manifest['layers'] if row['table'] == 'map_labels'] == [1]
@@ -496,12 +496,12 @@ def test_a_panel_only_labels_name_still_gets_its_layer(tmp_path):
 
 def test_round_two_errors(tmp_path):
     fixture = pack_fixture.build_round_two(tmp_path / 'data')
-    good = fixture['style'].read_text()
+    good = fixture['style'].read_text(encoding='utf-8')
 
     def refused(change, name):
         document = json.loads(good)
         change(document)
-        fixture['style'].write_text(json.dumps(document))
+        fixture['style'].write_text(json.dumps(document), encoding='utf-8')
         return run_plain(fixture, tmp_path / name, success=False)
 
     def tall(document):
@@ -562,27 +562,27 @@ def test_errors_are_clear(tmp_path):
     assert missing.returncode == 1 and 'Data root @basemap has no path on this device' in missing.stderr and 'roots.json' in missing.stderr
     config = tmp_path / 'config'
     config.mkdir()
-    (config / 'roots.json').write_text(json.dumps({'roots': {'basemap': str(fixture['basemap'])}}))
+    (config / 'roots.json').write_text(json.dumps({'roots': {'basemap': str(fixture['basemap'])}}), encoding='utf-8')
     assert subprocess.run(command, capture_output=True, text=True, env={**env, 'GIS_COMPOSER_CONFIG_DIR': str(config)}).returncode == 0
     undeclared = subprocess.run(command[:-2] + ['--output', str(tmp_path / 'o2'), '--data-root', f'other={tmp_path}'],
                                 capture_output=True, text=True, env=env)
     assert 'not declared in gis-project.json' in undeclared.stderr
-    document = json.loads(fixture['style'].read_text())
+    document = json.loads(fixture['style'].read_text(encoding='utf-8'))
     document['layers'][1]['data']['sha256'] = '0' * 64
     document.pop('extent')
     changed = tmp_path / 'changed.json'
-    changed.write_text(json.dumps(document))
+    changed.write_text(json.dumps(document), encoding='utf-8')
     stale = run({**fixture, 'style': changed}, tmp_path / 'o3', '--full', '--project', fixture['project'], success=False)
     assert 'has changed since the map-style was written' in stale
     document['layers'][1]['data'].pop('sha256')
-    changed.write_text(json.dumps(document))
+    changed.write_text(json.dumps(document), encoding='utf-8')
     no_extent = run({**fixture, 'style': changed}, tmp_path / 'o4', '--project', fixture['project'], success=False)
     assert 'no extent.bbox' in no_extent and '--full' in no_extent
     no_project = run({**fixture, 'style': changed}, tmp_path / 'o5', '--full', success=False)
     assert 'no gis-project.json was found' in no_project
     assert run({**fixture, 'style': changed}, tmp_path / 'o6', '--full', '--project', fixture['project'])['scope'] == 'full'
     document['layers'][1]['data']['path'] = '../outside.gpkg'
-    changed.write_text(json.dumps(document))
+    changed.write_text(json.dumps(document), encoding='utf-8')
     assert 'must be relative, without ".."' in run({**fixture, 'style': changed}, tmp_path / 'o7', '--full', success=False)
 
 
@@ -591,12 +591,12 @@ def test_unreadable_data_is_listed_not_packed(tmp_path):
     tiles = fixture['basemap'] / 'folder'  # tiles without data.kind: GDAL cannot read the folder
     (tiles / '12').mkdir(parents=True)
     (tiles / '12' / '0.png').write_bytes(b'\x89PNG\r\n\x1a\n')
-    document = json.loads(fixture['style'].read_text())
+    document = json.loads(fixture['style'].read_text(encoding='utf-8'))
     document['dataRoot'] = 'file'
     document['layers'].insert(0, {'id': 'tile-folder', 'geometry': 'polygon', 'data': {'path': '@basemap/folder'},
                                   'renderer': {'type': 'single', 'symbol': {'fill': {'color': '#000000'}}}})
     style = fixture['project'] / 'tiles.map-style.json'  # dataRoot "file": paths relative to this file, here the project root
-    style.write_text(json.dumps(document))
+    style.write_text(json.dumps(document), encoding='utf-8')
     manifest = run({**fixture, 'style': style}, tmp_path / 'out')
     assert {row['ref']: row['layers'] for row in manifest['not_packed']} == {'@basemap/tiles': ['tiles'], '@basemap/folder': ['tile-folder']}
     assert not {'tiles', 'tile-folder'} & {l['id'] for l in manifest['layers']}
@@ -659,11 +659,11 @@ def test_clip_keeps_field_types_and_split_parts(tmp_path):
     frame = gpd.GeoDataFrame({'count': pd.array([7, None], dtype='Int64'), 'flag': pd.array([True, None], dtype='boolean')},
                              geometry=[u, Polygon([(10.04, 0.42), (10.06, 0.42), (10.06, 0.44), (10.04, 0.44)])], crs='EPSG:4326')
     pyogrio.write_dataframe(frame, fixture['project'] / 'inputs' / 'shapes.gpkg', layer='shapes')
-    document = json.loads(fixture['style'].read_text())
+    document = json.loads(fixture['style'].read_text(encoding='utf-8'))
     document['layers'] = [{'id': 'shapes', 'geometry': 'polygon', 'data': {'path': 'inputs/shapes.gpkg'},
                            'renderer': {'type': 'single', 'symbol': {'fill': {'color': '#123456'}}}}]
     document.pop('labelPlacements')
-    fixture['style'].write_text(json.dumps(document))
+    fixture['style'].write_text(json.dumps(document), encoding='utf-8')
     manifest = run(fixture, tmp_path / 'out', '--clip')
     gpkg = tmp_path / 'out' / 'demo-map.gpkg'
     info = pyogrio.read_info(gpkg, layer='shapes')

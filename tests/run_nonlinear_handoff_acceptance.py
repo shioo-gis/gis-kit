@@ -24,7 +24,7 @@ from _delivery import digest,write_json
 def main(old,out,backend):
     out.mkdir();src=out/'source';src.mkdir()
     for name,oldpath in [('source.png',old/'nonlinear-evidence/source.png'),('gcps.json',old/'nonlinear-evidence/gcps.json'),('policy.json',old/'nonlinear-policy.json'),('policy-erratum.md',old/'nonlinear-policy-erratum.md'),('provenance.json',old/'nonlinear-evidence/provenance.json'),('predeclared-policy.md',old/'nonlinear-evidence/predeclared-policy.md')]:shutil.copyfile(oldpath,src/name)
-    data=json.loads((src/'gcps.json').read_text());points=[x for x in data['points'] if x['role']=='fit']
+    data=json.loads((src/'gcps.json').read_text(encoding='utf-8'));points=[x for x in data['points'] if x['role']=='fit']
     rows=[]
     for axis in (0,1):
         for value in sorted(set(x['world'][axis] for x in points)):
@@ -36,9 +36,9 @@ def main(old,out,backend):
     for i in range(2):
         command=[sys.executable,str(S/'nonlinear-georef.py'),str(src/'source.png'),str(src/'gcps.json'),'--params',str(src/'policy.json'),'--backend-gdalwarp',backend,'--pixel-vectors',str(src/'pixels.gpkg'),'--pixel-manifest',str(src/'pixels.json'),'--vector-step-px','1','--output',str(out/f'run{i}')]
         start=time.perf_counter();r=subprocess.run(command,capture_output=True,text=True)
-        (out/f'run{i}.log').write_text(r.stdout+r.stderr)
+        (out/f'run{i}.log').write_text(r.stdout+r.stderr, encoding='utf-8')
         if r.returncode:raise RuntimeError(f'TPS CLI failed: run{i}.log')
-        commands.append(dict(command=command,wall_seconds=time.perf_counter()-start));records.append(json.loads((out/f'run{i}/record.json').read_text()))
+        commands.append(dict(command=command,wall_seconds=time.perf_counter()-start));records.append(json.loads((out/f'run{i}/record.json').read_text(encoding='utf-8')))
     raster_hashes=[];vector_hashes=[]
     for i in range(2):
         with rio.open(out/f'run{i}/warped.tif') as d:

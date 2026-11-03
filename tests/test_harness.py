@@ -49,7 +49,7 @@ def recorded(tmp_path):
                  '--params', params, '--output', tmp_path / 'grid')
     assert result.returncode == 0, result.stderr
     path = next((tmp_path / 'trace').glob('*.json'))
-    return source, params, path, json.loads(path.read_text())
+    return source, params, path, json.loads(path.read_text(encoding='utf-8'))
 
 
 def test_discovery_no_site_packages_and_help_passthrough():
@@ -127,7 +127,7 @@ def test_trace_to_recipe_real_replay_binding_and_cache(tmp_path, recorded):
     draft = tmp_path / 'recipe.json'
     made = cli('recipe', 'from-trace', tmp_path / 'trace', '--output', draft)
     assert made.returncode == 0, made.stderr
-    data = json.loads(draft.read_text())
+    data = json.loads(draft.read_text(encoding='utf-8'))
     assert len(data['inputs']) == 1 and data['steps'][1]['input'] == 'step_001'
     assert data['steps'][0]['params']['size_m'] == 5  # not the subsequently edited params file
     before = digest(source)
@@ -138,9 +138,9 @@ def test_trace_to_recipe_real_replay_binding_and_cache(tmp_path, recorded):
     expected = gpd.read_file(tmp_path / 'grid/result.gpkg')
     actual = gpd.read_file(tmp_path / 'one/default/step_001/result.gpkg')
     assert expected.geometry.equals(actual.geometry) and expected.crs == actual.crs
-    dossier = json.loads((tmp_path / 'one/default/step_002/dossier.json').read_text())
+    dossier = json.loads((tmp_path / 'one/default/step_002/dossier.json').read_text(encoding='utf-8'))
     assert dossier['lineage_roles'] == ['step_001'] and dossier['upstream_statuses'] == {'step_001': 'complete'}
-    assert json.loads((tmp_path / 'one/record.json').read_text())['status_scope'] == 'execution_only'
+    assert json.loads((tmp_path / 'one/record.json').read_text(encoding='utf-8'))['status_scope'] == 'execution_only'
     other = dataset(tmp_path / 'other.gpkg')
     role = next(iter(data['inputs']))
     bound = recipe.execute(draft, tmp_path / 'bound', tmp_path / 'cache2', {role: str(other)})
@@ -191,7 +191,7 @@ def test_trace_redacts_and_never_captures_output_or_environment(tmp_path, monkey
     secret = 'fixture-sensitive-value'
     monkeypatch.setattr(trace.subprocess, 'run', lambda command, env=None: SimpleNamespace(returncode=0))
     trace.run_traced(tmp_path / 'trace', 'geocode', ['--api-key', secret, '--url=https://example.invalid/?token=' + secret], ['unused'])
-    text = next((tmp_path / 'trace').glob('*.json')).read_text()
+    text = next((tmp_path / 'trace').glob('*.json')).read_text(encoding='utf-8')
     event = json.loads(text)
     assert secret not in text and trace.REDACTED in text
     assert 'capture' not in event and not event['recipe_eligible']
@@ -204,14 +204,14 @@ def test_trace_interruption_and_launch_failure(tmp_path, monkeypatch):
         raise KeyboardInterrupt
     monkeypatch.setattr(trace.subprocess, 'run', interrupt)
     assert trace.run_traced(tmp_path / 'interrupt', 'inspect-data', [], ['unused']) == 130
-    event = json.loads(next((tmp_path / 'interrupt').glob('*.json')).read_text())
+    event = json.loads(next((tmp_path / 'interrupt').glob('*.json')).read_text(encoding='utf-8'))
     assert event['execution_status'] == 'interrupted' and not event['recipe_eligible']
     def fail(command, env=None):
         raise FileNotFoundError('missing test executable')
     monkeypatch.setattr(trace.subprocess, 'run', fail)
     with pytest.raises(FileNotFoundError):
         trace.run_traced(tmp_path / 'failure', 'inspect-data', [], ['unused'])
-    assert json.loads(next((tmp_path / 'failure').glob('*.json')).read_text())['execution_status'] == 'launch_failed'
+    assert json.loads(next((tmp_path / 'failure').glob('*.json')).read_text(encoding='utf-8'))['execution_status'] == 'launch_failed'
 
 
 def test_parameters_drift_and_sensitive_snapshot_not_promotable(tmp_path, monkeypatch):
@@ -238,7 +238,7 @@ def test_raster_trace_recipe_preserves_absent_status(tmp_path):
     assert run.returncode == 0, run.stderr
     trace.distill(tmp_path / 'trace', tmp_path / 'recipe.json')
     recipe.execute(tmp_path / 'recipe.json', tmp_path / 'replay', tmp_path / 'cache')
-    dossier = json.loads((tmp_path / 'replay/default/step_001/dossier.json').read_text())
+    dossier = json.loads((tmp_path / 'replay/default/step_001/dossier.json').read_text(encoding='utf-8'))
     assert dossier['source_status'] is None and dossier['source_status_present'] is False
     assert dossier['execution_status'] is None and dossier['process_status'] == 'complete'
     with rasterio.open(tmp_path / 'replay/default/step_001/result.tif') as ds:
@@ -312,8 +312,8 @@ def test_semantic_cli_json_csv_and_gpkg(tmp_path):
     data.to_file(tmp_path / 'changed.gpkg')
     result = cli('semantic-check', source, tmp_path / 'changed.gpkg', '--id', 'id', '--fields', 'review', 'value')
     assert result.returncode == 1 and json.loads(result.stdout)['protected_values_checked'] == 3
-    (tmp_path / 'before.csv').write_text('id,v\na,\nb,candidate\n')
-    (tmp_path / 'after.csv').write_text('id,v\nb,candidate\na,unknown\n')
+    (tmp_path / 'before.csv').write_text('id,v\na,\nb,candidate\n', encoding='utf-8')
+    (tmp_path / 'after.csv').write_text('id,v\nb,candidate\na,unknown\n', encoding='utf-8')
     result = cli('semantic-check', tmp_path / 'before.csv', tmp_path / 'after.csv', '--id', 'id', '--fields', 'v', site=False)
     assert result.returncode == 0 and json.loads(result.stdout)['protected_values_checked'] == 2
 
@@ -341,12 +341,12 @@ def test_p4_network_trace_candidate_review_and_recipe(tmp_path):
               '--params', 'params.json', '--output', 'network',
               *[item for name in paths if name != 'input' for item in ('--' + name, paths[name].name)], cwd=root)
     assert run.returncode == 0, run.stderr
-    event = json.loads(next((root / 'trace').glob('*.json')).read_text())
+    event = json.loads(next((root / 'trace').glob('*.json')).read_text(encoding='utf-8'))
     assert event['recipe_eligible'] is True and event['capture']['source_status'] == 'candidate'
     with pytest.raises(ValueError, match='explicit --artifact'):
         trace.distill(root / 'trace', root / 'ambiguous.json')
     trace.distill(root / 'trace', root / 'recipe.json', artifacts={event['id']: 'routes.gpkg'})
-    draft = json.loads((root / 'recipe.json').read_text())
+    draft = json.loads((root / 'recipe.json').read_text(encoding='utf-8'))
     step = draft['steps'][0]
     assert step['validate'] == {'allow_candidate': False}
     assert {'access-areas', 'barriers'} <= step['files'].keys()
@@ -359,11 +359,11 @@ def test_p4_network_trace_candidate_review_and_recipe(tmp_path):
     for name in ('replay', 'cached'):
         result = recipe.execute(root / 'reviewed.json', root / name, root / 'cache')
     assert result['cache_hits'] == 1
-    first = json.loads((root / 'network/record.json').read_text())
-    replay = json.loads((root / 'replay/default/step_001/record.json').read_text())
+    first = json.loads((root / 'network/record.json').read_text(encoding='utf-8'))
+    replay = json.loads((root / 'replay/default/step_001/record.json').read_text(encoding='utf-8'))
     assert replay['status'] == 'candidate' and replay['details'] == first['details']
     assert replay['details']['od'][0]['cost'] == pytest.approx(47)
-    dossier = json.loads((root / 'replay/default/step_001/dossier.json').read_text())
+    dossier = json.loads((root / 'replay/default/step_001/dossier.json').read_text(encoding='utf-8'))
     assert dossier['source_status'] == dossier['execution_status'] == 'candidate'
     assert dossier['process_status'] == 'complete'
 
@@ -371,7 +371,7 @@ def test_p4_network_trace_candidate_review_and_recipe(tmp_path):
 def test_professional_capture_keeps_backend_executable_as_input(tmp_path):
     source = dataset(tmp_path / 'source.gpkg')
     backend = tmp_path / 'backend-python'
-    backend.write_text('synthetic launcher identity, never executed')
+    backend.write_text('synthetic launcher identity, never executed', encoding='utf-8')
     write_json(tmp_path / 'p.json', {'operation': 'infer'})
     site = tmp_path / 'site'
     site.mkdir()
@@ -448,15 +448,15 @@ def test_trace_preparation_and_distillation_without_gis_imports(tmp_path, record
 @pytest.mark.parametrize('literal', ['NaN', 'Infinity', '-Infinity', '1e999'])
 def test_trace_nonfinite_snapshot_still_runs_native_command(tmp_path, monkeypatch, literal):
     source = tmp_path / 'source.csv'
-    source.write_text('id,value\na,1\n')
+    source.write_text('id,value\na,1\n', encoding='utf-8')
     params = tmp_path / 'params.json'
-    params.write_text('{"extra": ' + literal + '}')
+    params.write_text('{"extra": ' + literal + '}', encoding='utf-8')
     calls = []
     monkeypatch.setattr(trace.subprocess, 'run',
                         lambda command, env=None: calls.append(command) or SimpleNamespace(returncode=0))
     args = ['grid', str(source), '--params', str(params), '--output', str(tmp_path / 'out')]
     assert trace.run_traced(tmp_path / 'trace', 'daily', args, ['native-command']) == 0
-    event = json.loads(next((tmp_path / 'trace').glob('*.json')).read_text())
+    event = json.loads(next((tmp_path / 'trace').glob('*.json')).read_text(encoding='utf-8'))
     assert calls == [['native-command']]
     assert 'capture' not in event and event['recipe_eligible'] is False
 
@@ -479,7 +479,7 @@ def test_trace_nested_consumed_artifact_is_not_externalized(tmp_path, recorded):
 
 
 def test_trace_relative_backend_directories_keep_original_cwd(tmp_path, monkeypatch):
-    (tmp_path / 'source.csv').write_text('id,value\na,1\n')
+    (tmp_path / 'source.csv').write_text('id,value\na,1\n', encoding='utf-8')
     write_json(tmp_path / 'params.json', {'operation': 'infer'})
     (tmp_path / 'site').mkdir()
     monkeypatch.chdir(tmp_path)
@@ -496,8 +496,8 @@ def test_semantic_empty_table_still_checks_upstream_columns(tmp_path, valid, suf
     before, after = tmp_path / ('before' + suffix), tmp_path / ('after' + suffix)
     column = 'status' if valid else 'value'
     if suffix == '.csv':
-        before.write_text('id,' + column + '\n')
-        after.write_text('id,status\n')
+        before.write_text('id,' + column + '\n', encoding='utf-8')
+        after.write_text('id,status\n', encoding='utf-8')
     else:
         gpd.GeoDataFrame({'id': [], column: []}, geometry=[], crs=32631).to_file(before)
         gpd.GeoDataFrame({'id': [], 'status': []}, geometry=[], crs=32631).to_file(after)

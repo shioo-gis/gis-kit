@@ -62,7 +62,7 @@ def inspect(source, out, *extra, success=True, ezdxf=True):
     result = subprocess.run([*command, 'inspect', str(source), '--output', str(out), *map(str, extra)],
                             capture_output=True, text=True, env={**os.environ, 'PYTHONDONTWRITEBYTECODE': '1'})
     assert (result.returncode == 0) == success, result.stdout+result.stderr
-    return (json.loads((out/'cad.json').read_text()) if success else result.stderr)
+    return (json.loads((out/'cad.json').read_text(encoding='utf-8')) if success else result.stderr)
 
 
 def codes(report):
@@ -86,7 +86,7 @@ def test_zone_prefixed_grid_inventory_and_outputs(tmp_path):
     lon, lat = report['crs']['readings'][0]['matches'][0]['candidates'][0]['lonlat']
     assert lon == pytest.approx(117, abs=0.01) and lat == pytest.approx(30.72, abs=0.01)
     assert (tmp_path/'out'/'check.png').stat().st_size > 10_000
-    record = json.loads((tmp_path/'out'/'record.json').read_text())
+    record = json.loads((tmp_path/'out'/'record.json').read_text(encoding='utf-8'))
     assert record['source']['sha256'] == report['source']['sha256'] and set(record['files']) == {'cad.json', 'check.png'}
     assert 'new directory' in inspect(source, tmp_path/'out', success=False)
     assert not list(tmp_path.glob('.delivery-*'))
@@ -227,7 +227,7 @@ def test_reference_overlap_lists_its_crs_for_unprefixed_coordinates(tmp_path):
     assert report['crs']['status'] == 'candidate' and codes(report) == ['EPSG:4547']
     match = report['crs']['readings'][0]['matches'][0]
     assert match['grid'] == 'reference layer (extents-overlap)' and match['candidates'][0]['basis'] == 'reference'
-    record = json.loads((tmp_path/'out'/'record.json').read_text())
+    record = json.loads((tmp_path/'out'/'record.json').read_text(encoding='utf-8'))
     assert record['reference']['sha256'] and record['reference']['layer'] == 'range'
 
 
@@ -268,7 +268,7 @@ def assign(source, out, *extra, success=True):
     result = subprocess.run([sys.executable, str(SCRIPTS/'cad.py'), 'assign-crs', str(source), '--output', str(out), *map(str, extra)],
                             capture_output=True, text=True, env={**os.environ, 'PYTHONDONTWRITEBYTECODE': '1'})
     assert (result.returncode == 0) == success, result.stdout+result.stderr
-    return json.loads((out/'manifest.json').read_text()) if success else result.stderr
+    return json.loads((out/'manifest.json').read_text(encoding='utf-8')) if success else result.stderr
 
 
 def converted(tmp_path, entities, name='drawing', **options):
@@ -334,7 +334,7 @@ def extract(source, out, *extra, success=True, ezdxf=True):
     result = subprocess.run([*command, 'extract', str(source), '--output', str(out), *map(str, extra)],
                             capture_output=True, text=True, env={**os.environ, 'PYTHONDONTWRITEBYTECODE': '1'})
     assert (result.returncode == 0) == success, result.stdout+result.stderr
-    return json.loads((out/'manifest.json').read_text()) if success else result.stderr
+    return json.loads((out/'manifest.json').read_text(encoding='utf-8')) if success else result.stderr
 
 
 def layer(out, name):
@@ -473,7 +473,7 @@ def polygonize(source, out, *extra, success=True, snap=0.05, max_gap=0.5, min_ar
                              '--snap', str(snap), '--max-gap', str(max_gap), '--min-area', str(min_area), *map(str, extra)],
                             capture_output=True, text=True, env={**os.environ, 'PYTHONDONTWRITEBYTECODE': '1'})
     assert (result.returncode == 0) == success, result.stdout+result.stderr
-    return json.loads((out/'manifest.json').read_text()) if success else result.stderr
+    return json.loads((out/'manifest.json').read_text(encoding='utf-8')) if success else result.stderr
 
 
 def faces_of(out, name='faces'):
@@ -624,7 +624,7 @@ def run_label(faces, texts, rules, out, success=True):
     result = subprocess.run([sys.executable, str(SCRIPTS/'cad.py'), 'label', str(faces), '--texts', str(texts), '--rules', str(rules),
                              '--output', str(out)], capture_output=True, text=True, env={**os.environ, 'PYTHONDONTWRITEBYTECODE': '1'})
     assert (result.returncode == 0) == success, result.stdout+result.stderr
-    return json.loads((out/'manifest.json').read_text()) if success else result.stderr
+    return json.loads((out/'manifest.json').read_text(encoding='utf-8')) if success else result.stderr
 
 
 def test_label_end_to_end(tmp_path):
@@ -733,7 +733,7 @@ def run_convert(source, out, *extra, path, oda='', success=True):
                             capture_output=True, text=True,
                             env={**os.environ, 'PATH': str(path), 'GIS_KIT_ODA': str(oda), 'PYTHONDONTWRITEBYTECODE': '1'})
     assert (result.returncode == 0) == success, result.stdout+result.stderr
-    return json.loads((out/'manifest.json').read_text()) if success else result.stderr
+    return json.loads((out/'manifest.json').read_text(encoding='utf-8')) if success else result.stderr
 
 
 def test_convert_runs_the_converter_on_a_copy_and_reads_back(tmp_path):
@@ -875,7 +875,7 @@ def xiangyuan(source, out, *extra, success=True):
     result = subprocess.run([sys.executable, str(SCRIPTS/'cad.py'), 'xiangyuan', str(source), '--output', str(out), *map(str, extra)],
                             capture_output=True, text=True, env={**os.environ, 'PYTHONDONTWRITEBYTECODE': '1'})
     assert (result.returncode == 0) == success, result.stdout+result.stderr
-    return json.loads((out/'manifest.json').read_text()) if success else result.stderr
+    return json.loads((out/'manifest.json').read_text(encoding='utf-8')) if success else result.stderr
 
 
 def test_xiangyuan_parcels_from_xdata(tmp_path):
@@ -1102,7 +1102,7 @@ def test_xiangyuan_reads_embedded_workbooks_tables_and_block_fields(tmp_path):
     assert list(filled['filled_from_block']) == ['备注'] and filled['备注'].tolist() == ['依据政府批件']
     assert filled['容积率'].tolist() == [2.5] and filled['landuse'].tolist() == ['G1+C1']
     assert manifest['summary']['filled_from_block'] == {'备注': 1}
-    record = json.loads((out/'record.json').read_text())
+    record = json.loads((out/'record.json').read_text(encoding='utf-8'))
     assert {'ole/FFF01.xlsx', 'ole/FFF02.xlsx', table['file']} <= set(record['files'])
 
 
@@ -1113,7 +1113,7 @@ def test_xiangyuan_lists_ole_frames_without_olefile(tmp_path):
     result = subprocess.run([sys.executable, '-c', hide, str(SCRIPTS/'cad.py'), 'xiangyuan', str(source), '--units', 'm',
                              '--output', str(tmp_path/'out')], capture_output=True, text=True)
     assert result.returncode == 0, result.stderr
-    manifest = json.loads((tmp_path/'out'/'manifest.json').read_text())
+    manifest = json.loads((tmp_path/'out'/'manifest.json').read_text(encoding='utf-8'))
     assert any('2 OLE objects are listed without their contents: olefile is not installed' in w for w in manifest['warnings'])
     frames = gpd.read_file(tmp_path/'out'/'parcels.gpkg', layer='ole_frames')
     assert len(frames) == 2 and frames['file'].isna().all() and frames.geometry.notna().all()
@@ -1124,7 +1124,7 @@ def overlay(source, out, *extra, success=True):
     result = subprocess.run([sys.executable, str(SCRIPTS/'cad.py'), 'overlay', str(source), '--output', str(out), *map(str, extra)],
                             capture_output=True, text=True, env={**os.environ, 'PYTHONDONTWRITEBYTECODE': '1'})
     assert (result.returncode == 0) == success, result.stdout+result.stderr
-    return json.loads((out/'manifest.json').read_text()) if success else result.stderr
+    return json.loads((out/'manifest.json').read_text(encoding='utf-8')) if success else result.stderr
 
 
 X, Y = 500_000, 2_500_000
@@ -1179,7 +1179,7 @@ def test_overlay_measures_intersections_and_plots(tmp_path):
     assert row['area_m2'] == pytest.approx(5000, rel=1e-6) and row['parcel_share'] == pytest.approx(0.5, rel=1e-6)
     assert row['reference_share'] == pytest.approx(0.5, rel=1e-6) and row.geometry.geom_type == 'MultiPolygon'
     assert (tmp_path/'out'/'check.png').stat().st_size > 0
-    record = json.loads((tmp_path/'out'/'record.json').read_text())
+    record = json.loads((tmp_path/'out'/'record.json').read_text(encoding='utf-8'))
     assert record['tool'] == 'cad overlay' and set(record['files']) == {'manifest.json', 'overlay.gpkg', 'check.png'}
 
 
@@ -1258,7 +1258,7 @@ def compare(faces, fills, out, *extra, success=True):
     result = subprocess.run([sys.executable, str(SCRIPTS/'cad.py'), 'compare-fills', str(faces), '--fills', str(fills),
                              '--output', str(out), *map(str, extra)], capture_output=True, text=True)
     assert (result.returncode == 0) == success, result.stdout+result.stderr
-    return json.loads((out/'manifest.json').read_text()) if success else result.stderr
+    return json.loads((out/'manifest.json').read_text(encoding='utf-8')) if success else result.stderr
 
 
 def fill_compare_inputs(tmp_path):

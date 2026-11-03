@@ -31,7 +31,7 @@ def run(*args):
 
 
 def read(directory, name):
-    return json.loads((directory/name).read_text())
+    return json.loads((directory/name).read_text(encoding='utf-8'))
 
 
 def test_point_chain_children_and_manifest(levels, tmp_path):

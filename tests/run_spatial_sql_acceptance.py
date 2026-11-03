@@ -132,18 +132,18 @@ def main():
                     FROM read_parquet({lit(work/'points.parquet')}) p
                     JOIN read_parquet({lit(work/'zones.parquet')}) z ON ST_Intersects(p.geom, z.geom)
                     WHERE p.row_index <= {size} GROUP BY z.zone_id'''
-                (trial/'query.sql').write_text(query)
+                (trial/'query.sql').write_text(query, encoding='utf-8')
                 result = subprocess.run([sys.executable, __file__, '_worker', mode, str(trial), str(size)],
                              capture_output=True, text=True, env={**os.environ, 'PYTHONDONTWRITEBYTECODE':'1'})
-                (trial/'stdout.txt').write_text(result.stdout)
-                (trial/'stderr.txt').write_text(result.stderr)
+                (trial/'stdout.txt').write_text(result.stdout, encoding='utf-8')
+                (trial/'stderr.txt').write_text(result.stderr, encoding='utf-8')
                 assert result.returncode == 0, result.stderr
-                metrics = json.loads((trial/'metrics.json').read_text())
+                metrics = json.loads((trial/'metrics.json').read_text(encoding='utf-8'))
                 if mode == 'sql':
-                    assert 'SPATIAL_JOIN' in (trial/'delivery/plan.txt').read_text()
+                    assert 'SPATIAL_JOIN' in (trial/'delivery/plan.txt').read_text(encoding='utf-8')
                     data = pq.read_table(trial/'delivery/result.parquet').to_pydict()
                     actual = {str(k): [n, v] for k, n, v in zip(data['id'], data['n'], data['passengers'])}
-                    report = json.loads((trial/'delivery/record.json').read_text())
+                    report = json.loads((trial/'delivery/record.json').read_text(encoding='utf-8'))
                     metrics['query_seconds'] = report['query_seconds']
                     # Independent geometry and CRS readback; exact original zone WKB.
                     output_geometry = shapely.from_wkb(data['geom'])
@@ -151,7 +151,7 @@ def main():
                     assert all(shapely.equals_exact(g, expected[k], 0) for k, g in zip(data['id'], output_geometry))
                     assert report['validation']['axis_units'][0]['name'] == 'degree'
                 else:
-                    actual = json.loads((trial/'baseline-counts.json').read_text())
+                    actual = json.loads((trial/'baseline-counts.json').read_text(encoding='utf-8'))
                 assert actual == counts[size], f'Independent aggregation mismatch: {mode}/{size}: ' + repr({k:(v,counts[size].get(k)) for k,v in actual.items() if v != counts[size].get(k)})
                 records.append(metrics)
     assert input_hash == {name: fingerprint(name) for name in input_hash}

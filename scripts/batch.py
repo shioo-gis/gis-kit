@@ -12,13 +12,13 @@ from __future__ import annotations
 import argparse
 import json
 import os
-import shlex
 import subprocess
 import sys
 import time
 from multiprocessing import Pool
 from pathlib import Path
 
+from _command import show_command, split_command
 from _safe_io import validate_vector_file
 
 
@@ -31,7 +31,7 @@ def build_legacy_command(
     overwrite: bool = False,
 ) -> list[str]:
     out_path = output_dir / file.name
-    command = shlex.split(runner) + [script, str(file)] + extra_args + ["--output", str(out_path)]
+    command = split_command(runner) + [script, str(file)] + extra_args + ["--output", str(out_path)]
     if overwrite:
         command.append("--overwrite")
     return command
@@ -48,7 +48,7 @@ def build_template_command(file: Path, output_dir: Path, command_template: str) 
         "output": str(out_path),
         "output_dir": str(output_dir),
     }
-    return [part.format(**replacements) for part in shlex.split(command_template)]
+    return [part.format(**replacements) for part in split_command(command_template)]
 
 
 def build_command(
@@ -198,7 +198,7 @@ def main():
     output_dir.mkdir(parents=True, exist_ok=True)
 
     script = str(Path(args.script).resolve()) if args.script else None
-    extra_args = shlex.split(args.args) if args.args else []
+    extra_args = split_command(args.args) if args.args else []
 
     files = sorted(input_dir.glob(args.pattern))
     if not files:
@@ -213,7 +213,7 @@ def main():
     if args.dry_run:
         for f in files:
             cmd = build_command(f, output_dir, script, extra_args, args.command, args.runner, overwrite=args.overwrite)
-            print(f"  {shlex.join(cmd)}")
+            print(f"  {show_command(cmd)}")
         print(f"\nDry run: {total} files would be processed")
         return
 

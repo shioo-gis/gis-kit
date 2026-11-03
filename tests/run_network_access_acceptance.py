@@ -84,16 +84,16 @@ def main(source, output):
     summaries={}
     for budget in (100,400):
         p['budget']=budget
-        params=output/f'params-{budget}.json';params.write_text(json.dumps(p,indent=2))
+        params=output/f'params-{budget}.json';params.write_text(json.dumps(p,indent=2), encoding='utf-8')
         dest=output/f'budget-{budget}'
         command=[sys.executable,str(S/'network.py'),str(output/'roads.gpkg'),'--origins',str(output/'demand.gpkg'),
                  '--facilities',str(output/'facilities.gpkg'),'--params',str(params),'--access-areas',str(output/'areas.gpkg'),
                  '--barriers',str(output/'barriers.gpkg'),'--output',str(dest)]
         completed=subprocess.run(command,text=True,capture_output=True,env={**os.environ,'PYTHONDONTWRITEBYTECODE':'1'})
         (output/f'cli-{budget}.json').write_text(json.dumps(dict(command=command,returncode=completed.returncode,
-                                                              stdout=completed.stdout,stderr=completed.stderr),indent=2))
+                                                              stdout=completed.stdout,stderr=completed.stderr),indent=2), encoding='utf-8')
         if completed.returncode:raise RuntimeError(completed.stderr)
-        details=json.loads((dest/'record.json').read_text())['details']
+        details=json.loads((dest/'record.json').read_text(encoding='utf-8'))['details']
         graph=gpd.read_file(dest/'graph.gpkg');arcs=graph.set_index('id').cost.to_dict()
         for row in details['od']:
             if row['cost'] is not None:
@@ -116,7 +116,7 @@ def main(source, output):
         obstacles[obstacles.geom_type=='LineString'].plot(ax=ax,color='#433459',linewidth=1)
         route=gpd.read_file(output/f'budget-{budget}/routes.gpkg')
         if len(route):route.plot(ax=ax,color='#2378ad',linewidth=1.1,alpha=.65)
-        det=json.loads((output/f'budget-{budget}/record.json').read_text())['details']
+        det=json.loads((output/f'budget-{budget}/record.json').read_text(encoding='utf-8'))['details']
         states={r['origin_id']:r['status'] for r in det['coverage']['all']['demand']}
         for _,d in demand.iloc[:11].iterrows():
             ax.scatter(d.geometry.x,d.geometry.y,color=colors[states[d.id]],s=48,zorder=5)
@@ -135,7 +135,7 @@ def main(source, output):
                 tunnel_ways=sum('tunnel' in json.loads(t) for t in roads.raw_tags),
                 scenarios=summaries,verified='CLI, GPKG geometry/attributes/CRS, every OD cost, demand aggregation',
                 limits='Weights/facilities synthetic; access rules scenario assumptions; walls/gates OSM-labelled, no field verification; geometry source is real; off-network d11 intentionally unknown')
-    (output/'acceptance.json').write_text(json.dumps(result,indent=2))
+    (output/'acceptance.json').write_text(json.dumps(result,indent=2), encoding='utf-8')
     print(json.dumps(result,indent=2))
 
 

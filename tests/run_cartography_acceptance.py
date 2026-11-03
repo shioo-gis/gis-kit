@@ -47,9 +47,9 @@ def execute(args):
             cmd=[sys.executable,str(SCRIPTS/script)]+([op] if script=='daily.py' else [])+[str(source),'--params',str(spec),'--output',str(dest)]
             if right:cmd+=['--right',str(right)]
             t=time.monotonic();result=subprocess.run(cmd,capture_output=True,text=True,env={**os.environ,'PYTHONDONTWRITEBYTECODE':'1'})
-            (root/(name+'.log')).write_text(result.stdout+result.stderr)
+            (root/(name+'.log')).write_text(result.stdout+result.stderr, encoding='utf-8')
             if result.returncode:raise RuntimeError(f'{name}: {result.stderr}')
-            record=json.loads((dest/'record.json').read_text());artifact=dest/record.get('artifact',{}).get('name','objects.gpkg')
+            record=json.loads((dest/'record.json').read_text(encoding='utf-8'));artifact=dest/record.get('artifact',{}).get('name','objects.gpkg')
             if artifact.exists():
                 data=gpd.read_file(artifact) if artifact.suffix=='.gpkg' else pd.read_csv(artifact)
                 if artifact.suffix=='.gpkg':assert data.crs and data.is_valid.all()

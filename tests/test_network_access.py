@@ -56,7 +56,7 @@ def test_midsegment_cost_coverage_and_export(tmp_path):
     for name, data in [('edges',e),('origins',o),('facilities',f),('areas',a),('barriers',b)]:
         data.to_file(tmp_path/f'{name}.gpkg',driver='GPKG')
     N.execute(tmp_path/'edges.gpkg',p,tmp_path/'origins.gpkg',tmp_path/'facilities.gpkg',tmp_path/'out',tmp_path/'areas.gpkg',tmp_path/'barriers.gpkg')
-    record = json.loads((tmp_path/'out/record.json').read_text())
+    record = json.loads((tmp_path/'out/record.json').read_text(encoding='utf-8'))
     assert record['details'] == d
     assert len(gpd.read_file(tmp_path/'out/graph.gpkg')) == 8
 

@@ -55,7 +55,7 @@ def render(root):
         with Image.open(root/f'coverage-qa-{number}.png') as image:
             hashes.append(hashlib.sha256(image.convert('RGBA').tobytes()).hexdigest())
     if hashes[0]!=hashes[1]: raise AssertionError('Repeated preview pixels differ')
-    (root/'render.json').write_text(json.dumps({'rgba_sha256':hashes,'visual_review':'requires inspection'},indent=2))
+    (root/'render.json').write_text(json.dumps({'rgba_sha256':hashes,'visual_review':'requires inspection'},indent=2), encoding='utf-8')
 
 
 def execute(root, render_python):
@@ -90,7 +90,7 @@ def execute(root, render_python):
                    env={**os.environ,'PYTHONDONTWRITEBYTECODE':'1','MPLCONFIGDIR':str(root/'mpl-cache')})
     (root/'acceptance.json').write_text(json.dumps({'runs':runs,'elapsed_seconds':time.perf_counter()-started,
            'coverage_python':sys.executable,'render_python':render_python,'performance_claim':False,
-           'scope':'synthetic planar coverage, actual GPKG and CLI chain; no production-map/historical acceptance'},indent=2))
+           'scope':'synthetic planar coverage, actual GPKG and CLI chain; no production-map/historical acceptance'},indent=2), encoding='utf-8')
     print(root)
 
 

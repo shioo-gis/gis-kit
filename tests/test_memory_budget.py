@@ -26,7 +26,7 @@ def dem(path, size=50):
 
 
 def run_terrain(tmp_path, *budget):
-    (tmp_path/'p.json').write_text(json.dumps(P))
+    (tmp_path/'p.json').write_text(json.dumps(P), encoding='utf-8')
     return subprocess.run([sys.executable, str(SCRIPTS/'gis.py'), *budget, 'terrain', str(dem(tmp_path/'dem.tif')),
                            '--params', str(tmp_path/'p.json'), '--output', str(tmp_path/'out')],
                           capture_output=True, text=True)

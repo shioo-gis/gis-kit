@@ -43,7 +43,7 @@ def main():
     for i in range(3):
         started=time.perf_counter()
         result=subprocess.run([sys.executable,str(SCRIPTS/'terrain.py'),str(source),'--params',str(out/'params.json'),'--output',str(out/f'run{i}')],capture_output=True,text=True,env=dict(os.environ,PYTHONDONTWRITEBYTECODE='1'))
-        (out/f'cli{i}.log').write_text(result.stdout+result.stderr); result.check_returncode(); times.append(time.perf_counter()-started)
+        (out/f'cli{i}.log').write_text(result.stdout+result.stderr, encoding='utf-8'); result.check_returncode(); times.append(time.perf_counter()-started)
         h={}; arrays={}
         for name, exp in expected.items():
             exp[~valid]=np.nan
@@ -52,7 +52,7 @@ def main():
             np.testing.assert_allclose(a[1:-1,1:-1],exp,rtol=0,atol=1e-9,equal_nan=True)
             assert np.isnan(a[[0,-1],:]).all() and np.isnan(a[:,[0,-1]]).all()
             h[name]=hashlib.sha256(a.astype('<f8').tobytes()).hexdigest(); arrays[name]=a
-        hashes.append(h); records.append(json.loads((out/f'run{i}/record.json').read_text()))
+        hashes.append(h); records.append(json.loads((out/f'run{i}/record.json').read_text(encoding='utf-8')))
     assert hashes[0]==hashes[1]==hashes[2] and before==digest(source)
     fig,axes=plt.subplots(2,2,figsize=(12,10),layout='constrained')
     extent=[t.c/1000,(t.c+z.shape[1]*t.a)/1000,(t.f+z.shape[0]*t.e)/1000,t.f/1000]

@@ -49,13 +49,13 @@ def main(destination):
         assert len(diff['details']['candidates'])==2
         assert all(x['proposal']=='split' and x['status']=='unknown' for x in diff['details']['candidates'])
         annotation,ledger=ledger_fixture(work)
-        ledger_path=work/'coverage-ledger.json';ledger_path.write_text(json.dumps(ledger))
+        ledger_path=work/'coverage-ledger.json';ledger_path.write_text(json.dumps(ledger), encoding='utf-8')
         cli('coverage.py',annotation,'--ledger',ledger_path,'--output',work/'coverage-hold.json')
-        assert json.loads((work/'coverage-hold.json').read_text())['status']=='hold'
+        assert json.loads((work/'coverage-hold.json').read_text(encoding='utf-8'))['status']=='hold'
         ledger['observations'][0].update(review='accepted',reviewer='synthetic test fixture, not a production review')
-        ledger_path.write_text(json.dumps(ledger))
+        ledger_path.write_text(json.dumps(ledger), encoding='utf-8')
         cli('coverage.py',annotation,'--ledger',ledger_path,'--output',work/'coverage-reviewed.json')
-        assert json.loads((work/'coverage-reviewed.json').read_text())['status']=='complete'
+        assert json.loads((work/'coverage-reviewed.json').read_text(encoding='utf-8'))['status']=='complete'
         # Existing production plotting CLI, no new renderer.
         cli('plot.py','--inputs',summary_artifact,'--output',work/'grid.png','--title','Fixed grid: stable cell IDs','--label-field','cell_id','--dpi','120')
         after={p.name:hashlib.sha256(p.read_bytes()).hexdigest() for p in (source,zones,points)}
@@ -84,7 +84,7 @@ def main(destination):
         with Image.open(root/name) as image: decoded.append(hashlib.sha256(image.convert('RGBA').tobytes()).hexdigest())
     assert decoded[0]==decoded[1]
     (root/'acceptance.json').write_text(json.dumps({'runs':summaries,'elapsed_seconds':time.perf_counter()-started,'performance_claim':False,
-        'preview_rgba_sha256':decoded,'visual_review':'requires actual inspection','data_scope':'hand-calculated synthetic inputs written as real GeoTIFF/GPKG, no production data supplied'},indent=2))
+        'preview_rgba_sha256':decoded,'visual_review':'requires actual inspection','data_scope':'hand-calculated synthetic inputs written as real GeoTIFF/GPKG, no production data supplied'},indent=2), encoding='utf-8')
     print(str(root))
 
 if __name__=='__main__': main(sys.argv[1])

@@ -54,10 +54,10 @@ def test_recipe_cache_and_parameter_invalidation(tmp_path):
 def test_recipe_corrupt_artifact_and_record(tmp_path):
     _,_=recipe_fixture(tmp_path)
     recipe(tmp_path/'recipe.json',tmp_path/'one',tmp_path/'cache')
-    records=json.loads((tmp_path/'one/record.json').read_text())['steps']
+    records=json.loads((tmp_path/'one/record.json').read_text(encoding='utf-8'))['steps']
     entry=tmp_path/'cache'/records[0]['signature']; (entry/'result.gpkg').write_bytes(b'broken')
     assert recipe(tmp_path/'recipe.json',tmp_path/'two',tmp_path/'cache')['cache_hits']<=1
-    (entry/'record.json').write_text('{}')
+    (entry/'record.json').write_text('{}', encoding='utf-8')
     assert recipe(tmp_path/'recipe.json',tmp_path/'three',tmp_path/'cache')['cache_hits']<=1
 
 
@@ -103,14 +103,14 @@ def test_atlas_all_ids_omissions_safe_paths_holes(tmp_path):
     source=atlas_fixture(tmp_path);h=digest(source)
     result=atlas(source,tmp_path/'atlas.json',tmp_path/'atlas')
     assert result['objects']==3 and result['omitted']==1 and digest(source)==h
-    r=json.loads((tmp_path/'atlas/record.json').read_text())
+    r=json.loads((tmp_path/'atlas/record.json').read_text(encoding='utf-8'))
     assert {o['id'] for o in r['objects']}=={'../a','乙','missing'}
     for o in r['objects']:
-        d=json.loads((tmp_path/'atlas'/o['path']).read_text());assert d['id']==o['id']
+        d=json.loads((tmp_path/'atlas'/o['path']).read_text(encoding='utf-8'));assert d['id']==o['id']
         if d['status']=='complete':
             assert (tmp_path/'atlas'/d['map']['path']).is_file()
             if d['id']=='乙':assert d['metrics']['area_m2']==84
-    html=(tmp_path/'atlas/index.html').read_text();assert '<script>' not in html and '&lt;script&gt;' in html
+    html=(tmp_path/'atlas/index.html').read_text(encoding='utf-8');assert '<script>' not in html and '&lt;script&gt;' in html
     with pytest.raises(ValueError):atlas(source,tmp_path/'atlas.json',tmp_path/'atlas')
 
 
@@ -151,7 +151,7 @@ def test_candidate_holes_islands_inset_native_and_seam(tmp_path):
     run,state,p=network_fixture(tmp_path);h=digest(run/'revisions/000001.json')
     result=candidates(run,tmp_path/'confirmed.json',tmp_path/'out')
     assert result['status']=='hold' and result['candidates']==5
-    r=json.loads((tmp_path/'out/candidates.json').read_text())
+    r=json.loads((tmp_path/'out/candidates.json').read_text(encoding='utf-8'))
     assert not r['issues'] and not r['diagnostics']
     assert sum(len(c['holes']) for c in r['candidates'])==2
     assert any(c['frame']=='inset' for c in r['candidates'])
@@ -165,7 +165,7 @@ def test_candidate_no_coordinate_snapping(tmp_path):
     state['edges']['outere0']['start']='duplicate'
     write_json(run/'revisions/000001.json',state);p['revision_sha256']=digest(run/'revisions/000001.json');write_json(tmp_path/'confirmed.json',p)
     candidates(run,tmp_path/'confirmed.json',tmp_path/'out')
-    r=json.loads((tmp_path/'out/candidates.json').read_text());assert r['issues']
+    r=json.loads((tmp_path/'out/candidates.json').read_text(encoding='utf-8'));assert r['issues']
     assert any('no noding' in i['reason'] for i in r['issues'])
 
 
@@ -182,7 +182,7 @@ def test_candidate_dangles_and_crossing_hold(tmp_path):
     state['nodes']['dangling']={'xy':[60,30]}
     state['edges']['tail']={'start':'outern0','end':'dangling','kind':'admin','status':'visible','geometry':{'type':'polyline','vertices':[]}}
     write_json(run/'revisions/000001.json',state);p['revision_sha256']=digest(run/'revisions/000001.json');p['confirmed_edges'].append('tail');write_json(tmp_path/'confirmed.json',p)
-    candidates(run,tmp_path/'confirmed.json',tmp_path/'out');r=json.loads((tmp_path/'out/candidates.json').read_text())
+    candidates(run,tmp_path/'confirmed.json',tmp_path/'out');r=json.loads((tmp_path/'out/candidates.json').read_text(encoding='utf-8'))
     assert any(d['kind']=='dangles' for d in r['diagnostics'])
 
 
@@ -203,9 +203,9 @@ def georef_fixture(root):
 def test_georef_multiframe_real_readback(tmp_path):
     p=georef_fixture(tmp_path);before={f:digest(f) for f in [p['image'],p['pixel_gpkg']]}
     cli('georef-delivery.py','package',tmp_path/'package.json','--output',tmp_path/'delivery')
-    r=json.loads((tmp_path/'delivery/record.json').read_text());assert r['status']=='spatial_candidate' and len(r['frames'])==2
+    r=json.loads((tmp_path/'delivery/record.json').read_text(encoding='utf-8'));assert r['status']=='spatial_candidate' and len(r['frames'])==2
     for f in r['frames']:
-        root=tmp_path/'delivery'/f['directory'];m=json.loads((root/'vectors.gpkg.manifest.json').read_text())
+        root=tmp_path/'delivery'/f['directory'];m=json.loads((root/'vectors.gpkg.manifest.json').read_text(encoding='utf-8'))
         assert any(o['id']=='cross-frame' for o in m['omitted_objects'])
         assert (root/m['transform']['path']).is_file()
         assert len(gpd.read_file(root/'vectors.gpkg'))==1
@@ -213,7 +213,7 @@ def test_georef_multiframe_real_readback(tmp_path):
 
 
 def test_affine_comparison_fixed_check_and_maximum(tmp_path):
-    p=georef_fixture(tmp_path);before=p['transforms'][0];after=json.loads(Path(before).read_text());after['matrix'][0][2]+=3;after['matrix'][1][2]+=4
+    p=georef_fixture(tmp_path);before=p['transforms'][0];after=json.loads(Path(before).read_text(encoding='utf-8'));after['matrix'][0][2]+=3;after['matrix'][1][2]+=4
     write_json(tmp_path/'after.json',after)
     r=D.compare(before,tmp_path/'after.json',tmp_path/'compare');assert r['maximum_frame_displacement']==5
     after['points'][-1]['pixel'][0]+=1;write_json(tmp_path/'changed.json',after)
@@ -221,11 +221,11 @@ def test_affine_comparison_fixed_check_and_maximum(tmp_path):
 
 
 def test_georef_package_failure_no_partial(tmp_path):
-    p=georef_fixture(tmp_path);r=json.loads(Path(p['transforms'][1]).read_text());r['acceptance']['status']='hold';write_json(p['transforms'][1],r)
+    p=georef_fixture(tmp_path);r=json.loads(Path(p['transforms'][1]).read_text(encoding='utf-8'));r['acceptance']['status']='hold';write_json(p['transforms'][1],r)
     with pytest.raises(ValueError,match='hold'):D.package(tmp_path/'package.json',tmp_path/'bad')
     assert not (tmp_path/'bad').exists()
     p['allow_hold']=True;write_json(tmp_path/'package.json',p);D.package(tmp_path/'package.json',tmp_path/'diagnostic')
-    assert json.loads((tmp_path/'diagnostic/record.json').read_text())['status']=='hold'
+    assert json.loads((tmp_path/'diagnostic/record.json').read_text(encoding='utf-8'))['status']=='hold'
 
 
 def test_recipe_dependency_and_implementation_invalidation(tmp_path,monkeypatch):
@@ -236,7 +236,7 @@ def test_recipe_dependency_and_implementation_invalidation(tmp_path,monkeypatch)
     copied=tmp_path/'scripts';shutil.copytree(SCRIPTS,copied)
     monkeypatch.setattr(module,'SCRIPTS',copied)
     recipe(tmp_path/'recipe.json',tmp_path/'first',tmp_path/'cache')
-    (copied/'_metric.py').write_text((copied/'_metric.py').read_text()+'\n# fixture implementation change\n')
+    (copied/'_metric.py').write_text((copied/'_metric.py').read_text(encoding='utf-8')+'\n# fixture implementation change\n', encoding='utf-8')
     assert recipe(tmp_path/'recipe.json',tmp_path/'code-changed',tmp_path/'cache')['cache_hits']==0
     distributions=list(module.importlib.metadata.distributions())
     monkeypatch.setattr(module.importlib.metadata,'distributions',lambda:distributions+[SimpleNamespace(metadata={'Name':'fixture-dependency'},version='2')])
@@ -255,7 +255,7 @@ def test_atlas_feet_units_and_all_invalid(tmp_path):
     source=tmp_path/'feet.gpkg';gpd.GeoDataFrame({'id':['foot']},geometry=[box(1000000,200000,1000010,200010)],crs=2263).to_file(source)
     write_json(tmp_path/'p.json',{'id':'id','span_m':20})
     atlas(source,tmp_path/'p.json',tmp_path/'feet-atlas')
-    r=json.loads((tmp_path/'feet-atlas/000001.json').read_text());assert abs(r['metrics']['area_m2']-9.29034116)<1e-7
+    r=json.loads((tmp_path/'feet-atlas/000001.json').read_text(encoding='utf-8'));assert abs(r['metrics']['area_m2']-9.29034116)<1e-7
     invalid=tmp_path/'invalid.gpkg';gpd.GeoDataFrame({'id':['a','b']},geometry=[None,None],crs=32631).to_file(invalid)
     assert atlas(invalid,tmp_path/'p.json',tmp_path/'invalid-atlas')['omitted']==2
 
@@ -273,7 +273,7 @@ def test_candidate_unconfirmed_and_invalid_edge_diagnostics(tmp_path):
     state['edges']['islande0']['status']='uncertain';write_json(run/'revisions/000001.json',state)
     p['revision_sha256']=digest(run/'revisions/000001.json');write_json(tmp_path/'confirmed.json',p)
     candidates(run,tmp_path/'confirmed.json',tmp_path/'out')
-    r=json.loads((tmp_path/'out/candidates.json').read_text())
+    r=json.loads((tmp_path/'out/candidates.json').read_text(encoding='utf-8'))
     assert {x['edge'] for x in r['omitted_edges']}=={'seam-top','islande0'}
     assert r['status']=='hold'
 
@@ -290,7 +290,7 @@ def test_georef_portable_pixel_references(tmp_path):
     p=georef_fixture(tmp_path);D.package(tmp_path/'package.json',tmp_path/'one')
     import shutil
     shutil.move(tmp_path/'one',tmp_path/'moved')
-    root=tmp_path/'moved/0001';r=json.loads((root/'vectors.gpkg.manifest.json').read_text())
+    root=tmp_path/'moved/0001';r=json.loads((root/'vectors.gpkg.manifest.json').read_text(encoding='utf-8'))
     assert digest(root/r['pixel_export']['path'])==r['pixel_export']['sha256']
     assert digest(root/r['pixel_export']['manifest_path'])==r['pixel_export']['manifest_sha256']
 
@@ -302,7 +302,7 @@ def test_atlas_manifest_html_references_resolve(tmp_path):
         def handle_starttag(self,tag,attrs):
             for k,v in attrs:
                 if k in ('href','src'):assert (tmp_path/'out'/v).is_file()
-    References().feed((tmp_path/'out/index.html').read_text())
+    References().feed((tmp_path/'out/index.html').read_text(encoding='utf-8'))
 
 
 def test_georef_reject_geographic_pixel_input(tmp_path):

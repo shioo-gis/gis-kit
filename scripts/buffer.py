@@ -141,9 +141,11 @@ def main() -> None:
         coordinate_distances = [value * coordinate_units_per_meter for value in distances_m]
         if any(not math.isfinite(value) for value in coordinate_distances):
             raise ValueError("Converted buffer distances are outside the supported numeric range")
+        # Positional on purpose: geopandas 1.2 renamed this argument resolution -> quad_segs and warns on the old
+        # name, while every earlier release rejects the new one.
         gdf["geometry"] = gdf.geometry.buffer(
             coordinate_distances,
-            resolution=args.segments,
+            args.segments,
             cap_style=CAP_STYLES[args.cap_style],
             join_style=JOIN_STYLES[args.join_style],
         )

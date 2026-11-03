@@ -8,7 +8,9 @@ import sys
 
 import pytest
 
-SCRIPTS = Path(__file__).resolve().parents[1] / 'scripts'
+ROOT = Path(__file__).resolve().parents[1]
+SCRIPTS = ROOT / 'scripts'
+PYTHON2_ONLY = {'make_base.py'}  # runs in ArcMap's Python 2.7, and is no Python 3 syntax
 ASCII_LOCALE = {'LC_ALL': 'C', 'LANG': 'C', 'PYTHONCOERCECLOCALE': '0', 'PYTHONUTF8': '0'}
 
 
@@ -24,8 +26,9 @@ def text_calls_without_encoding(tree):
                 yield node
 
 
-def test_scripts_name_the_encoding_of_every_text_file():
-    found = [f'{path.name}:{node.lineno}' for path in sorted(SCRIPTS.glob('*.py'))
+def test_scripts_and_tests_name_the_encoding_of_every_text_file():
+    # Tests too: one reading a tool's UTF-8 output by the code page stops the suite before it checks anything.
+    found = [f'{path.relative_to(ROOT)}:{node.lineno}' for path in sorted([*SCRIPTS.glob('*.py'), *(ROOT / 'tests').rglob('*.py')]) if path.name not in PYTHON2_ONLY
              for node in text_calls_without_encoding(ast.parse(path.read_text(encoding='utf-8')))]
     assert not found, found
 

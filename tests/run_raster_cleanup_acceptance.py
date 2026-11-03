@@ -76,7 +76,7 @@ def main():
     def run(name,recipe,cache):
         spec=root/(name+'.json');write_json(spec,recipe);start=time.perf_counter()
         result=subprocess.run([sys.executable,str(SCRIPTS/'recipe.py'),str(spec),'--output',str(root/name),'--cache',str(root/cache)],capture_output=True,text=True,env={**os.environ,'PYTHONDONTWRITEBYTECODE':'1'})
-        (root/(name+'.log')).write_text(result.stdout+result.stderr)
+        (root/(name+'.log')).write_text(result.stdout+result.stderr, encoding='utf-8')
         if result.returncode:raise RuntimeError(result.stderr)
         answer=json.loads(result.stdout);runs.append(dict(name=name,seconds=time.perf_counter()-start,**answer));return root/name/'default'
     for index,block in enumerate((1,256)):
@@ -88,12 +88,12 @@ def main():
         assert np.isfinite(repair[5,5]) and np.isnan(repair[8,8]) and np.isnan(repair[10:13,10:13]).all() and np.isnan(repair[0,3])
         modified=decode(folder/'repair/modified.tif');assert modified.sum()==1
         np.testing.assert_equal(repair[modified==0],damaged[modified==0])
-        record=json.loads((folder/'change/record.json').read_text());old=decode(folder/'baseline/result.tif');new=decode(folder/'classes/result.tif')
+        record=json.loads((folder/'change/record.json').read_text(encoding='utf-8'));old=decode(folder/'baseline/result.tif');new=decode(folder/'classes/result.tif')
         joint=np.isfinite(old)&np.isfinite(new); pixel=abs(transform.determinant)
         assert abs(record['joint_valid_area_m2']-joint.sum()*pixel)<1e-9
         assert abs(sum(row['area_m2'] for row in record['codebook'])-joint.sum()*pixel)<1e-9
         np.testing.assert_equal(decode(folder/'change/change.tif'),np.where(joint,(old!=new).astype(float),np.nan))
-        areas=json.loads((folder/'areas/table.json').read_text())
+        areas=json.loads((folder/'areas/table.json').read_text(encoding='utf-8'))
         for row in areas:np.testing.assert_allclose(sum(x['area_m2'] for x in row['classes']),row['valid_area_m2'],atol=1e-9,rtol=1e-12)
         sig={}
         for name in ('repair','smooth','baseline','classes','change','instances','terrain'):

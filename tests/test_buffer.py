@@ -256,6 +256,32 @@ def test_geojson_output_is_named_after_the_file_and_repeatable(tmp_path: Path) -
     assert b'"name": "rings"' in first
 
 
+def test_segments_set_the_circle_without_a_deprecation_warning(tmp_path: Path) -> None:
+    source, output = tmp_path / "source.gpkg", tmp_path / "buffer.gpkg"
+    _source(source, "EPSG:26918")
+    result = _run(source, output, "--distance", "100", "--segments", "4")
+    assert result.returncode == 0, result.stderr
+    assert "deprecated" not in result.stderr
+    assert len(gpd.read_file(output).geometry.iloc[0].exterior.coords) == 4 * 4 + 1
+
+
+def test_segments_are_passed_positionally(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """resolution= warns from geopandas 1.2, quad_segs= raises before it: the test environment may only show one of the two."""
+    source, output = tmp_path / "source.gpkg", tmp_path / "buffer.gpkg"
+    _source(source, "EPSG:26918")
+    calls = []
+    real = gpd.GeoSeries.buffer
+
+    def spy(self, *args, **kwargs):
+        calls.append((args, kwargs))
+        return real(self, *args, **kwargs)
+
+    monkeypatch.setattr(gpd.GeoSeries, "buffer", spy)
+    monkeypatch.setattr(sys, "argv", ["buffer.py", str(source), "--output", str(output), "--distance", "100", "--segments", "4"])
+    BUFFER.main()
+    assert calls[0][0][1] == 4 and not {"resolution", "quad_segs"} & set(calls[0][1])
+
+
 def test_buffer_crossing_a_utm_zone_names_the_way_out(tmp_path: Path) -> None:
     source, output = tmp_path / "source.gpkg", tmp_path / "buffer.gpkg"
     gpd.GeoDataFrame({"id": [0]}, geometry=[box(120.00, 30.00, 120.05, 30.05)], crs="EPSG:4326").to_file(source, driver="GPKG")

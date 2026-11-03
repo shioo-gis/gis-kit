@@ -126,7 +126,7 @@ def test_indicators_far_converts_square_feet_to_square_meters(tmp_path: Path) ->
     assert row["total_floor_area_m2"] == pytest.approx(464.5170580663741)
     assert row["FAR"] == pytest.approx(0.5)
     import json
-    assigned = json.loads(report.read_text())
+    assigned = json.loads(report.read_text(encoding="utf-8"))
     assert (assigned["matched_buildings"], assigned["unmatched_buildings"]) == (1, 0)
     assert assigned["allocated_footprint_area_m2"] == pytest.approx(232.25852903318707)
 
@@ -157,7 +157,7 @@ def test_indicators_report_matched_unmatched_and_partial_buildings(tmp_path: Pat
     result = _run("indicators.py", "far", "--parcels", str(parcels), "--buildings", str(buildings), "--floors-field", "floors", "--parcel-id", "pid", "--report-json", str(report))
     assert result.returncode == 0, result.stderr
     import json
-    details = json.loads(report.read_text())
+    details = json.loads(report.read_text(encoding="utf-8"))
     assert details["matched_buildings"] == 1
     assert details["unmatched_buildings"] == 1
     assert details["partially_unallocated_buildings"] == 1

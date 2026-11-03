@@ -34,7 +34,7 @@ def digest(path):
 
 
 def save(path, value):
-    path.write_text(json.dumps(value, indent=2, ensure_ascii=False, allow_nan=False)+'\n')
+    path.write_text(json.dumps(value, indent=2, ensure_ascii=False, allow_nan=False)+'\n', encoding='utf-8')
 
 
 def main():
@@ -77,7 +77,7 @@ def main():
             item['peak_rss_bytes'] = int(match[1])
         save(logs/(name+'.json'), item); calls.append(item)
         if result.returncode: raise RuntimeError(f'{name} failed: {result.stderr[-1500:]}')
-        return dest/'result.tif', json.loads((dest/'record.json').read_text())
+        return dest/'result.tif', json.loads((dest/'record.json').read_text(encoding='utf-8'))
     source = root/'source.tif'
     with rio.open(source) as ds:
         data = ds.read(1, masked=True).astype(float).filled(np.nan)
@@ -112,7 +112,7 @@ def main():
                 np.testing.assert_equal(ds.read_masks(1) > 0, np.isfinite(expected))
                 assert ds.crs == crs and ds.transform == transform
                 assert ds.tags(ns='IMAGE_STRUCTURE')['LAYOUT'] == 'COG'
-            record = json.loads((file.parent/'record.json').read_text())
+            record = json.loads((file.parent/'record.json').read_text(encoding='utf-8'))
             if name in last: assert last[name] == record['decoded_sha256']
             last[name] = record['decoded_sha256']
             verified.append(dict(name=name, block_size=size, decoded_sha256=last[name], file=str(file.relative_to(root))))
