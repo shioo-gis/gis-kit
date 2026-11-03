@@ -27,8 +27,7 @@ except ImportError:
     if str(Path(__file__).resolve().parent) not in sys.path:
         sys.path.insert(0, str(Path(__file__).resolve().parent))
     from _safe_io import write_vector_atomic
-from _budget import check_vector
-from _core import reproject
+from _core import read_vector, reproject
 
 
 CAP_STYLES = {"round": "round", "flat": "flat", "square": "square"}
@@ -109,9 +108,10 @@ def main() -> None:
         rings = sorted(rings)
 
     output = args.output or str(Path(args.input).stem) + "_buffer.gpkg"
-    read_kw = {"layer": args.layer} if args.layer else {}
-    check_vector(args.input, args.layer)
-    gdf = gpd.read_file(args.input, **read_kw)
+    try:
+        gdf = read_vector(args.input, args.layer)
+    except Exception as exc:
+        sys.exit(f"Error reading input: {exc}")
     original_crs = gdf.crs
     if rings is not None:
         clash = [name for name in ("buffer_m", "ring") if name in gdf.columns]

@@ -13,12 +13,11 @@ import math
 import sys
 from pathlib import Path
 
-import geopandas as gpd
 import pyogrio
 import shapely
 
 from _safe_io import AtomicVectorOutput, write_vector_atomic
-from _budget import check_vector
+from _core import check_geometry, read_vector
 
 
 def parse_agg(agg_str: str) -> dict:
@@ -123,16 +122,16 @@ def main():
 
     output = Path(args.output) if args.output else input_path.with_stem(input_path.stem + "_dissolved").with_suffix(".gpkg")
 
-    read_kwargs = {"engine": "pyogrio"}
-    if args.layer:
-        read_kwargs["layer"] = args.layer
+    try:
+        check_geometry(input_path, args.layer)
+    except Exception as exc:
+        sys.exit(f"Error reading input: {exc}")
 
     by = [f.strip() for f in args.by.split(",")] if args.by else None
     aggfunc = parse_agg(args.agg) if args.agg else "first"
 
     if not args.no_global_merge:
-        check_vector(input_path, args.layer)
-        gdf = gpd.read_file(input_path, **read_kwargs)
+        gdf = read_vector(input_path, args.layer, require_geometry=False)
         dissolved = finish_dissolve(gdf, by, aggfunc, args.multi, args.method)
         if args.method == "coverage":
             validate_coverage(gdf, dissolved)

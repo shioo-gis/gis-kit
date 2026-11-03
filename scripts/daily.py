@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Versioned, atomic result bundles for daily GIS operations (no recipe engine)."""
+"""Versioned, atomic result bundles for daily GIS operations (no recipe engine); normalize turns xy coordinate columns of a CSV or Excel table into a point layer."""
 from __future__ import annotations
 
 import argparse

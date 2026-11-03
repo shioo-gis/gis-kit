@@ -18,12 +18,11 @@ ALLOWED = {
     },
     'gpd.read_file(': {
         '_core.py': 1, '_raster_numeric.py': 1, '_recipe_operations.py': 1, 'admin-chain.py': 2,
-        'atlas.py': 1, 'buffer.py': 1, 'cad.py': 8, 'cartographic-map.py': 1, 'clip.py': 1, 'convert.py': 1,
-        'dissolve.py': 1, 'edit.py': 1, 'export-table.py': 1, 'field.py': 1, 'fix.py': 1,
+        'atlas.py': 1, 'cad.py': 8, 'cartographic-map.py': 1, 'edit.py': 1, 'field.py': 1, 'fix.py': 1,
         'georef-delivery.py': 2, 'gpkg.py': 2, 'hydro-review.py': 1, 'indicators.py': 1,
-        'inspect-data.py': 1, 'join.py': 1, 'network.py': 3, 'nonlinear-georef.py': 1, 'plot-chart.py': 1,
+        'join.py': 1, 'network.py': 3, 'nonlinear-georef.py': 1, 'plot-chart.py': 1,
         'plot.py': 1, 'raster-georef.py': 1, 'raster.py': 2, 'scheme.py': 1, 'spatial-inference.py': 1,
-        'split.py': 1, 'stats.py': 1, 'suitability.py': 2, 'terrain-detail.py': 1, 'topo.py': 1,
+        'split.py': 1, 'stats.py': 1, 'suitability.py': 2, 'terrain-detail.py': 1,
         'vector-georef.py': 1,
     },
     '.to_file(': {

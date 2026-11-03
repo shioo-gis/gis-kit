@@ -7,6 +7,13 @@
 - 目标是 EPSG:3857 时，warp 把格网裁进世界范围，不再发布南北越界到 ±2.4 亿米的结果；记录写 `target_grid_trimmed_to_world`。`display` 越界的报错写实际范围和允许范围。
 - `max_pixels`、`max_elements` 的报错共用一处，写明像元数、限额、约需内存和办法。
 - **内存预算默认开启**，上限是可用内存的 80%；`--memory-budget off` 关闭。估算系数按实测校正（`display` 原来低估约 4 倍），`package`、`admin-chain`、`display-vector`、`nonlinear-georef`、`oriented-crop`、`raster-local-trace`、`raster-annotate`、`raster-georef` 预览和 `cad label` 的文字层也接上了预算。错误记录新增 `budget_source`。
+- 无几何的输入（CSV、GeoPackage 属性表、`.dbf`）进 `inspect-data summary/bbox`、`convert`、`clip`、`buffer`、`dissolve`、`export-table`、`topo` 时给可读错误，不再抛 `AttributeError`；错误指出同文件里带几何的图层和 `daily normalize`。`inspect-data schema/head/values` 不需要几何，继续读表格。这些工具的读取走 `_core.read_vector`。
+- `describe` 对 CSV 推断字段类型（看文件开头，`field_types_sampled_bytes` 写明字节数）。
+- `describe` 不再只按后缀定类型：`.jpg`、`.png` 加世界文件按栅格描述，新增 `transform`、`world_file`，CRS 未知时写明。**行为变化：** 没有仿射的栅格（含 `.tif`）`extent`、`resolution` 改为 `null`，此前给的是像元坐标；没有 GCP 和 RPC 时另有警告 `georeference_missing`。
+- `inspect-data schema` 的 `nullable` 看全部行，不再只看前 5 行，只读属性、分块读，所以大图层要多花时间；`dtype` 改为字段声明的类型，有空值的整数字段不再显示成 `float64`。
+- `clip --bbox -180,-90,180,-60` 可以直接写，不必用 `--bbox=`。
+- `python3 -I gis.py` 可以运行；直接 `python3 -I` 跑其它脚本不支持，见 `references/runtime-environment.md`。
+- `gis.py list --search csv` 能搜到 `daily`（`normalize` 把坐标列变成点层）。
 - `terrain.py`、`terrain-backend.py`（`terrain-cost.py` 经它）不再按 CRS 声明的轴名判断：`rasterio` 的 x、y 是数据轴，与声明的轴序无关，所以 CGCS2000 高斯-克吕格（如 EPSG:4547）和极地投影（如 EPSG:3031、3413）不再被拒绝。条件改为投影 CRS、两轴同一已知线性单位、x 在 y 的顺时针方向；Krovak 这类左手系仍拒绝，报错写明原因。`terrain` 记录新增 `ground_scale`，写明范围内的尺度因子。
 - 量算默认不再把任何投影 CRS 都当分析 CRS：源 CRS 的尺度在图层范围内偏离 1 超过 5%（Mercator 超过 0.5%）时，改用与经纬度数据相同的本地 UTM。EPSG:3857 上的 `buffer`、`field add-*`、`join`、`stats`、`indicators`、`topo` 阈值和 `daily` 量算都按地面距离算对；`buffer` 等输出仍回到输入 CRS，`daily geometry` 这类留在分析 CRS 的操作会输出 UTM。范围放不进一个 UTM 带时报错并写明尺度和 `--analysis-crs`；显式给 `--analysis-crs` 仍照用。
 - 重投影有了共同出口 `_core.reproject`，`convert`、`merge`、`clip`、`buffer`、`topo`、`plot`、`suitability`、`cad`、`raster`、`daily` 和量算都走它。**行为变化：** 含极点或跨目标 CRS 接缝（地理 CRS 和 Mercator 是 180 度经线，圆锥和其他世界投影是中央经线的对面）的线和面现在默认报错，写明行号和办法，不再静默翻转或得到 0 行；gis-kit 不做切分。经纬度数据里长于 1 度的边，在转到会弯曲它的投影前先加密，稀疏顶点的极帽面不再坍缩（因此多出顶点）。转换后没有可用坐标（无穷大或 1e10 以上）也报错。

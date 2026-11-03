@@ -11,6 +11,7 @@ from pathlib import Path
 import subprocess
 import sys
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))  # python3 -I leaves the script directory off the path
 import _budget
 
 SCRIPTS = Path(__file__).resolve().parent

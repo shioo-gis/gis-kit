@@ -28,8 +28,28 @@ def read(path, layer=None, encoding='utf-8', sheet=0):
         if len(header)!=len(set(header)): raise ValueError('Duplicate CSV headers')
         return pd.read_csv(path,dtype=str,keep_default_na=False,encoding=encoding)
     if suffix in ('.xlsx','.xls'): return pd.read_excel(path,dtype=str,keep_default_na=False,sheet_name=sheet)
-    check_vector(path,layer)
-    return gpd.read_file(path,layer=layer,engine='pyogrio').reset_index(drop=True)
+    return read_vector(path,layer,require_geometry=False).reset_index(drop=True)
+
+
+def check_geometry(path, layer=None) -> None:
+    """Refuse a table before anything reads it: geopandas would return a DataFrame and the tool would fail later on a missing attribute."""
+    # Layer 0 is what a read without a layer takes; the read itself warns about that choice.
+    if pyogrio.read_info(path, layer=0 if layer is None else layer).get('geometry_type') is not None:
+        return
+    where = f'Layer {layer} of {path}' if layer else str(path)
+    spatial = [str(name) for name, kind in pyogrio.list_layers(path) if kind]
+    others = f'Layers with geometry: {", ".join(spatial)}. ' if spatial else ''
+    raise ValueError(f'{where} has no geometry: it is a plain table. {others}'
+                     'To build points from coordinate columns use gis.py daily normalize (references/daily-vector.md).')
+
+
+def read_vector(path, layer=None, *, require_geometry=True, check_budget=True, **kwargs):
+    """Read one layer through the memory budget; a table without geometry is refused unless the caller only wants attributes."""
+    if require_geometry:
+        check_geometry(path, layer)
+    if check_budget:
+        check_vector(path, layer)
+    return gpd.read_file(path, layer=layer, engine='pyogrio', **kwargs)
 
 
 def environment():

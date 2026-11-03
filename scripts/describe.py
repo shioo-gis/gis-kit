@@ -13,12 +13,15 @@ from __future__ import annotations
 import argparse
 import json
 import math
+import re
 import sys
 from pathlib import Path
 
 RASTER_SUFFIXES = {'.tif', '.tiff', '.vrt', '.img', '.asc', '.jp2', '.nc', '.dem', '.hgt'}
 LAYER_LIMIT = 20
 FIELD_LIMIT = 50
+# GDAL's CSV default for AUTODETECT_SIZE_LIMIT.
+CSV_TYPE_SAMPLE_BYTES = 100000
 
 
 def crs_card(crs) -> dict | None:
@@ -81,6 +84,10 @@ def describe_vector(path: Path) -> tuple[dict, list[dict]]:
     for name in names[:LAYER_LIMIT]:
         info = pyogrio.read_info(path, layer=name)  # fast counts/bounds only; -1/None when unknown
         driver = driver or info.get('driver')
+        # OGR calls every CSV column a string unless asked to look at the start of the file.
+        sampled = driver == 'CSV'
+        if sampled:
+            info = pyogrio.read_info(path, layer=name, AUTODETECT_TYPE='YES', AUTODETECT_SIZE_LIMIT=str(CSV_TYPE_SAMPLE_BYTES))
         # pandas reports strings as 'object'; the OGR type name is clearer there.
         fields = [{'name': str(n), 'type': str(t) if str(t) != 'object' else str(o).removeprefix('OFT').lower()}
                   for n, t, o in zip(info['fields'], info['dtypes'], info['ogr_types'])]
@@ -89,40 +96,78 @@ def describe_vector(path: Path) -> tuple[dict, list[dict]]:
         geometry = info.get('geometry_type')
         layers.append({'name': name, 'geometry_type': geometry, 'feature_count': count if count >= 0 else None,
                        'crs': crs, 'extent': _extent(info.get('total_bounds')),
-                       'fields': fields[:FIELD_LIMIT], 'field_count': len(fields)})
+                       'fields': fields[:FIELD_LIMIT], 'field_count': len(fields),
+                       **({'field_types_sampled_bytes': CSV_TYPE_SAMPLE_BYTES} if sampled else {})})
         if crs is None and geometry:
             warnings.append({'code': 'crs_missing', 'message': f'图层 {name} 没有 CRS'})
     return {'driver': driver or 'unknown', 'layers': layers, 'layer_count': len(names)}, warnings
 
 
+def _open_raster(path: Path):
+    """Open without rasterio's warning on stderr; the card reports a missing georeference itself."""
+    import warnings
+    import rasterio
+    from rasterio.errors import NotGeoreferencedWarning
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore', NotGeoreferencedWarning)
+        return rasterio.open(path)
+
+
+def _world_file(src) -> str | None:
+    """The sidecar GDAL read the affine from (.jgw, .pgw, .tfw, .wld, ...), if any."""
+    for name in src.files[1:]:  # the first one is the dataset itself
+        if re.fullmatch(r'\.(?:wld|(?!raw)[a-z0-9]{2,4}w)', Path(name).suffix.lower()):
+            return Path(name).name
+    return None
+
+
 def describe_raster(path: Path) -> tuple[dict, list[dict]]:
     import numpy as np
-    import rasterio
     from _grid import nodata_unset
     warnings = []
-    with rasterio.open(path) as src:
+    with _open_raster(path) as src:
         crs = crs_card(src.crs.to_wkt()) if src.crs else None
+        # GDAL's identity transform means "no transform": its pixel coordinates are not a place.
+        placed = not src.transform.is_identity
+        world_file = _world_file(src) if placed else None
+        controls = bool(src.gcps[0]) or src.rpcs is not None
         # JSON has no NaN: a NaN NoData is reported as the string "nan", unset as null.
         nodata = [None if v is None else 'nan' if math.isnan(v) else float(v) for v in src.nodatavals]
         raster = {'width': src.width, 'height': src.height, 'band_count': src.count,
                   'dtypes': list(src.dtypes), 'nodata': nodata, 'crs': crs,
                   # Size of all bands decoded in their own dtypes; a fact, not a memory estimate.
                   'decoded_bytes': src.width*src.height*sum(np.dtype(d).itemsize for d in src.dtypes),
-                  'resolution': [float(src.res[0]), float(src.res[1])] if src.transform.is_rectilinear else None,
-                  'extent': _extent(src.bounds)}
+                  'resolution': [float(src.res[0]), float(src.res[1])] if placed and src.transform.is_rectilinear else None,
+                  'extent': _extent(src.bounds) if placed else None,
+                  'transform': [float(v) for v in tuple(src.transform)[:6]] if placed else None,
+                  'world_file': world_file}
         driver = src.driver
         undeclared = all(nodata_unset(src, band) for band in src.indexes)
     if crs is None:
-        warnings.append({'code': 'crs_missing', 'message': '栅格没有 CRS'})
+        warnings.append({'code': 'crs_missing', 'message': f'CRS 未知：世界文件 {world_file} 只含仿射，不含 CRS' if world_file else '栅格没有 CRS'})
+    if not placed and not controls:
+        warnings.append({'code': 'georeference_missing', 'message': '栅格没有仿射、GCP 或 RPC，像元不对应地理位置'})
     if undeclared:
         warnings.append({'code': 'nodata_unset', 'message': '所有波段都未设置 NoData，也没有掩膜'})
     return {'driver': driver, 'raster': raster}, warnings
 
 
+def read_card(path: Path) -> tuple[str, dict, list[dict]]:
+    """The suffix only picks which reader goes first: an image with a world file is a raster under any suffix."""
+    readers = {'vector': describe_vector, 'raster': describe_raster}
+    first, second = ('raster', 'vector') if path.suffix.lower() in RASTER_SUFFIXES else ('vector', 'raster')
+    try:
+        return first, *readers[first](path)
+    except Exception as error:
+        try:
+            return second, *readers[second](path)
+        except Exception as other:
+            raise ValueError(f'not readable as {first} ({error}) or as {second} ({other})') from None
+
+
 def describe(path: Path) -> dict:
     stat = path.stat()
-    kind = 'raster' if path.suffix.lower() in RASTER_SUFFIXES else 'vector'
-    body, warnings = (describe_raster if kind == 'raster' else describe_vector)(path)
+    kind, body, warnings = read_card(path)
     return {'contract': 'describe', 'schema_version': 1, 'path': str(path), 'kind': kind,
             'driver': body.pop('driver'), 'revision': {'size': stat.st_size if path.is_file() else None,
                                                        'mtime': stat.st_mtime},
