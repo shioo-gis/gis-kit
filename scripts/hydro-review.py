@@ -14,7 +14,8 @@ from _peak_rss import peak_rss_bytes
 from _safe_io import write_vector_atomic
 from _metric import _horizontal_meters_per_unit
 from pyproj import CRS
-from daily import fingerprint,clean
+from _core import clean
+from _delivery import fingerprint
 from _budget import check_raster, check_vector
 
 

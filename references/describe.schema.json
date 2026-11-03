@@ -40,7 +40,8 @@
               "properties": { "name": { "type": "string" }, "type": { "type": "string" } }
             }
           },
-          "field_count": { "description": "Total fields; `fields` may be truncated.", "type": "integer", "minimum": 0 }
+          "field_count": { "description": "Total fields; `fields` may be truncated.", "type": "integer", "minimum": 0 },
+          "field_types_sampled_bytes": { "description": "Only for CSV: field types are inferred from this many leading bytes of the file, so a later row can disagree.", "type": "integer", "minimum": 0 }
         }
       }
     },
@@ -58,7 +59,9 @@
         "nodata": { "description": "Per band: a number, \"nan\" for a NaN NoData, or null when unset.", "type": "array", "items": { "anyOf": [{ "type": ["number", "null"] }, { "const": "nan" }] } },
         "crs": { "$ref": "#/$defs/crs" },
         "resolution": { "type": ["array", "null"], "items": { "type": "number" }, "minItems": 2, "maxItems": 2 },
-        "extent": { "$ref": "#/$defs/extent" }
+        "extent": { "$ref": "#/$defs/extent" },
+        "transform": { "description": "Affine [a, b, c, d, e, f]: x = a*col + b*row + c, y = d*col + e*row + f, at the outer corner of the pixel. null when the raster has none; then resolution and extent are null too.", "type": ["array", "null"], "items": { "type": "number" }, "minItems": 6, "maxItems": 6 },
+        "world_file": { "description": "Name of the sidecar the affine came from (.jgw, .pgw, .tfw, .wld, ...), or null.", "type": ["string", "null"] }
       }
     },
     "warnings": {

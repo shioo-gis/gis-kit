@@ -29,7 +29,7 @@ from shapely.geometry import Polygon
 from shapely.validation import explain_validity
 
 from _safe_io import iter_vector_chunks
-from _budget import check_vector
+from _core import read_vector, reproject
 
 DEFAULT_CHECKS = "gaps,overlaps,slivers,invalid-geometries,duplicates"
 KNOWN_CHECKS = {"gaps", "overlaps", "slivers", "invalid-geometries", "duplicates", "self-intersections"}
@@ -550,7 +550,7 @@ def check_topology(
     report.meters_per_unit = float(factor_m)
     report.analysis_method = (
         "caller-specified projected CRS" if analysis_crs else
-        "local UTM for bounded joint analysis extent" if source_crs.is_geographic else
+        "local UTM for bounded joint analysis extent" if source_crs.is_geographic or not source_crs.equals(projected.crs) else
         "input projected CRS with verified horizontal units"
     )
     if expected_index is not None:
@@ -648,7 +648,7 @@ def _write_errors(
                     by_crs.setdefault(str(row["_geometry_crs"]), []).append(i)
             for geometry_crs, positions in by_crs.items():
                 source_geometries = [rows[i]["geometry"] for i in positions]
-                output_geometries = gpd.GeoSeries(source_geometries, crs=geometry_crs).to_crs(source_crs)
+                output_geometries = reproject(gpd.GeoSeries(source_geometries, crs=geometry_crs), source_crs, purpose='return')
                 for i, geometry in zip(positions, output_geometries):
                     rows[i]["geometry"] = geometry
             for row in rows:
@@ -695,11 +695,7 @@ def _write_errors(
 
 
 def _read_layer(path: str, layer: str | None) -> gpd.GeoDataFrame:
-    kwargs: dict[str, Any] = {"engine": "pyogrio"}
-    if layer:
-        kwargs["layer"] = layer
-    check_vector(path, layer)
-    return gpd.read_file(path, **kwargs)
+    return read_vector(path, layer)
 
 
 def _parser() -> argparse.ArgumentParser:

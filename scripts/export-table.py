@@ -18,15 +18,11 @@ from pathlib import Path
 import geopandas as gpd
 import pandas as pd
 from _metric import analysis_frame
-from _budget import check_vector
+from _core import read_vector
 
 
 def read_layer(path: Path, layer: str | None) -> gpd.GeoDataFrame:
-    kwargs: dict = {"engine": "pyogrio"}
-    if layer:
-        kwargs["layer"] = layer
-    check_vector(path, layer)
-    return gpd.read_file(path, **kwargs)
+    return read_vector(path, layer)
 
 
 def add_coords(gdf: gpd.GeoDataFrame, analysis_crs=None) -> pd.DataFrame:
@@ -70,7 +66,11 @@ def main() -> None:
         print(f"ERROR: Unsupported output format '{ext}'. Use .csv or .xlsx", file=sys.stderr)
         sys.exit(1)
 
-    gdf = read_layer(input_path, args.layer)
+    try:
+        gdf = read_layer(input_path, args.layer)
+    except Exception as exc:
+        print(f"ERROR: {exc}", file=sys.stderr)
+        sys.exit(1)
 
     if args.include_coords:
         df = add_coords(gdf, args.analysis_crs)

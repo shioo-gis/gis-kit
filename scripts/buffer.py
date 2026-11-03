@@ -27,7 +27,7 @@ except ImportError:
     if str(Path(__file__).resolve().parent) not in sys.path:
         sys.path.insert(0, str(Path(__file__).resolve().parent))
     from _safe_io import write_vector_atomic
-from _budget import check_vector
+from _core import read_vector, reproject
 
 
 CAP_STYLES = {"round": "round", "flat": "flat", "square": "square"}
@@ -108,9 +108,10 @@ def main() -> None:
         rings = sorted(rings)
 
     output = args.output or str(Path(args.input).stem) + "_buffer.gpkg"
-    read_kw = {"layer": args.layer} if args.layer else {}
-    check_vector(args.input, args.layer)
-    gdf = gpd.read_file(args.input, **read_kw)
+    try:
+        gdf = read_vector(args.input, args.layer)
+    except Exception as exc:
+        sys.exit(f"Error reading input: {exc}")
     original_crs = gdf.crs
     if rings is not None:
         clash = [name for name in ("buffer_m", "ring") if name in gdf.columns]
@@ -124,7 +125,7 @@ def main() -> None:
     try:
         gdf, meters_per_unit = analysis_frame(gdf, args.analysis_crs)
         analysis_crs = gdf.crs
-        method = analysis_method(original_crs, args.analysis_crs)
+        method = analysis_method(original_crs, args.analysis_crs, used=analysis_crs)
         coordinate_units_per_meter = 1 / meters_per_unit
         reprojected = CRS.from_user_input(gdf.crs) != CRS.from_user_input(original_crs)
 
@@ -149,7 +150,7 @@ def main() -> None:
             cap_style=CAP_STYLES[args.cap_style],
             join_style=JOIN_STYLES[args.join_style],
         )
-        if reprojected and args.analysis_crs is None and CRS.from_user_input(original_crs).is_geographic:
+        if reprojected and args.analysis_crs is None:
             nonempty = gdf.loc[gdf.geometry.notna() & ~gdf.geometry.is_empty]
             if not nonempty.empty:
                 try:
@@ -169,7 +170,7 @@ def main() -> None:
 
     if reprojected:
         try:
-            gdf = gdf.to_crs(original_crs)
+            gdf = reproject(gdf, original_crs, purpose='return')
             nonempty = gdf.loc[gdf.geometry.notna() & ~gdf.geometry.is_empty]
             if not nonempty.empty and not all(math.isfinite(value) for value in nonempty.total_bounds):
                 parser.error("Reprojected geographic buffer contains non-finite coordinates")

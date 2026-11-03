@@ -43,6 +43,7 @@ import subprocess
 import xml.etree.ElementTree as ET
 import zipfile
 
+from _budget import check_raster, check_vector
 from _delivery import bundle, digest, write_json
 import _map_style
 import _style_read
@@ -588,6 +589,7 @@ def pack_vector(entry, gpkg, scope, bbox, geometry, driver='GPKG'):
         raise ValueError(f'{entry["ref"]} has no CRS, so the map extent cannot be placed on it; assign a CRS or use --full')
     selector = None if scope == 'full' else extent_in(bbox, crs)
     window = {} if selector is None else {'bbox': tuple(selector.bounds)}
+    check_vector(path, layer, window.get('bbox'))
     if scope == 'clip' and 'clipped' in list(info['fields']):
         raise ValueError(f'{entry["ref"]} already has a field named "clipped"; --clip adds that field')
     try:
@@ -672,6 +674,8 @@ def pack_raster(entry, gpkg, stage, scope, bbox, tiles=True):
             if col1 <= col0 or row1 <= row0:
                 raise ValueError(f'{entry["ref"]} does not reach the map extent')
             window = Window(col0, row0, col1 - col0, row1 - row0)
+        # The read itself plus the per-band statistics, in the band's own type.
+        check_raster(source, arrays=source.count+1, itemsize=np.dtype(source.dtypes[0]).itemsize, width=window.width, height=window.height)
         data = source.read(window=window, masked=False)
         transform = source.window_transform(window)
         dtype, count, nodata = source.dtypes[0], source.count, source.nodata

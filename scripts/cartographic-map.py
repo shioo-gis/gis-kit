@@ -12,7 +12,7 @@ from shapely.ops import orient
 from _cartography import prepare,positive
 from _delivery import bundle,digest,write_json
 from _safe_io import iter_vector_chunks
-from daily import fingerprint
+from _delivery import fingerprint
 from _budget import check_vector
 
 

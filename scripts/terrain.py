@@ -13,9 +13,11 @@ import scipy
 from scipy.ndimage import correlate, minimum_filter, maximum_filter
 
 from _budget import check_raster
-from _delivery import bundle, digest, write_json
+from _delivery import bundle, digest, implementation_hashes, write_json
 from _peak_rss import peak_rss_bytes
-from raster import inspect, band_data, positive_integer
+from _core import record_facts, report_warnings
+from _grid import grid_facts, guard_pixels, inspect, band_data, planar_metres_per_unit, positive_integer
+from _metric import ground_scale_range
 
 
 def derivatives(z, dx, dy):
@@ -81,25 +83,20 @@ def execute(source, params, output):
     if any(Path(str(source)+s).exists() for s in ('.msk', '.aux.xml', '.ovr')):
         raise ValueError('External sidecars unsupported; prepare self-contained raster')
     identity = digest(source)
-    implementation = {n: digest(Path(__file__).with_name(n)) for n in ('terrain.py', 'raster.py', '_delivery.py')}
+    implementation = implementation_hashes(__file__)
     with bundle(output) as stage:
         with rio.open(source) as ds:
             meta = inspect(ds)
-            crs = CRS(ds.crs)
-            if not crs.is_projected or len(crs.axis_info) != 2:
-                raise ValueError('Two-dimensional projected CRS required; warp explicitly first')
-            axes = crs.axis_info
-            if [a.direction for a in axes] != ['east', 'north']:
-                raise ValueError('East/north projected axes required')
+            metres_per_unit = planar_metres_per_unit(ds.crs, ds.bounds)
             t = ds.transform
             if t.b or t.d or t.a <= 0 or t.e >= 0:
                 raise ValueError('North-up grid required; warp explicitly first')
-            limit = positive_integer(params.get('max_pixels', 5000000))
-            if ds.width*ds.height > limit:
-                raise ValueError('Raster exceeds max_pixels memory guard')
-            # z, zero-filled copy, east/north gradients, slope/aspect/relief and a filter temporary.
-            check_raster(ds, arrays=10 if shade else 8)
-            dx, dy = t.a*axes[0].unit_conversion_factor, -t.e*axes[1].unit_conversion_factor
+            guard_pixels(ds.width*ds.height, positive_integer(params.get('max_pixels', 5000000)), f'{source.name} ({ds.width} x {ds.height})', way_out='Warp to a coarser resolution or clip first')
+            # z, its copies, gradients, outputs and filter temporaries; measured 105-109 bytes per pixel, 113-117 with hillshade.
+            check_raster(ds, arrays=15 if shade else 14)
+            dx, dy = t.a*metres_per_unit, -t.e*metres_per_unit
+            scale = ground_scale_range(CRS(ds.crs), ds.bounds)
+            facts = grid_facts(ds, positive_integer(params.get('band', 1)), 'terrain')
             band = positive_integer(params.get('band', 1))
             if ds.units[band-1] is not None and ds.units[band-1] not in (params['vertical_unit'], {'metre':'m','foot':'ft','us_survey_foot':'us_survey_foot'}[params['vertical_unit']]):
                 raise ValueError('Band unit conflicts with declared vertical unit')
@@ -125,21 +122,22 @@ def execute(source, params, output):
                 if check.crs != profile['crs'] or check.transform != t or check.units != (unit,) or not np.array_equal(decoded, values, equal_nan=True):
                     raise ValueError('Raster readback mismatch')
             artifacts[name] = {'file': path.name, 'sha256': digest(path), 'summary': summary(values), 'unit': unit}
-        if digest(source) != identity or implementation != {n: digest(Path(__file__).with_name(n)) for n in implementation}:
+        if digest(source) != identity or implementation != implementation_hashes(__file__):
             raise ValueError('Source or implementation changed during execution')
-        write_json(stage/'record.json', {'schema_version': 1, 'status': 'complete',
+        write_json(stage/'record.json', {'schema_version': 1, 'status': 'complete', **record_facts(facts),
             'source': {'name': source.name, 'sha256': identity, 'grid': meta}, 'parameters': params,
             'method': 'Horn 3x3; downhill aspect clockwise from grid north; 3x3 max-minus-min relief'
                       + ('; Lambertian hillshade 0..1 (light azimuth/altitude, z_factor scales gradients)' if shade else ''),
             'hillshade': shade,
             'assumptions': ['No filling or edge interpolation', 'Flat aspect is NoData',
                             'Projected grid distances; no ground-scale correction (z_factor is the only scale adjustment)', 'No hydrology or event reconstruction'],
-            'spacing_metres': [dx, dy], 'elevation_metres': summary(z), 'artifacts': artifacts,
+            'spacing_metres': [dx, dy], 'ground_scale': scale and {'min': scale[0], 'max': scale[1], 'meaning': 'ground distance times this factor is the grid distance; tangent of slope is low by it where above 1'}, 'elevation_metres': summary(z), 'artifacts': artifacts,
             'environment': {'python': sys.version, 'numpy': np.__version__, 'scipy': scipy.__version__,
                             'rasterio': rio.__version__, 'gdal': rio.__gdal_version__},
             'implementation': implementation, 'resources': {'wall_seconds': time.perf_counter()-started,
             'max_rss_bytes': peak_rss_bytes(),
             'rss_scope': 'process lifetime high-water mark; excludes child processes'}})
+    report_warnings(facts)
     return Path(output)
 
 

@@ -4,6 +4,7 @@ import numpy as np
 import pandas as pd
 import geopandas as gpd
 import shapely
+from _core import reproject
 from _daily import stable, metric
 from _metric import analysis_frames
 
@@ -12,7 +13,7 @@ def compare(left, right, p):
     key = p['id']; stable(left, key); stable(right, key)
     for data in (left,right):
         if data.geometry.isna().any() or data.geometry.is_empty.any() or not data.geometry.is_valid.all(): raise ValueError('Version comparison requires valid nonempty geometries')
-    right = right.to_crs(left.crs)
+    right = reproject(right, left.crs, purpose='align')
     a = left.set_index(left[key].astype(str)); b = right.set_index(right[key].astype(str))
     fields = p.get('fields', sorted((set(left.columns) & set(right.columns)) - {key, left.geometry.name}))
     rows = []
@@ -154,7 +155,7 @@ def cleanup(frame,right,p):
     if method=='precision': geometries=shapely.set_precision(work.geometry.to_numpy(),tolerance)
     elif method=='snap':
         if right is None: raise ValueError('snap requires reference')
-        reference=right.to_crs(work.crs)
+        reference=reproject(right,work.crs,purpose='align')
         if not reference.geometry.is_valid.all(): raise ValueError('Invalid reference geometry')
         geometries=shapely.snap(work.geometry.to_numpy(),reference.geometry.union_all(),tolerance)
     elif method=='coverage_simplify':
@@ -238,7 +239,7 @@ def cleanup_adopt(left,right,p,hashes):
         footprint_equal = before.geometry.union_all().equals(after.geometry.union_all())
         if preserve and not footprint_equal: raise ValueError('Candidate changed protected coverage footprint')
         coverage_report = {'input_valid': True, 'output_valid': True, 'footprint_preserved': footprint_equal}
-    result=left.copy();result.geometry=right.to_crs(left.crs).geometry.to_numpy()
+    result=left.copy();result.geometry=reproject(right,left.crs,purpose='align').geometry.to_numpy()
     checks={'id':key,'rules':p['rules']}
     _,old_report=rules(left,None,checks);errors,new_report=rules(result,None,checks)
     if not new_report['passed']: raise ValueError('Candidate fails business rules')

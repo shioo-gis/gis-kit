@@ -19,6 +19,7 @@ import math
 from pathlib import Path
 import shutil
 
+from _budget import check_vector
 from _delivery import bundle, digest, write_json
 
 VERSION = '0.1.0'
@@ -135,6 +136,7 @@ def read_source(source, layer, id_field, fields, bbox):
     crs = info.get('crs') or ''
     if crs and crs not in ('EPSG:4326', 'OGC:CRS84'):
         raise ValueError(f'Source must be EPSG:4326 longitude/latitude, not {crs}')
+    check_vector(source, layer, bbox)
     if id_field is None:
         frame = pyogrio.read_dataframe(source, layer=layer, bbox=bbox, columns=fields, fid_as_index=True)
         frame = frame[frame.geometry.notna()]

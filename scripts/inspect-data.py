@@ -17,7 +17,8 @@ from pathlib import Path
 import geopandas as gpd
 import pyogrio
 from _table import tabulate
-from _budget import check_vector
+from _core import read_vector
+from _safe_io import iter_vector_chunks
 
 
 def resolve_path(raw: str) -> Path:
@@ -65,11 +66,9 @@ def pick_layer(path: Path, layer: str | None) -> str:
     return layer
 
 
-def read_layer(path: Path, layer: str, rows: int | None = None) -> gpd.GeoDataFrame:
+def read_layer(path: Path, layer: str, rows: int | None = None, *, require_geometry: bool = True) -> gpd.GeoDataFrame:
     try:
-        if rows is None:
-            check_vector(path, layer)
-        return gpd.read_file(path, layer=layer, engine="pyogrio", rows=rows)
+        return read_vector(path, layer, require_geometry=require_geometry, check_budget=rows is None, rows=rows)
     except Exception as e:
         sys.exit(f"Error reading layer '{layer}': {e}")
 
@@ -89,24 +88,31 @@ def cmd_layers(args: argparse.Namespace) -> None:
 def cmd_schema(args: argparse.Namespace) -> None:
     path = resolve_path(args.file)
     layer = pick_layer(path, args.layer)
-    gdf = read_layer(path, layer, rows=5)
+    # Nulls are a fact about every row, so scan them all; attributes only, a chunk at a time.
+    try:
+        info = pyogrio.read_info(path, layer=layer)
+        with_null, samples = set(), {}
+        for _, frame in iter_vector_chunks(path, layer=layer, read_geometry=False):
+            with_null.update(frame.columns[frame.isna().any()])
+            for col in frame.columns:
+                seen = samples.setdefault(col, [])
+                seen += frame[col].dropna().head(3 - len(seen)).tolist()
+    except Exception as e:
+        sys.exit(f"Error reading layer '{layer}': {e}")
 
     rows = []
-    for col in gdf.columns:
-        if col == gdf.geometry.name:
-            continue
-        series = gdf[col]
-        sample_vals = series.dropna().head(3).tolist()
-        sample_str = ", ".join(str(v) for v in sample_vals) if sample_vals else ""
+    # The declared type: pandas turns an integer field with nulls into float64.
+    for col, dtype in zip(info["fields"], info["dtypes"]):
+        sample_str = ", ".join(str(v) for v in samples.get(col, []))
         rows.append({
-            "field": col,
-            "dtype": str(series.dtype),
-            "nullable": str(series.isna().any()),
+            "field": str(col),
+            "dtype": str(dtype),
+            "nullable": str(col in with_null),
             "samples": sample_str[:80],
         })
 
     print(f"Layer: {layer}")
-    print(f"Geometry column: {gdf.geometry.name}")
+    print(f"Geometry column: {'geometry' if info['geometry_type'] else 'none (table)'}")
     print()
     print(tabulate(rows, headers="keys", tablefmt="simple"))
 
@@ -174,9 +180,9 @@ def cmd_summary(args: argparse.Namespace) -> None:
 def cmd_head(args: argparse.Namespace) -> None:
     path = resolve_path(args.file)
     layer = pick_layer(path, args.layer)
-    gdf = read_layer(path, layer, rows=args.n)
+    gdf = read_layer(path, layer, rows=args.n, require_geometry=False)
 
-    df = gdf.drop(columns=gdf.geometry.name, errors="ignore")
+    df = gdf.drop(columns="geometry", errors="ignore") if isinstance(gdf, gpd.GeoDataFrame) else gdf
     print(f"Layer: {layer} (first {len(df)} rows)")
     print()
     print(tabulate(df, headers="keys", tablefmt="simple", showindex=False))
@@ -185,11 +191,11 @@ def cmd_head(args: argparse.Namespace) -> None:
 def cmd_values(args: argparse.Namespace) -> None:
     path = resolve_path(args.file)
     layer = pick_layer(path, args.layer)
-    gdf = read_layer(path, layer)
+    gdf = read_layer(path, layer, require_geometry=False)
 
     field = args.field
     if field not in gdf.columns:
-        available = [c for c in gdf.columns if c != gdf.geometry.name]
+        available = [c for c in gdf.columns if c != "geometry"]
         sys.exit(f"Error: field '{field}' not found. Available: {', '.join(available)}")
 
     series = gdf[field]

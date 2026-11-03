@@ -20,6 +20,7 @@ import numpy as np
 from PIL import Image, ImageDraw
 from skimage.morphology import skeletonize
 from shapely.geometry import LineString
+from _budget import check_image
 from _raster_preprocess import crop_aid
 
 
@@ -92,6 +93,7 @@ def run(image,output,bounds,preprocess='gray',threshold=None,min_length=8,simpli
     if threshold is not None and not 0<=threshold<=255:raise ValueError('threshold must be in [0,255]')
     left,top,right,bottom=bounds
     with Image.open(image) as im:
+        check_image(image,im.width,im.height,bytes_per_pixel=4)  # a crop still decodes the whole image
         if not (0<=left<right<=im.width and 0<=top<bottom<=im.height):raise ValueError('Invalid source-pixel crop')
         if (right-left)*(bottom-top)>1000000:raise ValueError('Local tool limited to one million pixels')
         original=im.crop(bounds).convert('RGB')

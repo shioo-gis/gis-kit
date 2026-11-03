@@ -8,6 +8,7 @@ from scipy.spatial import cKDTree
 
 import _raster_numeric as n
 from _daily import stable
+from _grid import band_data, guard_pixels, inspect, positive_integer, windows
 
 OPERATIONS = ('fill_holes', 'focal', 'aggregate', 'regions', 'sieve', 'seed_region',
               'morphology', 'class_area', 'transition', 'class_combine', 'zonal_fill')
@@ -50,7 +51,6 @@ def reduce_values(values, method):
 
 
 def footprint(ds, p):
-    from raster import positive_integer
     if 'radius_m' in p:
         radius = n.finite(p['radius_m'])
         if radius <= 0:
@@ -69,7 +69,6 @@ def footprint(ds, p):
 
 
 def focal(a, ds, p):
-    from raster import positive_integer, windows
     method = n.choice(p.get('statistic', 'mean'), ('mean', 'sum', 'min', 'max', 'median', 'std', 'mode'))
     if p.get('kind') == 'categorical':
         categories(a)
@@ -103,7 +102,6 @@ def focal(a, ds, p):
 
 
 def fill(a, ds, p, protected, allowed):
-    from raster import positive_integer
     kind = n.choice(p['kind'], ('continuous', 'categorical'))
     method = n.choice(p['method'], ('nearest', 'idw'))
     if kind == 'categorical':
@@ -151,15 +149,13 @@ def fill(a, ds, p, protected, allowed):
 
 
 def process(operation, datasets, p, stage, stack):
-    from raster import band_data, inspect, positive_integer
     import rasterio as rio
     from _delivery import write_json
     from _budget import check_raster
     ds = datasets[0]
-    if len(datasets)*ds.width*ds.height > positive_integer(p.get('max_elements', 10000000)):
-        raise ValueError('Exceeded max_elements')
-    # Operand decodes plus output, labels, protection mask and the encoded copy.
-    check_raster(ds, arrays=len(datasets)+4)
+    guard_pixels(len(datasets)*ds.width*ds.height, positive_integer(p.get('max_elements', 10000000)), f'{len(datasets)} input(s) of {ds.width} x {ds.height}', param='max_elements', way_out='Warp to a coarser resolution or clip first')
+    # Operand decodes plus output, labels, masks and the encoded copy; regions measured 69-77 bytes per pixel.
+    check_raster(ds, arrays=len(datasets)+9)
     arrays = []
     for other in datasets:
         n.same_grid(ds, other)

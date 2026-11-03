@@ -16,10 +16,10 @@ import numpy as np
 import rasterio as rio
 from shapely.geometry import LineString
 from _budget import check_raster
-from _delivery import bundle, digest, write_json
+from _delivery import bundle, digest, implementation_hashes, write_json
 from _peak_rss import peak_rss_bytes
 from _safe_io import iter_vector_chunks, write_vector_atomic
-from raster import inspect, band_data, band_matches
+from _grid import inspect, band_data, band_matches
 from terrain import derivatives, summary
 
 _spec = importlib.util.spec_from_file_location('terrain_backend', Path(__file__).with_name('terrain-backend.py'))
@@ -91,7 +91,7 @@ def execute(source, friction, p, output, grass):
     if not grass.is_file() or not os.access(grass, os.X_OK):
         raise ValueError('Explicit executable GRASS launcher required')
     hashes = [digest(x) for x in paths]
-    code = {n: digest(Path(__file__).with_name(n)) for n in ('terrain-cost.py', '_walk_worker.py', 'terrain-backend.py', 'terrain.py', 'raster.py', '_delivery.py', '_safe_io.py')}
+    code = implementation_hashes(__file__)
     for path in paths:
         if any(Path(str(path)+s).exists() for s in ('.msk', '.ovr', '.aux.xml')):
             raise ValueError('External sidecars unsupported')
@@ -183,7 +183,7 @@ def execute(source, friction, p, output, grass):
         if count != len(routes):
             raise ValueError('Route readback mismatch')
         artifacts['routes.gpkg'] = dict(sha256=digest(stage/'routes.gpkg'), count=len(routes))
-        if hashes != [digest(x) for x in paths] or code != {n: digest(Path(__file__).with_name(n)) for n in code}:
+        if hashes != [digest(x) for x in paths] or code != implementation_hashes(__file__):
             raise ValueError('Source or implementation changed')
         rss = peak_rss_bytes()
         write_json(stage/'record.json', dict(status='candidate', parameters=p, inputs=[dict(path=str(x), sha256=h) for x, h in zip(paths, hashes)], source_grid=meta, implementation=code, backend_version=version, backend_grid_error_pixels=errors, reachable=reachable, cost_seconds=float(cost) if reachable else None, path_recomputed_seconds=checked, path_cells=[list(q) for q in path], artifacts=artifacts, resources=dict(wall_seconds=time.perf_counter()-started, self_max_rss_bytes=rss, worker=worker), assumptions=['Eight-neighbour GRASS r.walk without knights; cell-centre graph permits diagonal corner contact, barriers exclude cells only.', 'Friction NoData is an explicitly supplied barrier; complete DEM required. No hidden slope cutoff.', 'to_end uses negated elevation from end: exact transpose of directed edge costs, not ordinary downhill cost from end.', 'Corridor = cells with d(start,v)+d(v,end)-d(start,end) <= declared extra seconds; finite graph walks, not a continuous safe travel area.', 'Slope is Horn 3x3 diagnostic; edge costs use signed elevation difference / horizontal distance. Parameters are scenarios, not surveyed walking times.'], numerical_tolerance=dict(absolute_seconds=tolerance, relative=1e-10)))

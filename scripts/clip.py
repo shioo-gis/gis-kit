@@ -10,28 +10,24 @@ import argparse
 import math
 import sys
 
-import geopandas as gpd
 import pandas as pd
 import pyogrio
 from shapely.geometry import box
 
+from _core import read_vector, reproject
 from _safe_io import write_vector_atomic
-from _budget import check_vector
 
 
 def read_gdf(path, layer=None, bbox=None, *, columns=None, where=None):
-    kwargs = {"engine": "pyogrio"}
-    if layer:
-        kwargs["layer"] = layer
+    kwargs = {}
     if bbox:
         kwargs["bbox"] = bbox
     if columns is not None:
         kwargs["columns"] = columns
     if where:
         kwargs["where"] = where
-    if not bbox and not where:  # filtered reads load only part of the layer
-        check_vector(path, layer)
-    return gpd.read_file(path, **kwargs)
+    # Filtered reads load only part of the layer.
+    return read_vector(path, layer, check_budget=not bbox and not where, **kwargs)
 
 
 def parse_bbox(value):
@@ -39,6 +35,16 @@ def parse_bbox(value):
     if len(coords) != 4 or not all(math.isfinite(coord) for coord in coords) or coords[0] > coords[2] or coords[1] > coords[3]:
         raise ValueError("--bbox requires minx,miny,maxx,maxy")
     return tuple(coords)
+
+
+def bbox_argv(argv):
+    """argparse takes a value that starts with '-' for an option, and southern and western boxes all do."""
+    argv = list(argv)
+    for position, token in enumerate(argv[:-1]):
+        if token == "--bbox" and argv[position + 1].startswith("-") and "," in argv[position + 1]:
+            argv[position:position + 2] = [f"--bbox={argv[position + 1]}"]
+            break
+    return argv
 
 
 def overlap_bbox(first, second):
@@ -74,7 +80,7 @@ def main():
     parser.add_argument("--filter-layer-name", help="Layer name within the spatial filter file")
     parser.add_argument("--invert", action="store_true", help="Invert selection")
     parser.add_argument("--overwrite", action="store_true", help="Explicitly replace an existing single-layer output file")
-    args = parser.parse_args()
+    args = parser.parse_args(bbox_argv(sys.argv[1:]))
 
     try:
         bbox = parse_bbox(args.bbox) if args.bbox else None
@@ -98,7 +104,7 @@ def main():
             if (mask.crs is None) != (source_crs is None):
                 raise ValueError(f"{label} and input must both define a CRS, or both be unreferenced")
             if source_crs is not None and mask.crs != source_crs:
-                return mask.to_crs(source_crs)
+                return reproject(mask, source_crs, purpose='align')
             return mask
 
         clip_gdf = align_mask_crs(clip_gdf, "Clip mask")

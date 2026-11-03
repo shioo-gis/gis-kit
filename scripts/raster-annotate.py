@@ -24,6 +24,7 @@ from PIL import Image, ImageDraw
 from shapely.geometry import LineString, Point, Polygon, box, mapping
 from shapely import STRtree, make_valid
 from shapely.validation import explain_validity
+from _budget import check_image
 from _model_actor import POLICY, validate_actor
 
 GROUPS = ('nodes', 'edges', 'points', 'faces')
@@ -463,6 +464,7 @@ def view(run, bounds=None, max_size=1600, overlay=False, ids=None, labels=False,
     if preprocess not in MODES:
         raise ValueError('Unknown preprocessing mode')
     with Image.open(path) as im:
+        check_image(path, im.width, im.height, bytes_per_pixel=4)  # a crop still decodes the whole image
         clean = im.crop(bounds).convert('RGB').resize(size, Image.Resampling.LANCZOS)
         aid = crop_aid(im,bounds,preprocess,kernel).resize(size, Image.Resampling.LANCZOS) if preprocess != 'none' else None
     ident = uuid.uuid4().hex

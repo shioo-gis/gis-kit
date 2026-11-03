@@ -65,6 +65,7 @@ _LAYER_ORDER = ["province", "city", "district", "highlight"]
 _DEFAULT_STYLE = {"location": "default", "landuse": "standard"}
 
 from _budget import check_vector
+from _core import reproject
 
 
 def _parse_input(spec: str) -> tuple[str, str | None]:
@@ -135,7 +136,7 @@ def plot_location(inputs: list[tuple[str, str | None]], template: dict, args):
         base_crs = gdfs[0].crs
         for i in range(1, len(gdfs)):
             if gdfs[i].crs and gdfs[i].crs != base_crs:
-                gdfs[i] = gdfs[i].to_crs(base_crs)
+                gdfs[i] = reproject(gdfs[i], base_crs, purpose='align')
 
     for i, gdf in enumerate(gdfs):
         layer_key = _LAYER_ORDER[i] if i < len(_LAYER_ORDER) else _LAYER_ORDER[-1]

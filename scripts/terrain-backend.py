@@ -15,8 +15,8 @@ import numpy as np
 import rasterio as rio
 from pyproj import CRS
 from _budget import check_raster
-from _delivery import bundle, digest, write_json
-from raster import inspect, band_data, band_matches, positive_integer
+from _delivery import bundle, digest, implementation_hashes, write_json
+from _grid import guard_pixels, inspect, band_data, band_matches, planar_metres_per_unit, positive_integer
 from terrain import summary
 
 
@@ -35,11 +35,10 @@ def validate(operation, p, ds):
     for field in ('vertical_datum','source_description'):
         if not isinstance(p.get(field),str) or not p[field].strip(): raise ValueError(f'Explicit {field} required')
     c=CRS(ds.crs); t=ds.transform
-    if not c.is_projected or len(c.axis_info)!=2 or [a.direction for a in c.axis_info]!=['east','north'] or any(a.unit_conversion_factor!=1 for a in c.axis_info):
-        raise ValueError('Projected east/north metre CRS required')
+    if planar_metres_per_unit(c,ds.bounds)!=1: raise ValueError('Projected metre CRS required')
     if t.b or t.d or t.a<=0 or t.e>=0: raise ValueError('North-up grid required')
-    if ds.count!=1 or min(ds.shape)<3 or ds.width*ds.height>positive_integer(p.get('max_pixels',1000000)):
-        raise ValueError('Requires single-band bounded grid of at least 3x3')
+    if ds.count!=1 or min(ds.shape)<3: raise ValueError('Requires single-band grid of at least 3x3')
+    guard_pixels(ds.width*ds.height,positive_integer(p.get('max_pixels',1000000)),f'Grid ({ds.width} x {ds.height})',way_out='Warp to a coarser resolution or clip first')
     if ds.units[0] not in (None,'m','metre'): raise ValueError('Band unit conflicts with metre')
     # Input grid, read-back outputs, and for viewshed the stacked outputs plus the visible count.
     outputs=4 if operation=='hydrology' else len(p['observers']) if isinstance(p.get('observers'),list) else 0
@@ -88,7 +87,7 @@ def execute(operation, source, p, output, grass):
     if not grass.is_file() or not os.access(grass,os.X_OK): raise ValueError('Explicit executable GRASS launcher required')
     if any(Path(str(source)+s).exists() for s in ('.msk','.ovr','.aux.xml')): raise ValueError('External sidecars unsupported')
     before=digest(source)
-    code={n:digest(Path(__file__).with_name(n)) for n in ('terrain-backend.py','_grass_worker.py','terrain.py','raster.py','_delivery.py')}
+    code=implementation_hashes(__file__)
     with rio.open(source) as ds:
         meta=inspect(ds); validate(operation,p,ds); values=band_data(ds,1)
         if np.ma.getmaskarray(values).any(): raise ValueError('Backend requires complete DEM; missing cells must not silently become drainage or visibility barriers')
@@ -136,7 +135,7 @@ def execute(operation, source, p, output, grass):
                     if not band_matches(d,1,a):raise ValueError('Published raster readback mismatch')
                 summaries[name]={'file':path.name,'sha256':digest(path),'summary':summary(a)}
             resource_report=json.loads((work/'worker.json').read_text(encoding='utf-8'))
-        if before!=digest(source) or code!={n:digest(Path(__file__).with_name(n)) for n in code}:raise ValueError('Input or implementation changed')
+        if before!=digest(source) or code!=implementation_hashes(__file__):raise ValueError('Input or implementation changed')
         write_json(stage/'record.json',dict(schema_version=1,status='candidate',operation=operation,parameters=p,source_sha256=before,
             source_grid=meta,backend_version=version,implementation=code,backend_grid_roundtrip_error_pixels=grid_errors,artifacts=summaries,resources=dict(cli_work_seconds=time.perf_counter()-started,worker=resource_report),
             assumptions=['GRASS AT least-cost routing; no prior sink filling; negative accumulation retains boundary uncertainty; streams and basins are raster candidates' if operation=='hydrology' else 'Planar visibility, no curvature or refraction; DSM surface plus observer/target heights; outside radius is NoData; count is number of observers seeing pixel',

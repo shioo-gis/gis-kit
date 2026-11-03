@@ -8,6 +8,7 @@
 # ///
 
 import argparse
+import re
 import sys
 from pathlib import Path
 
@@ -57,22 +58,48 @@ def remove_duplicates(gdf: gpd.GeoDataFrame, by: str) -> tuple[gpd.GeoDataFrame,
     return gdf, before - len(gdf)
 
 
-def fix_encoding(gdf: gpd.GeoDataFrame, source_encoding: str) -> tuple[gpd.GeoDataFrame, int]:
+def looks_garbled(value: str) -> bool:
+    """A Latin-1 symbol or control next to another high character: bytes read in the wrong encoding, not spelling.
+
+    Accented letters alone ('ÄÖ', 'Müller') prove nothing: they also decode as GBK, but they are ordinary text.
+    """
+    return any(re.search("[\x80-\xbf\xd7\xf7]", run) for run in re.findall("[\x80-\xff]{2,}", value))
+
+
+def fix_encoding(gdf: gpd.GeoDataFrame, source_encoding: str) -> tuple[gpd.GeoDataFrame, int, list[str]]:
+    """Repair a field only when it proves garbled: every non-ASCII value decodes and at least one looks garbled.
+
+    Any other field stays as it was, and the returned notes say why.
+    """
     fixed = 0
+    notes: list[str] = []
     for col in gdf.select_dtypes(include=["object"]).columns:
         if col == gdf.geometry.name:
             continue
-        for idx in gdf.index:
-            val = gdf.at[idx, col]
-            if isinstance(val, str):
+        repaired: dict[str, str] = {}
+        others: set[str] = set()
+        for val in gdf[col]:
+            if isinstance(val, str) and not val.isascii():
                 try:
                     decoded = val.encode("latin-1").decode(source_encoding)
                     if decoded != val:
-                        gdf.at[idx, col] = decoded
-                        fixed += 1
+                        repaired[val] = decoded
                 except (UnicodeDecodeError, UnicodeEncodeError):
-                    pass
-    return gdf, fixed
+                    others.add(val)
+        if not repaired:
+            continue
+        before, after = next(iter(repaired.items()))
+        changed = int(gdf[col].map(lambda v: isinstance(v, str) and v in repaired).sum())
+        candidates = f"{changed} values could be {source_encoding} read as Latin-1 (such as {before!r} -> {after!r})"
+        if others:
+            notes.append(f"Encoding left unchanged in '{col}': {candidates}, but {len(others)} other values could not (such as {min(others)!r})")
+        elif not any(looks_garbled(val) for val in repaired):
+            notes.append(f"Encoding left unchanged in '{col}': {candidates}, but nothing shows they are garbled")
+        else:
+            gdf[col] = gdf[col].map(lambda v: repaired.get(v, v) if isinstance(v, str) else v)
+            fixed += changed
+            notes.append(f"Encoding fixed in '{col}': {changed} values (such as {before!r} -> {after!r})")
+    return gdf, fixed, notes
 
 
 def drop_null_fields(gdf: gpd.GeoDataFrame) -> tuple[gpd.GeoDataFrame, list[str]]:
@@ -92,7 +119,7 @@ def main() -> None:
     parser.add_argument("--remove-empty", action="store_true", help="Remove empty geometries")
     parser.add_argument("--remove-duplicates", action="store_true", help="Remove duplicate features")
     parser.add_argument("--dedupe-by", choices=["geometry", "attributes", "both"], default="both")
-    parser.add_argument("--fix-encoding", action="store_true", help="Re-encode string fields to utf-8")
+    parser.add_argument("--fix-encoding", action="store_true", help="Repair text garbled by reading --source-encoding bytes as Latin-1; a field that does not prove garbled is left unchanged and reported")
     parser.add_argument("--source-encoding", default="gbk", help="Source encoding (default: gbk)")
     parser.add_argument("--drop-null-fields", action="store_true", help="Drop entirely null fields")
     parser.add_argument("--overwrite", action="store_true")
@@ -131,8 +158,9 @@ def main() -> None:
         report.append(f"Removed duplicates (by {args.dedupe_by}): {count}")
 
     if args.fix_encoding:
-        gdf, count = fix_encoding(gdf, args.source_encoding)
+        gdf, count, notes = fix_encoding(gdf, args.source_encoding)
         report.append(f"Fixed encoding values: {count}")
+        report.extend(notes)
 
     if args.drop_null_fields:
         gdf, cols = drop_null_fields(gdf)

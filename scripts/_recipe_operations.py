@@ -3,6 +3,7 @@ import json
 from pathlib import Path
 import sys
 
+from _budget import check_vector
 from _delivery import digest
 
 # Shared with daily.py: additions cannot silently disappear from recipes.
@@ -96,7 +97,7 @@ def validate(path, validation, artifact):
     import geopandas as gpd
     import numpy as np
     from pyproj import CRS
-    from raster import inspect
+    from _grid import inspect
     record = json.loads((path/'record.json').read_text(encoding='utf-8'))
     # Some original raster records have no status. Absence is not acceptance;
     # an explicit null/unknown/hold is not a successful legacy record.
@@ -130,6 +131,7 @@ def validate(path, validation, artifact):
                         raise ValueError('Required CRS differs')
         elif file.suffix == '.gpkg':
             for layer in gpd.list_layers(file).name:
+                check_vector(file, layer)
                 frame = gpd.read_file(file, layer=layer)
                 if file == target:
                     if not validation.get('min_rows', 0) <= len(frame) <= validation.get('max_rows', float('inf')) or not set(validation.get('columns', [])) <= set(frame.columns):

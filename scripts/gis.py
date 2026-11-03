@@ -11,6 +11,7 @@ from pathlib import Path
 import subprocess
 import sys
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))  # python3 -I leaves the script directory off the path
 import _budget
 
 SCRIPTS = Path(__file__).resolve().parent
@@ -71,8 +72,8 @@ def main(argv: list[str] | None = None) -> int:
         'gis.py list [--json] [--search TEXT]; gis.py capabilities --json; gis.py TOOL --help; '
         'gis.py [--trace DIRECTORY] [--memory-budget SIZE] TOOL ... . Existing script CLIs remain supported.'))
     parser.add_argument('--trace', type=Path, help='Opt-in local execution records; no stdout/stderr or environment capture')
-    parser.add_argument('--memory-budget', metavar='SIZE', help=f'Opt-in read budget such as 2GiB, passed to the tool as {_budget.ENV}; '
-                        f'estimated overruns exit {_budget.EXIT_CODE} before reading')
+    parser.add_argument('--memory-budget', metavar='SIZE', help=f'Read budget such as 2GiB, or off, passed to the tool as {_budget.ENV}; defaults to '
+                        f'{_budget.DEFAULT_SHARE:.0%} of available memory; estimated overruns exit {_budget.EXIT_CODE} before reading')
     parser.add_argument('tool', nargs='?', help='list, capabilities, or a public script name without .py')
     parser.add_argument('arguments', nargs=argparse.REMAINDER)
     args = parser.parse_args(argv)
@@ -80,7 +81,7 @@ def main(argv: list[str] | None = None) -> int:
     env = {'PYTHONIOENCODING': 'utf-8', **os.environ}
     if args.memory_budget is not None:
         try:
-            env[_budget.ENV] = str(_budget.parse_size(args.memory_budget))
+            env[_budget.ENV] = 'off' if args.memory_budget.strip().lower() in _budget.OFF else str(_budget.parse_size(args.memory_budget))
         except ValueError as error:
             parser.error(str(error))
     if args.tool is None:

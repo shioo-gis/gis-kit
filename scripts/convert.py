@@ -16,7 +16,7 @@ import geopandas as gpd
 import pyogrio
 from pyproj import CRS
 
-from _budget import check_vector
+from _core import check_geometry, read_vector, reproject
 from _safe_io import AtomicVectorOutput, stream_vector
 
 # Inputs picked up by directory batch mode; single-file mode reads anything GDAL can open.
@@ -47,17 +47,12 @@ def check_fields(path: Path, layer: str | None, fields: list[str] | None) -> Non
 
 
 def read_file(path: Path, layer: str | None, encoding: str | None, fields: list[str] | None = None) -> gpd.GeoDataFrame:
-    kwargs: dict = {"engine": "pyogrio"}
-    if layer:
-        kwargs["layer"] = layer
+    kwargs: dict = {}
     if fields:
         kwargs["columns"] = fields
     if encoding:
         kwargs["encoding"] = encoding
-    if path.suffix.lower() == ".gdb":
-        kwargs["engine"] = "pyogrio"
-    check_vector(path, layer)
-    return gpd.read_file(path, **kwargs)
+    return read_vector(path, layer, **kwargs)
 
 
 def write_file(gdf, path, layer, *, overwrite=False, protected_paths=()):
@@ -82,7 +77,7 @@ def stream_convert(input_path, output_path, layer, out_layer, crs, encoding, ove
             out.write(frame, append=not first, **options)
 
         count = stream_vector(input_path, write, driver=out.driver, layer=layer,
-                              transform=(lambda frame: frame.to_crs(crs)) if crs else None,
+                              transform=(lambda frame: reproject(frame, crs, purpose='publish')) if crs else None,
                               **({"encoding": encoding} if encoding else {}), **({"columns": fields} if fields else {}))
         if count is None:
             return False
@@ -95,6 +90,7 @@ def stream_convert(input_path, output_path, layer, out_layer, crs, encoding, ove
 
 def convert_single(input_path: Path, output_path: Path, layer: str | None, output_layer: str | None, crs: str | None, encoding: str | None, overwrite=False, fields: list[str] | None = None) -> None:
     require_layer(input_path, layer)
+    check_geometry(input_path, layer)
     check_fields(input_path, layer, fields)
     if stream_convert(input_path, output_path, layer, output_layer or layer, crs, encoding, overwrite, fields):
         return
@@ -103,7 +99,7 @@ def convert_single(input_path: Path, output_path: Path, layer: str | None, outpu
 
     if crs:
         src_crs = gdf.crs
-        gdf = gdf.to_crs(crs)
+        gdf = reproject(gdf, crs, purpose='publish')
         print(f"Reprojected: {src_crs} -> {gdf.crs}")
 
     out_layer = output_layer or layer

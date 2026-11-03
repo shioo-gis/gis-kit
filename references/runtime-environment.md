@@ -16,6 +16,10 @@
 - Windows PowerShell 接管外部命令的输出（`|`、`>`、赋值给变量）时按 `[Console]::OutputEncoding` 解码，中文代码页上会显示成乱码。可以先设 `[Console]::OutputEncoding = [Text.UTF8Encoding]::new()`，或用工具的 `--output` 写文件。
 - 确实需要其它编码时设 `PYTHONIOENCODING`，例如 `gbk`；写不出的字符同样转义，不会崩溃。
 
+## `python3 -I`
+
+`python3 -I scripts/gis.py ...` 可以运行：`gis.py` 自己把脚本目录放回 `sys.path`。它启动工具时不传 `-I`，因为工具之间要互相导入，所以隔离只覆盖 `gis.py` 这一层，工具仍按普通方式运行。直接 `python3 -I scripts/daily.py` 这类调用不支持，会报 `ModuleNotFoundError`。
+
 ## 按能力加载依赖
 
 | 能力 | 依赖与边界 |

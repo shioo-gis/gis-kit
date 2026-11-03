@@ -35,7 +35,7 @@ def identifier(value):
 
 
 def validate_step(path, validation):
-    from daily import read
+    from _core import read
     record = json.loads((path / 'record.json').read_text(encoding='utf-8'))
     artifact = path / record['artifact']['name']
     if artifact.parent != path or artifact.name not in ('result.gpkg', 'result.csv'):
@@ -97,7 +97,7 @@ def execute(recipe, output, cache, bindings=None):
         if not set(variant) <= {'id','params'} or not set(variant.get('params',{})) <= set(ids):
             raise ValueError('Unknown variant step or field')
     implementation = {p.name: digest(p) for p in sorted(SCRIPTS.glob('*.py'))}
-    from daily import environment as runtime_environment
+    from _core import environment as runtime_environment
     environment = {'python':sys.version,'runtime':runtime_environment(),
                    'packages':sorted((d.metadata['Name'],d.version) for d in importlib.metadata.distributions() if d.metadata['Name'])}
     cache = Path(cache).resolve(); output=Path(output).absolute()

@@ -15,6 +15,7 @@ import shapely
 from shapely.geometry import Point, LineString, Polygon, box
 from shapely.ops import split, substring, nearest_points, voronoi_diagram
 
+from _core import reproject
 from _metric import analysis_frame, analysis_frames, validate_measurement_geometries
 
 
@@ -135,7 +136,7 @@ def normalize(frame, p):
 def update(left, right, p):
     key = p['id']; stable(left, key); stable(right, key)
     if left.crs is None or right.crs is None: raise ValueError('Missing CRS')
-    right = right.to_crs(left.crs)
+    right = reproject(right, left.crs, purpose='align')
     fields = p.get('fields', [])
     if key in fields or left.geometry.name in fields: raise ValueError('ID/geometry cannot be attribute update fields')
     for f in fields:
@@ -299,7 +300,7 @@ def rules(frame, other, p, fingerprints=None):
         else:
             if other is None or frame.crs is None or other.crs is None: raise ValueError('Spatial rule requires known CRS')
             validate_measurement_geometries(frame); validate_measurement_geometries(other)
-            union = other.to_crs(frame.crs).geometry.union_all()
+            union = reproject(other, frame.crs, purpose='align').geometry.union_all()
             mask = ~frame.geometry.covered_by(union) if kind == 'within' else frame.geometry.intersects(union)
         for i in frame.index[mask]:
             geom = frame.loc[i].geometry

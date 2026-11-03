@@ -11,7 +11,7 @@ from pyproj import CRS
 from shapely.geometry import Point
 from _delivery import bundle, digest, write_json
 from _safe_io import iter_vector_chunks
-from daily import fingerprint
+from _delivery import fingerprint
 
 spec=importlib.util.spec_from_file_location('georef',Path(__file__).with_name('raster-georef.py'))
 from _budget import check_vector
@@ -89,7 +89,7 @@ def package(specification,output):
             from shapely import transform as transform_geometry
             matrix=np.array(r['matrix']);area=G.region(r)
             for layer,_ in pyogrio.list_layers(folder/'vectors.gpkg'):
-                source=gpd.read_file(p['pixel_gpkg'],layer=layer)
+                check_vector(p['pixel_gpkg'],layer);source=gpd.read_file(p['pixel_gpkg'],layer=layer)
                 selected=source.loc[source.geometry.map(lambda g:g is not None and not g.is_empty and area.covers(g))]
                 expected=transform_geometry(selected.geometry.array,lambda coords:coords@matrix[:,:2].T+matrix[:,2])
                 attributes=selected.drop(columns=selected.geometry.name).reset_index(drop=True);rows=0

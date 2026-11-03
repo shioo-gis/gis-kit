@@ -18,6 +18,30 @@ from _safe_io import write_vector_atomic
 from _budget import check_vector
 
 
+BOOL_WORDS = {"true": True, "t": True, "yes": True, "y": True, "1": True,
+              "false": False, "f": False, "no": False, "n": False, "0": False}
+
+
+def bool_value(value):
+    if isinstance(value, str):
+        return BOOL_WORDS.get(value.strip().lower())
+    try:
+        return bool(value) if value in (0, 1) else None
+    except (TypeError, ValueError):
+        return None
+
+
+def cast_bool(series):
+    """Booleans from what each value says; nulls stay null, and any other value fails instead of becoming True."""
+    present = series.dropna()
+    known = present.map(bool_value)
+    unknown = present[known.isna()].astype(str).unique()
+    if len(unknown):
+        raise ValueError(f"{len(unknown)} distinct values are not booleans, such as {', '.join(map(repr, unknown[:5]))}; "
+                         f"accepted: true/false, t/f, yes/no, y/n, 1/0")
+    return known.reindex(series.index).astype("boolean")
+
+
 def read_input(args) -> gpd.GeoDataFrame:
     kwargs = {"engine": "pyogrio"}
     if hasattr(args, "layer") and args.layer:
@@ -106,13 +130,13 @@ def cmd_cast(args):
         sys.exit(1)
     if args.field == gdf.geometry.name:
         raise ValueError("Cannot cast active geometry")
-    type_map = {"int": "Int64", "float": "float64", "str": "str", "bool": "bool"}
+    type_map = {"int": "Int64", "float": "float64", "str": "str", "bool": "boolean"}
     target = type_map.get(args.type)
     if target is None:
         print(f"Unknown type '{args.type}'. Use: int, float, str, bool", file=sys.stderr)
         sys.exit(1)
     try:
-        gdf[args.field] = gdf[args.field].astype(target)
+        gdf[args.field] = cast_bool(gdf[args.field]) if args.type == "bool" else gdf[args.field].astype(target)
     except (ValueError, TypeError) as e:
         print(f"Cast failed: {e}", file=sys.stderr)
         sys.exit(1)

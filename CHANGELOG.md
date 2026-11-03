@@ -2,6 +2,29 @@
 
 ## 未发布
 
+- 工具不再报假事实、不再悄悄改坏数据：
+  - `split.py`：字段为空的行写进 `<前缀>_NULL.<格式>`，不再丢掉。几个值会写进同一个文件时（如 `a/b` 和 `a_b`，或只差大小写，这在 macOS 默认卷上是同一个文件）在写出前拒绝并列出这些值，此前后写的覆盖先写的，还多报文件数。结尾报告读回的要素数（`4 of 4 features`）。GPKG 和 GeoJSON 走原子写出。**行为变化：** 已有输出默认拒绝，新增 `--overwrite`；输出不会替换输入。
+  - `gpkg.py import`、`copy`、`sql --output`：**行为变化：** 目标图层已存在时拒绝，文件不变；此前静默追加，跑两次 4 行变 8 行。没有新增追加开关，因为追加不校验 CRS 和字段：实测 3857 的坐标追加进 4326 图层不报错，多出的字段被丢掉。要合并用 `merge.py`。
+  - `gpkg.py drop`：删除图层时一并删除空间索引和 `gpkg_data_columns`、`gpkg_metadata_reference`、`gpkgext_relations`、`layer_styles` 里的记录，全部在一个事务里；此前留下 `rtree_<层>_<几何列>*` 四张孤表。
+  - `field.py cast --type bool`：按值的含义转换，接受 `true/false`、`t/f`、`yes/no`、`y/n`、`1/0`（不分大小写）和数值 0、1，空值保持为空。此前 `'false'` 变 True、空值变 False。**行为变化：** 其他值（如 `maybe`、`2`）报错并列出，不写输出。
+  - `fix.py --fix-encoding`：按字段判断。字段里所有非 ASCII 值都能解码，且至少一个值带有乱码特征（Latin-1 符号或控制字符与另一个高位字符相邻，如 `µÀÂ·`）时才修复；否则原样保留，并在报告里写明可能的结果和不改的原因。此前 `ÄÖ` 变 `闹`、`Müller` 变 `M黮ler`，还报告为修复。**行为变化：** 全部值都没有乱码特征的字段（如只有 `ÊÐ`）不再修复，由报告说明。
+  - `vector-georef.py apply`：保留 Z 值，只变换 X、Y；Z 不随比例缩放。清单和标准输出新增 `z_features`。此前 Z 被静默丢掉。M 值仍在读取时丢弃，`pyogrio` 在 stderr 警告，`record.json` 写明。
+- 栅格的发现有了去处：`raster`、`terrain`、`terrain-detail` 的 `record.json` 新增 `warnings` 和 `facts`，由 `_grid.grid_facts` 统一产生（NoData 未设、地面尺度、超出世界范围、极帽缺失、类型变化），警告同时写到 stderr。`raster` 记录走共用骨架 `_core.write_record`，现有字段不变。线性重采样遇到 NoData 未设只写警告，不拒绝。`describe` 不再把有内部掩膜的栅格报成 `nodata_unset`。
+- `raster.py warp`、`align` 由 GDAL 按块读源，峰值取决于目标格网，不再随源增长；有内部掩膜、alpha、声明之外的无穷大或 NaN、64 位整数时才退回整读。**行为变化：** 结果保留源类型（float32 仍是 float32，声明了 NoData 的整数在最近邻下不变，其余用能容纳结果的最小浮点），不再一律 float64；`max_pixels` 按目标格网计。
+- 目标是 EPSG:3857 时，warp 把格网裁进世界范围，不再发布南北越界到 ±2.4 亿米的结果；记录写 `target_grid_trimmed_to_world`。`display` 越界的报错写实际范围和允许范围。
+- `max_pixels`、`max_elements` 的报错共用一处，写明像元数、限额、约需内存和办法。
+- **内存预算默认开启**，上限是可用内存的 80%；`--memory-budget off` 关闭。估算系数按实测校正（`display` 原来低估约 4 倍），`package`、`admin-chain`、`display-vector`、`nonlinear-georef`、`oriented-crop`、`raster-local-trace`、`raster-annotate`、`raster-georef` 预览和 `cad label` 的文字层也接上了预算。错误记录新增 `budget_source`。
+- 无几何的输入（CSV、GeoPackage 属性表、`.dbf`）进 `inspect-data summary/bbox`、`convert`、`clip`、`buffer`、`dissolve`、`export-table`、`topo` 时给可读错误，不再抛 `AttributeError`；错误指出同文件里带几何的图层和 `daily normalize`。`inspect-data schema/head/values` 不需要几何，继续读表格。这些工具的读取走 `_core.read_vector`。
+- `describe` 对 CSV 推断字段类型（看文件开头，`field_types_sampled_bytes` 写明字节数）。
+- `describe` 不再只按后缀定类型：`.jpg`、`.png` 加世界文件按栅格描述，新增 `transform`、`world_file`，CRS 未知时写明。**行为变化：** 没有仿射的栅格（含 `.tif`）`extent`、`resolution` 改为 `null`，此前给的是像元坐标；没有 GCP 和 RPC 时另有警告 `georeference_missing`。
+- `inspect-data schema` 的 `nullable` 看全部行，不再只看前 5 行，只读属性、分块读，所以大图层要多花时间；`dtype` 改为字段声明的类型，有空值的整数字段不再显示成 `float64`。
+- `clip --bbox -180,-90,180,-60` 可以直接写，不必用 `--bbox=`。
+- `python3 -I gis.py` 可以运行；直接 `python3 -I` 跑其它脚本不支持，见 `references/runtime-environment.md`。
+- `gis.py list --search csv` 能搜到 `daily`（`normalize` 把坐标列变成点层）。
+- `terrain.py`、`terrain-backend.py`（`terrain-cost.py` 经它）不再按 CRS 声明的轴名判断：`rasterio` 的 x、y 是数据轴，与声明的轴序无关，所以 CGCS2000 高斯-克吕格（如 EPSG:4547）和极地投影（如 EPSG:3031、3413）不再被拒绝。条件改为投影 CRS、两轴同一已知线性单位、x 在 y 的顺时针方向；Krovak 这类左手系仍拒绝，报错写明原因。`terrain` 记录新增 `ground_scale`，写明范围内的尺度因子。
+- 量算默认不再把任何投影 CRS 都当分析 CRS：源 CRS 的尺度在图层范围内偏离 1 超过 5%（Mercator 超过 0.5%）时，改用与经纬度数据相同的本地 UTM。EPSG:3857 上的 `buffer`、`field add-*`、`join`、`stats`、`indicators`、`topo` 阈值和 `daily` 量算都按地面距离算对；`buffer` 等输出仍回到输入 CRS，`daily geometry` 这类留在分析 CRS 的操作会输出 UTM。范围放不进一个 UTM 带时报错并写明尺度和 `--analysis-crs`；显式给 `--analysis-crs` 仍照用。
+- 重投影有了共同出口 `_core.reproject`，`convert`、`merge`、`clip`、`buffer`、`topo`、`plot`、`suitability`、`cad`、`raster`、`daily` 和量算都走它。**行为变化：** 含极点或跨目标 CRS 接缝（地理 CRS 和 Mercator 是 180 度经线，圆锥和其他世界投影是中央经线的对面）的线和面现在默认报错，写明行号和办法，不再静默翻转或得到 0 行；gis-kit 不做切分。经纬度数据里长于 1 度的边，在转到会弯曲它的投影前先加密，稀疏顶点的极帽面不再坍缩（因此多出顶点）。转换后没有可用坐标（无穷大或 1e10 以上）也报错。
+- 运行记录的 `implementation_sha256`（以及 `terrain-*`、`spatial-inference` 的 `implementation`）不再靠每个脚本手写文件名清单，改为从脚本出发沿导入和 `with_name()` 自动收集，新增共享模块不会从记录里漏掉。清单内容因此更完整；`terrain*` 不再列 `raster.py`，因为共用函数已移到 `_grid.py`、`_core.py`，CLI 不变。新增 `tests/test_core_ratchet.py`：直接调用 `.to_crs(`、`gpd.read_file(`、`.to_file(` 的次数只减不增。
 - `package.py pack --format arcmap`（#45 写入方向，gis-plugin#16 第三个平台）：把 `map-style` v1 打成 ArcMap 图层包 `.lpk`（7z；`v107/<名>.gdb`、`v107/`、`v105/`、`v10/` 各一份 `.lyr`、`esriinfo/`），`--lyr` 另把图层文件放在解开的数据旁边。闭源的 `.lyr` 不从零序列化：新模块 `_arcmap_style.py` 自带 CFB v3 读写（不依赖 olefile），裁切、改写、拼接 `templates/arcmap/` 里 ArcObjects 用虚构数据写的骨架（生成方法和脚本在 `tests/arcmap_skeletons/`），并重排对象编号。组装结果与 ArcObjects 写的文件除 Lab 末位外逐字节相同（单元测试比对摘要）。single、categorized、graduated 写成简单、唯一值、分级渲染器，任意类数；rule 和带缺口的 graduated 写成组图层，每条规则一个单一符号图层加定义查询；线宽、标记大小与形状、空填充、透明度、筛选、标注字段与表达式、字体、晕边，面板和分组写成组图层。颜色按 ArcObjects 的 gamma 1.8 矩阵写 CIELAB。栅格、阴影线、比例圆、箭头形标记等没有骨架的列入 `unsupported`。在 ArcMap 10.8、ArcGIS Pro 3.4.3 上实测（`tests/arcmap_open_check.py`、`tests/arcmap_open_check_pro.py`）：不断链，渲染器类型、类、分界值读回一致，渲染像素与请求的颜色逐字节相同；据此把数据放进 `v107/`（Pro 解 `.lpk` 只取最新版本文件夹，`commondata/` 不会解出）。清单 `arcmap-package` v1，`gis.py capabilities` 已声明。说明见 `references/arcmap-package.md`。
 - 修复 Windows 上的文件读写：工具读写文本（`--params`、`package.json`、`<id>.map-style.json` 等）都明确用 UTF-8，不再用系统代码页。此前 `package.py read` 遇到中文必然失败。`batch.py`、`recipe.py` 读子工具输出也固定 UTF-8。
 - `package.py` 的 7-Zip 列表在 Windows 上也用 `/` 分隔路径。

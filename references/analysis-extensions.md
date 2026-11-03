@@ -16,7 +16,7 @@ PYTHONDONTWRITEBYTECODE=1 python3 gis-kit/scripts/raster.py zonal input.tif --pa
 | `copy` | 单波段 GeoTIFF 或 `format: "COG"`；实际检查 COG 布局 |
 | `display` | 显示派生，只接受 north-up EPSG:3857。`band`、`mode: values/colors`（默认 colors）、`breaks`、`unit`、`status`；`colors` 模式给 `colors`（每个区间一个 `#RRGGBB`）；`encoding: class-index/value-rgb24`（后者配合 `kind: continuous`）。详见 [composer-display.md](composer-display.md) |
 | `clip` | `vector`、可选 `layer`、`all_touched`；以面掩膜裁剪，保留源网格范围，不自动缩小外框 |
-| `warp` | `crs`、可选目标单位 `resolution`；`kind: categorical/continuous`；分类默认 nearest，可显式 mode；连续必须指定 `resampling: nearest/bilinear/cubic/average/mode`；可选 `bounds`（经纬度 `[西, 南, 东, 北]`）只读取覆盖该范围的源窗口（整像元外扩一格），`max_pixels` 按窗口计，用于从全球 DEM 取样区 |
+| `warp` | `crs`、可选目标单位 `resolution`；`kind: categorical/continuous`；分类默认 nearest，可显式 mode；连续必须指定 `resampling: nearest/bilinear/cubic/average/mode`；可选 `bounds`（经纬度 `[西, 南, 东, 北]`）把目标限制在覆盖该范围的源窗口（整像元外扩一格），用于从全球 DEM 取样区。`max_pixels` 按目标格网计；目标是 EPSG:3857 时格网裁进世界范围，记录里写 `target_grid_trimmed_to_world`。结果保留源类型：浮点仍是原类型、缺值用 NaN；整数只在最近邻或众数且声明了 NoData 时不变，否则用能容纳结果的最小浮点（≤16 位用 float32，32 位用 float64） |
 | `align` | `reference` 栅格；严格复用其 CRS、原点、分辨率、宽高，重采样参数同 warp |
 | `mosaic` | 显式 `overlap: first/last/min/max`；来源必须同 CRS、分辨率且原点按整像元对齐，否则先 align |
 | `calculate` | 有限值 `scale`、`offset`；或 `threshold`、`true`、`false` 表示原像元 ≥ 阈值的条件计算；不执行任意表达式 |
@@ -27,7 +27,9 @@ PYTHONDONTWRITEBYTECODE=1 python3 gis-kit/scripts/raster.py zonal input.tif --pa
 
 共用 `band`（从 1 起，默认 1）、`block_size`（默认 256）、`max_pixels`（默认 50000000）。要求已知 CRS；`inspect/warp` 接受旋转网格，其余操作要求北向上，旋转源先用 warp 正规化。外部 `.msk/.aux.xml/.ovr` sidecar 拒绝，避免单文件指纹漏掉数据语义；内部掩膜受支持。本页基础写出为单波段 Float64，NaN NoData；整数超出 ±2^53 拒绝，避免类别精度丢失。原始数据类型、波段单位及 scale/offset 记录在报告中；非默认 scale/offset 拒绝分析，须先明确校准。多波段、类型转换与显式校准使用新增 `bands` 操作。
 
-窗口计算/掩膜/频数/统计可调块大小。warp、align、mosaic 使用有像元数上限的内存数组，未宣称流式、大数据或性能改善。输出逐块回读比对解码数值哈希；哈希带块大小，只能同口径比较。COG 使用 nearest overview；原分辨率像元必须保持一致。
+`record.json` 有 `warnings`（需要注意的发现，同时写到 stderr）和 `facts`（只陈述数据的性质），每项是 `code`、`severity`、`message`、`detail`：`nodata_unset`（没有 NoData 也没有掩膜；重采样会混合或分析会计入标记值时是警告，这时先用 `transform` 的 `method: invalidate` 标出无效值）、`ground_scale_range`（范围内的地面尺度，偏离 1 超过 5% 时是警告）、`grid_exceeds_world`、`target_grid_trimmed`、`polar_cap_outside_extent`（经纬度目标没有覆盖源所含的极点）、`dtype_promoted`、`edges_densified`。`terrain`、`terrain-detail` 的记录也有这两个字段。
+
+窗口计算/掩膜/频数/统计可调块大小。warp、align 由 GDAL 分块读源，峰值取决于目标格网，不随源大小增长（1.44 亿像元的 int16 源降采样实测净约 160 MB）；源有内部掩膜、alpha 或声明之外的无穷大、NaN，或是 64 位整数时，退回整读，此时 `max_pixels` 也按源计。mosaic 使用有像元数上限的内存数组。输出逐块回读比对解码数值哈希；哈希带块大小，只能同口径比较。COG 使用 nearest overview；原分辨率像元必须保持一致。
 
 分区输出 `valid_pixels`、`weight`、`sum`、`mean`、极值及可选直方图。fractional 使用 Shapely 对像元矩形求交，权重为投影平面覆盖比例，要求投影 CRS；计算每个有效像元的 `value × weight` 后求和，均值除以总有效权重。这里不输出平方米面积，不把经纬度像元数当面积。不同分区可重叠，各自独立统计；零有效像元的 sum/mean/min/max 为 null。浮点跨块验收容差为绝对 1e-8（和）/1e-10（权重），适用于固定测试样例，不是任意数据规模的误差承诺。
 

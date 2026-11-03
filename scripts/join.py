@@ -365,7 +365,7 @@ def _aggregate(
     if args.on:
         report["predicate"] = "attribute"
     else:
-        report.update(analysis_crs=str(analysis_crs), analysis_method=analysis_method(left, args.analysis_crs))
+        report.update(analysis_crs=str(analysis_crs), analysis_method=analysis_method(left, args.analysis_crs, used=analysis_crs))
     return out, report
 
 

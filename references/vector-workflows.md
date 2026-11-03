@@ -4,6 +4,8 @@
 
 - `gpkg.py sql --query` 接收完整 SQL，例如 `SELECT * FROM parcels WHERE area > 1000`；GDB 优先 OGR SQL，不将 query 当作 where 条件。
 - File GDB 使用 GDAL OpenFileGDB 驱动；写入需 GDAL ≥ 3.6，受限功能先输出 GPKG，不冒充写入成功。
+- `gpkg.py import`、`copy`、`sql --output` 不向已有图层追加，也不替换它：目标图层已存在时（名称不分大小写）拒绝，文件不变。换一个图层名（`--target-layer`、`--output-layer`），先 `gpkg.py drop`，或用 `merge.py` 合并。
+- `gpkg.py drop` 在一个事务里删除要素表、它的空间索引和注册信息（`gpkg_*`、`layer_styles`），同名图层可以再写入。
 - `gpkg.py` 只读 File GDB：`import`、`copy`、`export`、`sql --output` 写到 `.gdb` 以及对 `.gdb` 的 `drop`、`rename` 都会拒绝，报错写明运行时 GDAL 的 File GDB 能力和改用 `.gpkg` 的做法。gis-kit 写出的 GDB 经 ArcGIS 验收之前不放开。
 
 ## File GDB 兼容性实测
@@ -25,7 +27,7 @@
 
 ## 缓冲距离
 
-`buffer.py` 的 `--distance`、`--field` 与 `--distances` 均以米为单位；投影 CRS 按水平轴单位换算，输出保留输入 CRS。经纬度数据会使用局部 UTM 近似后再投回原 CRS；跨 UTM 带、超出可靠局部范围、缺失或无法识别的 CRS 会失败，不写缓冲结果。
+`buffer.py` 的 `--distance`、`--field` 与 `--distances` 均以米为单位；投影 CRS 按水平轴单位换算，输出保留输入 CRS。经纬度数据，以及尺度在范围内偏离 1 太多的投影（EPSG:3857 等），会使用局部 UTM 近似后再投回原 CRS；跨 UTM 带、超出可靠局部范围、缺失或无法识别的 CRS 会失败，不写缓冲结果。
 
 同心圈（服务范围、步行圈）用 `--distances 400,800,1200`：每个输入要素按距离各出一个完整圆面，带 `buffer_m`（米）和 `ring`（1 为最内圈），按输入顺序、由内到外排列；`--dissolve` 时按圈合并，多个中心的重叠范围逐圈并成一片。输入已有 `buffer_m` 或 `ring` 字段时拒绝。圈内要素的距离用 `join.py --predicate nearest --max-distance <最大圈> --distance-field distance_m` 标注，交给 Composer 的 `rings` 编码块按距离过滤高亮。
 

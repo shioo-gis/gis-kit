@@ -15,6 +15,9 @@ from shapely.geometry import box, mapping
 from shapely.ops import unary_union
 
 from _budget import check_raster, check_vector
+from _core import reproject
+from _delivery import fingerprint
+from _grid import band_data, guard_pixels, inspect, positive_integer, windows
 
 OPERATIONS = ('transform', 'combine', 'update', 'rasterize', 'bands', 'allocate', 'redistribute')
 
@@ -47,7 +50,7 @@ def polygons(path, ds, layer=None, polygon_only=True):
     frame = gpd.read_file(path, layer=layer)
     if frame.empty or frame.crs is None or frame.geometry.isna().any() or frame.geometry.is_empty.any() or not frame.geometry.is_valid.all() or (polygon_only and not frame.geom_type.isin(['Polygon', 'MultiPolygon']).all()):
         raise ValueError('Nonempty valid polygons with CRS required')
-    frame = frame.to_crs(ds.crs)
+    frame = reproject(frame, ds.crs, purpose='align')
     if not frame.geometry.is_valid.all():
         raise ValueError('Invalid transformed polygons')
     return frame
@@ -124,7 +127,6 @@ def transform(data, p):
     if method == 'auto_class':
         if not len(v):
             raise ValueError('Automatic classes require valid values')
-        from raster import positive_integer
         count = positive_integer(p['classes'])
         if count > 10000:
             raise ValueError('Too many classes')
@@ -178,7 +180,6 @@ def combine(arrays, p):
     policy = choice(p.get('nodata', 'propagate'), ('propagate', 'ignore'))
     count = valid.sum(axis=0)
     mask = (count == len(a)) if policy == 'propagate' else (count >= p.get('min_valid', 1))
-    from raster import positive_integer
     minimum = positive_integer(p.get('min_valid', 1))
     if minimum > len(a):
         raise ValueError('min_valid exceeds operand count')
@@ -267,8 +268,6 @@ def band_fsum(ds, band, pixels=1 << 20):
 
 def write(stage, filename, data, ds, p, descriptions=None):
     """Typed output, explicit rounding and full decoded readback before publication."""
-    from raster import inspect, positive_integer, windows
-    from daily import fingerprint
     encoded, valid, nodata, error = encode(data, p)
     dtype = encoded.dtype
     data = encoded
@@ -325,8 +324,7 @@ def allocate(ds, arrays, p, stage, budget):
         raise ValueError('Explicit total quantity and redistribution assumption required')
     if p.get('dtype', 'float64') != 'float64':
         raise ValueError('Allocation requires float64; integer uses largest_remainder flag')
-    if (len(zones)+1)*ds.width*ds.height > p.get('max_elements', 10000000):
-        raise ValueError('Allocation contribution bands exceed max_elements')
+    guard_pixels((len(zones)+1)*ds.width*ds.height, p.get('max_elements', 10000000), f'Allocation contribution bands ({len(zones)+1} x {ds.width} x {ds.height})', param='max_elements', way_out='Use fewer zones or a coarser grid')
     factor = area_factor(ds)
     cell_area = abs(ds.transform.determinant)*factor
     exclusion = unary_union(polygons(p['exclude'], ds, p.get('exclude_layer')).geometry) if 'exclude' in p else None
@@ -475,7 +473,6 @@ def is_local(operation, p):
 
 
 def read_operand(datasets, item, p, operation, window=None):
-    from raster import band_data, positive_integer
     index = item['input']
     if isinstance(index, bool) or not isinstance(index, int) or not 0 <= index < len(datasets):
         raise ValueError('Invalid input index')
@@ -540,14 +537,11 @@ def process_windows(operation, datasets, selectors, p, stage):
     No per-window metadata is retained. Output is still published by execute().
     """
     from contextlib import ExitStack
-    from raster import inspect, positive_integer, windows
     from rasterio.windows import Window, transform as window_transform
-    from daily import fingerprint
     ds = datasets[0]
     size = positive_integer(p.get('block_size', 256))
     capacity = min(size, ds.width)*min(size, ds.height)
-    if len(selectors)*capacity > positive_integer(p.get('max_elements', 10000000)):
-        raise ValueError('Window operands exceed max_elements memory guard')
+    guard_pixels(len(selectors)*capacity, positive_integer(p.get('max_elements', 10000000)), f'Window operands ({len(selectors)} x {capacity})', param='max_elements', way_out='Use a smaller block_size or fewer operands')
     cache = positive_integer(p.get('gdal_cache_mb', 64))
     fmt = choice(p.get('format', 'GTiff'), ('GTiff', 'COG'))
     geometries = None
@@ -639,7 +633,6 @@ def process_windows(operation, datasets, selectors, p, stage):
 
 
 def process(operation, datasets, p, stage, stack):
-    from raster import band_data, inspect, positive_integer
     ds = datasets[0]
     budget = [positive_integer(p.get('max_intersections', 2000000))]
     selectors = p.get('operands', [{'input': i, 'band': p.get('band', 1)} for i in range(len(datasets))])
@@ -647,10 +640,9 @@ def process(operation, datasets, p, stage, stack):
         raise ValueError('At least one operand required')
     if is_local(operation, p):
         return process_windows(operation, datasets, selectors, p, stage)
-    if len(selectors)*ds.width*ds.height > positive_integer(p.get('max_elements', 10000000)):
-        raise ValueError('Operand arrays exceed max_elements memory guard')
-    # Operands plus output, occupancy/validity masks and the encoded copy written out.
-    check_raster(ds, arrays=len(selectors)+4)
+    guard_pixels(len(selectors)*ds.width*ds.height, positive_integer(p.get('max_elements', 10000000)), f'Operand arrays ({len(selectors)} x {ds.width} x {ds.height})', param='max_elements', way_out='Warp to a coarser resolution or clip first')
+    # Operands plus output, masks, temporaries and the encoded copy; zscore measured 66-69 bytes per pixel.
+    check_raster(ds, arrays=len(selectors)+8)
     arrays = [read_operand(datasets, item, p, operation) for item in selectors]
     details = {'operands': selectors, 'sources': [inspect(d) for d in datasets],
                'execution': {'mode': 'bounded_full_array'},
@@ -707,8 +699,10 @@ def process(operation, datasets, p, stage, stack):
             raise ValueError('Redistribute requires one operand')
         target = stack.enter_context(rio.open(p['reference']))
         inspect(target)
-        if target.transform.b or target.transform.d or target.transform.a <= 0 or target.transform.e >= 0 or target.width*target.height > min(positive_integer(p.get('max_pixels', 50000000)), positive_integer(p.get('max_elements', 10000000))):
-            raise ValueError('Invalid or oversized target grid')
+        if target.transform.b or target.transform.d or target.transform.a <= 0 or target.transform.e >= 0:
+            raise ValueError('Invalid target grid')
+        guard_pixels(target.width*target.height, positive_integer(p.get('max_pixels', 50000000)), f'Target grid ({target.width} x {target.height})', way_out='Choose a coarser reference grid')
+        guard_pixels(target.width*target.height, positive_integer(p.get('max_elements', 10000000)), f'Target grid ({target.width} x {target.height})', param='max_elements', way_out='Choose a coarser reference grid')
         check_raster(target, arrays=4)  # output, touched mask, covered area and the encoded copy
         return dict(details, **redistribute(ds, target, arrays[0], p, stage, budget))
     else:

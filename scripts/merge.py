@@ -16,6 +16,7 @@ import geopandas as gpd
 import pandas as pd
 import pyogrio
 
+from _core import reproject
 from _safe_io import AtomicVectorOutput
 
 
@@ -121,7 +122,7 @@ def main() -> None:
                         max_features=args.chunk_size,
                     )
                     if gdf.crs and target_crs:
-                        gdf = gdf.to_crs(target_crs)
+                        gdf = reproject(gdf, target_crs, purpose='publish')
                     if args.add_source:
                         gdf["source_file"] = Path(path).name
                     gdf = align_chunk(gdf, fields, dtypes)

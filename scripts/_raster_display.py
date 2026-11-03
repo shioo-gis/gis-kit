@@ -12,6 +12,14 @@ import numpy as np
 from PIL import Image
 from rasterio.warp import transform
 
+from _grid import WEB_MERCATOR_BOUND
+
+
+def require_world(ds):
+    if any(abs(v) > WEB_MERCATOR_BOUND + 1e-7 for v in ds.bounds):
+        raise ValueError(f'Display outside Web Mercator world bounds: the grid spans {[round(v, 1) for v in ds.bounds]}, '
+                         f'and each coordinate must stay within +/-{WEB_MERCATOR_BOUND:.1f}. Warp to a target that stays inside first')
+
 
 def display(ds, values, parameters, stage):
     mode = parameters.get('mode', 'colors')
@@ -33,9 +41,7 @@ def display(ds, values, parameters, stage):
         raise ValueError('Explicit unit required (use dimensionless when appropriate)')
     if parameters.get('status') not in ('candidate', 'hold', 'accepted'):
         raise ValueError('Explicit candidate/hold/accepted status required; display does not grant acceptance')
-    bound = 20037508.342789244
-    if any(abs(v) > bound + 1e-7 for v in ds.bounds):
-        raise ValueError('Display outside Web Mercator world bounds')
+    require_world(ds)
     valid = ~np.ma.getmaskarray(values)
     indices = np.searchsorted(breaks, values.data, side='right')
     rgba = np.zeros((*values.shape, 4), dtype='uint8')
@@ -79,9 +85,7 @@ def display_values(ds, values, parameters, stage):
     from _scheme import build, class_index
     if ds.crs.to_epsg() != 3857:
         raise ValueError('Display requires EPSG:3857; warp explicitly before encoding')
-    bound = 20037508.342789244
-    if any(abs(v) > bound + 1e-7 for v in ds.bounds):
-        raise ValueError('Display outside Web Mercator world bounds')
+    require_world(ds)
     if 'colors' in parameters:
         raise ValueError('values mode carries no colours; the renderer colours by theme from the scheme')
     encoding = parameters.get('encoding', 'class-index')

@@ -6,6 +6,7 @@ import json
 import math
 import os
 from pathlib import Path
+import sqlite3
 import subprocess
 import sys
 
@@ -134,3 +135,40 @@ def test_refusals(tmp_path):
     assert 'expects no CRS' in cli('apply', placed, '--transform', tmp_path/'t'/'transform.json', '--output', next(out),
                                    success=False).stderr
     assert not any(p.exists() for p in tmp_path.glob('o[0-9]*'))
+
+
+def test_apply_keeps_z_and_reports_it(tmp_path):
+    cli('fit', '--gcp', control(tmp_path/'gcp.csv'), '--target-crs', 'EPSG:4547', '--basis', 'test', '--max-check-rmse', '0.1', '--output', tmp_path/'fit')
+    source = tmp_path/'plane.gpkg'
+    geometry = [Point(100, 200, 55.5), LineString([(0, 0, 1.5), (50, 80, 2.5)]), Point(300, 400)]
+    gpd.GeoDataFrame({'id': [1, 2, 3]}, geometry=geometry, crs=None).to_file(source, layer='spots')
+    summary = json.loads(cli('apply', source, '--transform', tmp_path/'fit'/'transform.json', '--output', tmp_path/'moved').stdout)
+    assert summary['z_features'] == {'spots': 2}
+    back = gpd.read_file(tmp_path/'moved'/'plane.gpkg', layer='spots')
+    assert back.has_z.tolist() == [True, True, False]
+    assert shapely.get_coordinates(back.geometry[0], include_z=True)[0, 2] == 55.5
+    line = shapely.get_coordinates(back.geometry[1], include_z=True)
+    assert line[:, 2].tolist() == [1.5, 2.5]
+    assert np.allclose(line[:, :2], truth([[0, 0], [50, 80]]), atol=0.2)
+    assert np.allclose(shapely.get_coordinates(back.geometry[2]), truth([[300, 400]]), atol=0.2)
+    manifest = json.loads((tmp_path/'moved'/'manifest.json').read_text(encoding='utf-8'))
+    record = json.loads((tmp_path/'moved'/'record.json').read_text(encoding='utf-8'))
+    assert manifest['z_features'] == {'spots': 2} and 'Z values are kept' in record['assumptions'][0]
+
+
+def test_apply_keeps_z_from_a_measured_layer_and_says_m_is_not_read(tmp_path):
+    cli('fit', '--gcp', control(tmp_path/'gcp.csv'), '--target-crs', 'EPSG:4547', '--basis', 'test', '--max-check-rmse', '0.1', '--output', tmp_path/'fit')
+    source = tmp_path/'measured.gpkg'
+    gpd.GeoDataFrame({'id': [1]}, geometry=[Point(100, 200, 55.5)], crs=None).to_file(source, layer='spots')
+    # GDAL through pyogrio cannot write M, so put a POINT ZM in the GeoPackage blob directly.
+    blob = b'GP\x00\x01' + (-1).to_bytes(4, 'little', signed=True) + shapely.to_wkb(shapely.from_wkt('POINT ZM (100 200 55.5 7)'), flavor='iso')
+    with sqlite3.connect(source) as db:
+        db.execute('UPDATE gpkg_geometry_columns SET m = 1 WHERE table_name = ?', ('spots',))
+        for name, in db.execute("SELECT name FROM sqlite_master WHERE type = 'trigger' AND tbl_name = 'spots'").fetchall():
+            db.execute(f'DROP TRIGGER "{name}"')
+        db.execute('UPDATE spots SET geom = ?', (blob,))
+    result = cli('apply', source, '--transform', tmp_path/'fit'/'transform.json', '--output', tmp_path/'moved')
+    assert 'Measured (M) geometry types are not supported' in result.stderr
+    back = gpd.read_file(tmp_path/'moved'/'measured.gpkg', layer='spots').geometry[0]
+    assert shapely.get_coordinates(back, include_z=True)[0, 2] == 55.5 and not shapely.has_m(back)
+    assert 'M values are not read' in json.loads((tmp_path/'moved'/'record.json').read_text(encoding='utf-8'))['assumptions'][0]

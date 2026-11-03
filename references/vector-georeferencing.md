@@ -42,8 +42,8 @@ CSV 必须有 `id`、`role`、`src_x`、`src_y`、`dst_x`、`dst_y` 列，`note`
   - `residuals.png`：残差箭头放大后画在目标坐标上，拟合点蓝色、检查点红色，标出各点残差。
   - `record.json`。
 - `apply`：新目录，含：
-  - `<输入名>.gpkg`：图层名和属性保持不变，CRS 为目标 CRS，另加 `extrapolated` 字段，表示要素是否落在拟合点凸包之外。`define` 没有凸包时，这个字段为空。
-  - `manifest.json`（`manifest: vector-georef-apply` v1）：输入的 SHA-256、所用变换及其状态、各图层要素数、各图层外推要素数、是否用了 `--allow-hold`。
+  - `<输入名>.gpkg`：图层名和属性保持不变，CRS 为目标 CRS，另加 `extrapolated` 字段，表示要素是否落在拟合点凸包之外。`define` 没有凸包时，这个字段为空。Z 值原样保留，不随比例缩放；M 值读取时就被丢弃（stderr 有警告，`record.json` 的 `assumptions` 也写明）。
+  - `manifest.json`（`manifest: vector-georef-apply` v1）：输入的 SHA-256、所用变换及其状态、各图层要素数、各图层外推要素数、各图层带 Z 的要素数（`z_features`）、是否用了 `--allow-hold`。
   - `record.json`。
 
 ## 应用时的检查
