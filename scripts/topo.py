@@ -30,6 +30,7 @@ from shapely.validation import explain_validity
 
 from _safe_io import iter_vector_chunks
 from _budget import check_vector
+from _core import reproject
 
 DEFAULT_CHECKS = "gaps,overlaps,slivers,invalid-geometries,duplicates"
 KNOWN_CHECKS = {"gaps", "overlaps", "slivers", "invalid-geometries", "duplicates", "self-intersections"}
@@ -648,7 +649,7 @@ def _write_errors(
                     by_crs.setdefault(str(row["_geometry_crs"]), []).append(i)
             for geometry_crs, positions in by_crs.items():
                 source_geometries = [rows[i]["geometry"] for i in positions]
-                output_geometries = gpd.GeoSeries(source_geometries, crs=geometry_crs).to_crs(source_crs)
+                output_geometries = reproject(gpd.GeoSeries(source_geometries, crs=geometry_crs), source_crs, purpose='return')
                 for i, geometry in zip(positions, output_geometries):
                     rows[i]["geometry"] = geometry
             for row in rows:

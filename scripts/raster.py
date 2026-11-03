@@ -24,7 +24,7 @@ from rasterio.merge import merge
 from shapely.geometry import box, mapping
 from _budget import check_raster, check_vector, raster_bytes, require
 from _daily import stable
-from _core import clean
+from _core import clean, reproject as reproject_vector
 from _delivery import fingerprint, implementation_hashes
 from _grid import band_data, band_matches, inspect, positive_integer, windows
 import _raster_numeric as numeric
@@ -46,7 +46,7 @@ def warp_window(ds, bounds):
 
 
 def zonal(ds,zones,p):
-    stable(zones,p['id']); zones=zones.to_crs(ds.crs)
+    stable(zones,p['id']); zones=reproject_vector(zones,ds.crs,purpose='align')
     if not zones.geom_type.isin(['Polygon','MultiPolygon']).all() or not zones.geometry.is_valid.all(): raise ValueError('Valid polygon zones required')
     mode=p.get('method','center')
     if mode not in ('center','all_touched','fractional'): raise ValueError('Unknown pixel coverage method')
@@ -102,7 +102,7 @@ def process(operation,paths,p,stage):
             check_vector(p['vector'],p.get('layer')); vectors=gpd.read_file(p['vector'],layer=p.get('layer')); stable(vectors,p['id'])
             if vectors.crs is None: raise ValueError('Vector requires CRS')
             if operation=='zonal': return zonal(ds,vectors,p)
-            vectors=vectors.to_crs(ds.crs)
+            vectors=reproject_vector(vectors,ds.crs,purpose='align')
             if not vectors.geom_type.eq('Point').all(): raise ValueError('Sampling requires points')
             rows=[]
             for ident,point in zip(vectors[p['id']],vectors.geometry):
@@ -178,7 +178,7 @@ def process(operation,paths,p,stage):
                 if operation=='clip':
                     check_vector(p['vector'],p.get('layer')); vector=gpd.read_file(p['vector'],layer=p.get('layer'))
                     if vector.crs is None or not vector.geometry.is_valid.all(): raise ValueError('Valid mask CRS/geometries required')
-                    geometries=[mapping(g) for g in vector.to_crs(ds.crs).geometry]
+                    geometries=[mapping(g) for g in reproject_vector(vector,ds.crs,purpose='align').geometry]
                 for win in windows(ds.width,ds.height,size):
                     values=band_data(ds,band,win); data=values.filled(np.nan)
                     if operation=='clip':

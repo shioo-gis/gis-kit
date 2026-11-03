@@ -28,6 +28,7 @@ except ImportError:
         sys.path.insert(0, str(Path(__file__).resolve().parent))
     from _safe_io import write_vector_atomic
 from _budget import check_vector
+from _core import reproject
 
 
 CAP_STYLES = {"round": "round", "flat": "flat", "square": "square"}
@@ -169,7 +170,7 @@ def main() -> None:
 
     if reprojected:
         try:
-            gdf = gdf.to_crs(original_crs)
+            gdf = reproject(gdf, original_crs, purpose='return')
             nonempty = gdf.loc[gdf.geometry.notna() & ~gdf.geometry.is_empty]
             if not nonempty.empty and not all(math.isfinite(value) for value in nonempty.total_bounds):
                 parser.error("Reprojected geographic buffer contains non-finite coordinates")

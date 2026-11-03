@@ -15,6 +15,7 @@ import pandas as pd
 import pyogrio
 from shapely.geometry import box
 
+from _core import reproject
 from _safe_io import write_vector_atomic
 from _budget import check_vector
 
@@ -98,7 +99,7 @@ def main():
             if (mask.crs is None) != (source_crs is None):
                 raise ValueError(f"{label} and input must both define a CRS, or both be unreferenced")
             if source_crs is not None and mask.crs != source_crs:
-                return mask.to_crs(source_crs)
+                return reproject(mask, source_crs, purpose='align')
             return mask
 
         clip_gdf = align_mask_crs(clip_gdf, "Clip mask")

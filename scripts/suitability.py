@@ -6,6 +6,7 @@ from pathlib import Path
 import time
 import numpy as np
 import geopandas as gpd
+from _core import reproject
 from _daily import stable, number
 from _delivery import bundle, digest, write_json
 from _peak_rss import peak_rss_bytes
@@ -42,7 +43,7 @@ def score(frame,p,restricted=None):
         for i in np.flatnonzero(~np.isfinite(v)|(v<lo)|(v>hi)):reasons[i].append('constraint:'+c['field'])
     if restricted is not None:
         if restricted.crs is None or not restricted.geom_type.isin(['Polygon','MultiPolygon']).all() or not restricted.geometry.is_valid.all() or restricted.geometry.is_empty.any():raise ValueError('Valid restriction polygons required')
-        area=restricted.to_crs(frame.crs).geometry.union_all()
+        area=reproject(restricted,frame.crs,purpose='align').geometry.union_all()
         for i in np.flatnonzero(frame.geometry.intersects(area)):reasons[i].append('restricted_intersection')
     scenarios=p['scenarios'];ids=[s['id'] for s in scenarios]
     if not 1<=len(scenarios)<=100 or any(not isinstance(i,str) or not i for i in ids) or len(ids)!=len(set(ids)):raise ValueError('Unique nonempty scenario IDs required')

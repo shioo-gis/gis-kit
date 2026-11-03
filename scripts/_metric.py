@@ -11,6 +11,8 @@ import math
 import geopandas as gpd
 from pyproj import CRS
 
+from _core import reproject
+
 
 def _horizontal_meters_per_unit(crs: CRS) -> float:
     if not crs.is_projected:
@@ -106,11 +108,8 @@ def analysis_frame(
         raise ValueError("Input CRS is neither geographic nor projected; specify a projected --analysis-crs")
 
     meters_per_unit = _horizontal_meters_per_unit(target_crs)
-    projected = gdf.to_crs(target_crs)
+    projected = reproject(gdf, target_crs, purpose='measure')
     validate_measurement_geometries(projected)
-    bounds = projected.total_bounds
-    if not all(math.isfinite(float(value)) for value in bounds):
-        raise ValueError("Projected analysis coordinates are non-finite")
     return projected, meters_per_unit
 
 

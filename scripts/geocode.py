@@ -20,6 +20,8 @@ from geopy.exc import GeocoderTimedOut, GeocoderServiceError
 from geopy.geocoders import Nominatim
 from shapely.geometry import Point
 
+from _core import reproject
+
 
 def make_geocoder(provider: str, api_key: str | None, delay: float):
     if provider == "nominatim":
@@ -126,7 +128,7 @@ def main() -> None:
         gdf = gdf.drop(columns=["index"])
 
         if args.crs != "EPSG:4326":
-            gdf = gdf.to_crs(args.crs)
+            gdf = reproject(gdf, args.crs, purpose='publish')
 
         output_path.parent.mkdir(parents=True, exist_ok=True)
         gdf.to_file(output_path, engine="pyogrio")

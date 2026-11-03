@@ -57,6 +57,7 @@ from _sandbox import configure_writable_caches
 configure_writable_caches()
 
 from _budget import check_vector
+from _core import reproject
 from _delivery import bundle, digest, write_json
 
 VERSION = '0.1.0'
@@ -2561,7 +2562,7 @@ def check_reference(frames, crs, spec, tolerance, min_share, layers):
     reference = gpd.read_file(path, layer=layer, bbox=box, engine='pyogrio')
     reference = reference[reference.geometry.notna() & reference.geom_type.str.contains('LineString|Polygon')]
     if not ref_crs.equals(crs):
-        reference = reference.to_crs(crs)
+        reference = reproject(reference, crs, purpose='align')
     edges = shapely.force_2d(reference.geometry.boundary.where(reference.geom_type.str.contains('Polygon'), reference.geometry).to_numpy())
     edges = edges[~shapely.is_empty(edges)]
     if not len(edges):
@@ -2850,7 +2851,7 @@ def overlay(args):
         if dropped_z:
             frame = frame.set_geometry(shapely.force_2d(frame.geometry.to_numpy()), crs=frame.crs)
         if reprojected:
-            frame = frame.to_crs(crs)
+            frame = reproject(frame, crs, purpose='align')
         name = layer if given else path.stem
         base, n = name, 2
         while name in labels:
@@ -2899,7 +2900,7 @@ def overlay(args):
         frame = pyogrio.read_dataframe(source, layer=name)
         if frame.crs is None:
             raise ValueError(f'{source}:{name} has no CRS; QA layers must share the parcels\' CRS')
-        qa[name] = frame if CRS.from_user_input(frame.crs).equals(crs) else frame.to_crs(crs)
+        qa[name] = frame if CRS.from_user_input(frame.crs).equals(crs) else reproject(frame, crs, purpose='align')
     hold = {'count': int(held.sum()), 'measured': not args.exclude_hold,
             'parcel_fids': [int(fid) for fid in parcels.index[held]],
             'parcel_ids': sorted(str(v) for v in parcels.loc[held, 'parcel_id'].dropna()) if 'parcel_id' in parcels else []}

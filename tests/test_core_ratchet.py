@@ -13,10 +13,8 @@ from _delivery import implementation_hashes, implementation_modules
 # a new direct call fails here until it goes through the shared code instead.
 ALLOWED = {
     '.to_crs(': {
-        '_analysis.py': 3, '_daily.py': 2, '_metric.py': 3, '_network_access.py': 1, '_raster_numeric.py': 1,
-        'admin-chain.py': 1, 'buffer.py': 2, 'cad.py': 3, 'clip.py': 1, 'convert.py': 2,
-        'export-table.py': 1, 'field.py': 1, 'geocode.py': 1, 'merge.py': 1, 'network.py': 1,
-        'package.py': 1, 'plot.py': 1, 'raster.py': 3, 'suitability.py': 1, 'topo.py': 2,
+        '_core.py': 2, '_metric.py': 2, '_network_access.py': 1, 'admin-chain.py': 1, 'buffer.py': 1, 'export-table.py': 1,
+        'field.py': 1, 'network.py': 1, 'package.py': 1, 'topo.py': 1,
     },
     'gpd.read_file(': {
         '_core.py': 1, '_raster_numeric.py': 1, '_recipe_operations.py': 1, 'admin-chain.py': 2,

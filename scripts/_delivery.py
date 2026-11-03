@@ -61,6 +61,11 @@ def implementation_hashes(entry):
     return {name: digest(path) for name, path in implementation_modules(entry).items()}
 
 
+def fact(code, severity, message, **detail):
+    """One finding a tool states about its own result: severity is info, warning or error."""
+    return {'code': code, 'severity': severity, 'message': message, 'detail': detail}
+
+
 def write_json(path, value):
     Path(path).write_text(json.dumps(value, ensure_ascii=False, indent=2, allow_nan=False) + '\n', encoding='utf-8')
 

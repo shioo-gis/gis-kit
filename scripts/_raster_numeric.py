@@ -15,6 +15,7 @@ from shapely.geometry import box, mapping
 from shapely.ops import unary_union
 
 from _budget import check_raster, check_vector
+from _core import reproject
 from _delivery import fingerprint
 from _grid import band_data, inspect, positive_integer, windows
 
@@ -49,7 +50,7 @@ def polygons(path, ds, layer=None, polygon_only=True):
     frame = gpd.read_file(path, layer=layer)
     if frame.empty or frame.crs is None or frame.geometry.isna().any() or frame.geometry.is_empty.any() or not frame.geometry.is_valid.all() or (polygon_only and not frame.geom_type.isin(['Polygon', 'MultiPolygon']).all()):
         raise ValueError('Nonempty valid polygons with CRS required')
-    frame = frame.to_crs(ds.crs)
+    frame = reproject(frame, ds.crs, purpose='align')
     if not frame.geometry.is_valid.all():
         raise ValueError('Invalid transformed polygons')
     return frame
