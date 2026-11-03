@@ -6,6 +6,7 @@ import math
 from pathlib import Path
 import numpy as np
 from PIL import Image
+from _budget import check_image
 from _delivery import bundle,digest,write_json
 
 
@@ -16,6 +17,7 @@ def execute(source,params,output):
     theta=math.radians(angle);c,s=math.cos(theta)*scale,math.sin(theta)*scale
     matrix=np.array([[c,-s,cx-c*width/2+s*height/2],[s,c,cy-s*width/2-c*height/2],[0,0,1.]])
     with Image.open(source) as src:
+        check_image(source,src.width,src.height,bytes_per_pixel=8)  # the decode and its RGB copy
         src.load();size=src.size
         corners=np.array([[0,0,1],[width,0,1],[width,height,1],[0,height,1]])@matrix.T
         if (corners[:,:2]<-1e-9).any() or (corners[:,0]>src.width+1e-9).any() or (corners[:,1]>src.height+1e-9).any():raise ValueError('Crop exceeds original image; padding is not evidence')

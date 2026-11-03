@@ -45,7 +45,7 @@ def test_parse_size_rejects(text):
 
 
 def test_require_passes_without_budget_or_estimate(monkeypatch):
-    monkeypatch.delenv(B.ENV, raising=False)
+    monkeypatch.setenv(B.ENV, 'off')
     B.require(10**18, basis='decoded_pixels', input='x.tif')
     monkeypatch.setenv(B.ENV, '1KiB')
     B.require(None, basis='sampled_features', input='x.gpkg')
@@ -69,7 +69,7 @@ def test_require_raises_exit_code_and_machine_line(monkeypatch, capsys):
 
 
 def test_no_budget_does_not_sample(monkeypatch, tmp_path):
-    monkeypatch.delenv(B.ENV, raising=False)
+    monkeypatch.setenv(B.ENV, 'off')
     monkeypatch.setattr(B, 'vector_bytes', lambda *a, **k: pytest.fail('sampled without a budget'))
     B.check_vector(tmp_path/'missing.gpkg')
 
@@ -93,7 +93,7 @@ def test_cli_budget_exceeded_exits_3_before_output(tmp_path):
     assert result.returncode == 3, result.stderr
     record = json.loads(result.stderr.strip().splitlines()[-1].removeprefix(B.ERROR_PREFIX))
     assert record['tool'] == 'terrain' and record['basis'] == 'decoded_pixels'
-    assert record['estimated_bytes'] == 50*50*8*8 and record['budget_bytes'] == 64*1024
+    assert record['estimated_bytes'] == 50*50*14*8 and record['budget_bytes'] == 64*1024
     assert not (tmp_path/'out').exists() and not list(tmp_path.glob('.*'))
 
 

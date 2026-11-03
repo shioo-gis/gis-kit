@@ -16,7 +16,7 @@ from _budget import check_raster, check_vector
 from _delivery import bundle, digest, implementation_hashes, write_json
 from _peak_rss import peak_rss_bytes
 from _safe_io import iter_vector_chunks, write_vector_atomic
-from _grid import inspect, band_data, positive_integer
+from _grid import guard_pixels, inspect, band_data, positive_integer
 
 
 def contours(z, transform, crs, levels, limit):
@@ -71,9 +71,10 @@ def execute(source,p,output):
     with rio.open(source) as ds:
         meta=inspect(ds);t=ds.transform;c=CRS(ds.crs)
         if not c.is_projected or t.b or t.d or t.a<=0 or t.e>=0:raise ValueError('North-up projected grid required')
-        if ds.count!=1 or min(ds.shape)<2 or ds.width*ds.height>positive_integer(p.get('max_pixels',5000000)):raise ValueError('Invalid or oversized single-band grid')
+        if ds.count!=1 or min(ds.shape)<2:raise ValueError('Invalid single-band grid')
+        guard_pixels(ds.width*ds.height,positive_integer(p.get('max_pixels',5000000)),f'{source.name} ({ds.width} x {ds.height})',way_out='Warp to a coarser resolution or clip first')
         if ds.units[0] not in (None,'m','metre'):raise ValueError('Band unit conflicts with metre')
-        check_raster(ds,arrays=3)  # masked float64 decode, its mask and the filled z
+        check_raster(ds,arrays=7)  # decode, mask, filled z and contour tracing; measured 50 bytes per pixel
         z=band_data(ds,1).filled(np.nan)
     with bundle(output) as stage:
         artifacts={}; reports={}

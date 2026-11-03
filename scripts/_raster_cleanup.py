@@ -8,7 +8,7 @@ from scipy.spatial import cKDTree
 
 import _raster_numeric as n
 from _daily import stable
-from _grid import band_data, inspect, positive_integer, windows
+from _grid import band_data, guard_pixels, inspect, positive_integer, windows
 
 OPERATIONS = ('fill_holes', 'focal', 'aggregate', 'regions', 'sieve', 'seed_region',
               'morphology', 'class_area', 'transition', 'class_combine', 'zonal_fill')
@@ -153,10 +153,9 @@ def process(operation, datasets, p, stage, stack):
     from _delivery import write_json
     from _budget import check_raster
     ds = datasets[0]
-    if len(datasets)*ds.width*ds.height > positive_integer(p.get('max_elements', 10000000)):
-        raise ValueError('Exceeded max_elements')
-    # Operand decodes plus output, labels, protection mask and the encoded copy.
-    check_raster(ds, arrays=len(datasets)+4)
+    guard_pixels(len(datasets)*ds.width*ds.height, positive_integer(p.get('max_elements', 10000000)), f'{len(datasets)} input(s) of {ds.width} x {ds.height}', param='max_elements', way_out='Warp to a coarser resolution or clip first')
+    # Operand decodes plus output, labels, masks and the encoded copy; regions measured 69-77 bytes per pixel.
+    check_raster(ds, arrays=len(datasets)+9)
     arrays = []
     for other in datasets:
         n.same_grid(ds, other)

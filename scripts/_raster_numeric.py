@@ -17,7 +17,7 @@ from shapely.ops import unary_union
 from _budget import check_raster, check_vector
 from _core import reproject
 from _delivery import fingerprint
-from _grid import band_data, inspect, positive_integer, windows
+from _grid import band_data, guard_pixels, inspect, positive_integer, windows
 
 OPERATIONS = ('transform', 'combine', 'update', 'rasterize', 'bands', 'allocate', 'redistribute')
 
@@ -324,8 +324,7 @@ def allocate(ds, arrays, p, stage, budget):
         raise ValueError('Explicit total quantity and redistribution assumption required')
     if p.get('dtype', 'float64') != 'float64':
         raise ValueError('Allocation requires float64; integer uses largest_remainder flag')
-    if (len(zones)+1)*ds.width*ds.height > p.get('max_elements', 10000000):
-        raise ValueError('Allocation contribution bands exceed max_elements')
+    guard_pixels((len(zones)+1)*ds.width*ds.height, p.get('max_elements', 10000000), f'Allocation contribution bands ({len(zones)+1} x {ds.width} x {ds.height})', param='max_elements', way_out='Use fewer zones or a coarser grid')
     factor = area_factor(ds)
     cell_area = abs(ds.transform.determinant)*factor
     exclusion = unary_union(polygons(p['exclude'], ds, p.get('exclude_layer')).geometry) if 'exclude' in p else None
@@ -542,8 +541,7 @@ def process_windows(operation, datasets, selectors, p, stage):
     ds = datasets[0]
     size = positive_integer(p.get('block_size', 256))
     capacity = min(size, ds.width)*min(size, ds.height)
-    if len(selectors)*capacity > positive_integer(p.get('max_elements', 10000000)):
-        raise ValueError('Window operands exceed max_elements memory guard')
+    guard_pixels(len(selectors)*capacity, positive_integer(p.get('max_elements', 10000000)), f'Window operands ({len(selectors)} x {capacity})', param='max_elements', way_out='Use a smaller block_size or fewer operands')
     cache = positive_integer(p.get('gdal_cache_mb', 64))
     fmt = choice(p.get('format', 'GTiff'), ('GTiff', 'COG'))
     geometries = None
@@ -642,10 +640,9 @@ def process(operation, datasets, p, stage, stack):
         raise ValueError('At least one operand required')
     if is_local(operation, p):
         return process_windows(operation, datasets, selectors, p, stage)
-    if len(selectors)*ds.width*ds.height > positive_integer(p.get('max_elements', 10000000)):
-        raise ValueError('Operand arrays exceed max_elements memory guard')
-    # Operands plus output, occupancy/validity masks and the encoded copy written out.
-    check_raster(ds, arrays=len(selectors)+4)
+    guard_pixels(len(selectors)*ds.width*ds.height, positive_integer(p.get('max_elements', 10000000)), f'Operand arrays ({len(selectors)} x {ds.width} x {ds.height})', param='max_elements', way_out='Warp to a coarser resolution or clip first')
+    # Operands plus output, masks, temporaries and the encoded copy; zscore measured 66-69 bytes per pixel.
+    check_raster(ds, arrays=len(selectors)+8)
     arrays = [read_operand(datasets, item, p, operation) for item in selectors]
     details = {'operands': selectors, 'sources': [inspect(d) for d in datasets],
                'execution': {'mode': 'bounded_full_array'},
@@ -702,8 +699,10 @@ def process(operation, datasets, p, stage, stack):
             raise ValueError('Redistribute requires one operand')
         target = stack.enter_context(rio.open(p['reference']))
         inspect(target)
-        if target.transform.b or target.transform.d or target.transform.a <= 0 or target.transform.e >= 0 or target.width*target.height > min(positive_integer(p.get('max_pixels', 50000000)), positive_integer(p.get('max_elements', 10000000))):
-            raise ValueError('Invalid or oversized target grid')
+        if target.transform.b or target.transform.d or target.transform.a <= 0 or target.transform.e >= 0:
+            raise ValueError('Invalid target grid')
+        guard_pixels(target.width*target.height, positive_integer(p.get('max_pixels', 50000000)), f'Target grid ({target.width} x {target.height})', way_out='Choose a coarser reference grid')
+        guard_pixels(target.width*target.height, positive_integer(p.get('max_elements', 10000000)), f'Target grid ({target.width} x {target.height})', param='max_elements', way_out='Choose a coarser reference grid')
         check_raster(target, arrays=4)  # output, touched mask, covered area and the encoded copy
         return dict(details, **redistribute(ds, target, arrays[0], p, stage, budget))
     else:

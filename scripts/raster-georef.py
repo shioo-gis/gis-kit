@@ -12,7 +12,7 @@ from pathlib import Path
 import numpy as np
 from pyproj import CRS, Transformer
 from _model_actor import validate_actor
-from _budget import check_vector
+from _budget import check_image, check_vector
 
 
 def write(path,value):
@@ -193,6 +193,7 @@ def preview(image, transform, output, max_size=1800):
     if Path(output).exists() or max_size <= 0:
         raise ValueError('Output exists or max-size is not positive')
     with Image.open(image) as im:
+        check_image(image,im.width,im.height,bytes_per_pixel=8)  # the decode and its RGB copy
         picture=im.convert('RGB')
     width,height=picture.size
     ratio=min(1,max_size/max(width,height))

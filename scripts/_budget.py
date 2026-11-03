@@ -1,22 +1,28 @@
-"""Opt-in memory budget: estimate a whole read before it happens and fail with a machine-readable error.
+"""Memory budget: estimate a whole read before it happens and fail with a machine-readable error.
 
-The budget comes from GIS_KIT_MEMORY_BUDGET (``gis.py --memory-budget`` sets it for the tool).
-Unset means no check. Estimates only stop reads that clearly exceed the budget; they are not an
-RSS limit. Contract: references/memory-budget.md.
+The budget comes from GIS_KIT_MEMORY_BUDGET (``gis.py --memory-budget`` sets it for the tool). Unset
+means a share of the memory available now; ``off`` turns the check off. Estimates only stop reads that
+clearly exceed the budget; they are not an RSS limit. Contract: references/memory-budget.md.
 """
 from __future__ import annotations
 
+from functools import lru_cache
 import json
 import math
 import os
 import re
+import subprocess
 import sys
+import warnings
 from pathlib import Path
 
 ENV = 'GIS_KIT_MEMORY_BUDGET'
 EXIT_CODE = 3
 ERROR_PREFIX = 'GIS_KIT_ERROR '
+OFF = ('off', 'none', 'unlimited')
 SAMPLE_FEATURES = 1000
+# The default leaves room for the interpreter and the imports, which the estimates do not count.
+DEFAULT_SHARE = 0.8
 # Peak RSS while pyogrio decodes a layer was 2.3-3.1x the resident frame (GPKG, 20k-200k features).
 VECTOR_PEAK_FACTOR = 3
 _UNITS = {'': 1, 'b': 1, 'kb': 10**3, 'mb': 10**6, 'gb': 10**9, 'tb': 10**12,
@@ -43,9 +49,40 @@ def parse_size(text: str) -> int:
     return value
 
 
+def available_memory() -> int | None:
+    """Bytes this machine can hand out now without swapping, or None when it cannot say."""
+    try:
+        if sys.platform == 'darwin':
+            text = subprocess.run(['vm_stat'], capture_output=True, text=True, timeout=5, check=True).stdout
+            page = int(re.search(r'page size of (\d+) bytes', text).group(1))
+            pages = {name.strip(): int(value.strip(' .')) for name, value in re.findall(r'^Pages ([^:]+):\s+(\d+)\.$', text, re.M)}
+            return page*sum(pages[name] for name in ('free', 'inactive', 'speculative', 'purgeable'))
+        if sys.platform == 'win32':
+            import ctypes
+
+            class MemoryStatus(ctypes.Structure):
+                _fields_ = [('length', ctypes.c_ulong), ('load', ctypes.c_ulong), ('total', ctypes.c_ulonglong), ('available', ctypes.c_ulonglong),
+                            ('page_total', ctypes.c_ulonglong), ('page_available', ctypes.c_ulonglong), ('virtual_total', ctypes.c_ulonglong),
+                            ('virtual_available', ctypes.c_ulonglong), ('extended', ctypes.c_ulonglong)]
+            status = MemoryStatus(length=ctypes.sizeof(MemoryStatus))
+            return int(status.available) if ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(status)) else None
+        with open('/proc/meminfo', encoding='utf-8') as stream:
+            return 1024*int(re.search(r'^MemAvailable:\s+(\d+) kB', stream.read(), re.M).group(1))
+    except (OSError, ValueError, KeyError, AttributeError, subprocess.SubprocessError):
+        return None
+
+
+@lru_cache(maxsize=1)
+def default_budget() -> int | None:
+    available = available_memory()
+    return int(available*DEFAULT_SHARE) if available else None
+
+
 def budget() -> int | None:
     value = os.environ.get(ENV, '').strip()
-    return parse_size(value) if value else None
+    if value.lower() in OFF:
+        return None
+    return parse_size(value) if value else default_budget()
 
 
 def require(estimate: int | None, *, basis: str, input, layer: str | None = None) -> None:
@@ -55,9 +92,11 @@ def require(estimate: int | None, *, basis: str, input, layer: str | None = None
         return
     record = {'contract': 'error', 'schema_version': 1, 'code': 'memory_budget_exceeded',
               'tool': Path(sys.argv[0]).stem or None, 'input': str(Path(input).absolute()), 'layer': layer,
-              'estimated_bytes': int(estimate), 'budget_bytes': limit, 'basis': basis}
+              'estimated_bytes': int(estimate), 'budget_bytes': limit, 'basis': basis,
+              'budget_source': 'explicit' if os.environ.get(ENV, '').strip() else 'available_memory'}
+    origin = f'{ENV}' if record['budget_source'] == 'explicit' else f'default, {DEFAULT_SHARE:.0%} of available memory; {ENV}=off removes it'
     sys.stderr.write(f'ERROR: estimated memory {estimate/2**30:.2f} GiB exceeds budget {limit/2**30:.2f} GiB '
-                     f'({ENV}) for {record["input"]}\n')
+                     f'({origin}) for {record["input"]}\n')
     sys.stderr.write(ERROR_PREFIX + json.dumps(record, ensure_ascii=False) + '\n')
     sys.stderr.flush()
     raise BudgetExceeded(record)
@@ -76,12 +115,22 @@ def check_raster(ds, *, arrays: float = 1, itemsize: int = 8, width: int | None 
             basis='decoded_pixels', input=ds.name)
 
 
-def vector_bytes(path, layer: str | None = None) -> int | None:
-    """Sample the first features, extrapolate to the layer, then allow for the decoding peak."""
+def check_image(path, width: int, height: int, *, bytes_per_pixel: float) -> None:
+    """Check an image library's full decode, measured in bytes per pixel of the steps the tool performs."""
+    if budget() is None:
+        return
+    require(math.ceil(width*height*bytes_per_pixel), basis='decoded_pixels', input=path)
+
+
+def vector_bytes(path, layer: str | None = None, bbox=None) -> int | None:
+    """Sample the first features, extrapolate to the layer or bbox, then allow for the decoding peak."""
     import geopandas as gpd
     import pyogrio
     import shapely
-    count = int(pyogrio.read_info(path, layer=layer).get('features', -1))
+    if bbox is None:
+        count = int(pyogrio.read_info(path, layer=layer).get('features', -1))
+    else:
+        count = len(pyogrio.read_bounds(path, layer=layer, bbox=tuple(bbox))[0])
     if count < 0:
         return None
     if count == 0:
@@ -99,7 +148,13 @@ def vector_bytes(path, layer: str | None = None) -> int | None:
     return math.ceil(size/len(sample)*count*VECTOR_PEAK_FACTOR)
 
 
-def check_vector(path, layer: str | None = None) -> None:
+def check_vector(path, layer: str | None = None, bbox=None) -> None:
     if budget() is None:
         return
-    require(vector_bytes(path, layer), basis='sampled_features', input=path, layer=layer)
+    try:
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore')
+            estimate = vector_bytes(path, layer, bbox)
+    except Exception:  # The tool's own read reports an unreadable source; a failed estimate must not decide it.
+        estimate = None
+    require(estimate, basis='sampled_features', input=path, layer=layer)

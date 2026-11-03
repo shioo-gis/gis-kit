@@ -1568,6 +1568,7 @@ def label(args):
     rules, rules_text = L.load(args.rules)
     faces_path, texts_path = Path(args.faces), Path(args.texts)
     check_vector(faces_path, args.faces_layer)
+    check_vector(texts_path, args.texts_layer)
     faces = gpd.read_file(faces_path, layer=args.faces_layer, engine='pyogrio')
     texts = gpd.read_file(texts_path, layer=args.texts_layer, engine='pyogrio')
     missing = {'face_id', 'status'} - set(faces.columns)

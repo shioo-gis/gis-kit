@@ -15,7 +15,7 @@ from scipy.ndimage import correlate, minimum_filter, maximum_filter
 from _budget import check_raster
 from _delivery import bundle, digest, implementation_hashes, write_json
 from _peak_rss import peak_rss_bytes
-from _grid import inspect, band_data, planar_metres_per_unit, positive_integer
+from _grid import guard_pixels, inspect, band_data, planar_metres_per_unit, positive_integer
 from _metric import ground_scale_range
 
 
@@ -90,11 +90,9 @@ def execute(source, params, output):
             t = ds.transform
             if t.b or t.d or t.a <= 0 or t.e >= 0:
                 raise ValueError('North-up grid required; warp explicitly first')
-            limit = positive_integer(params.get('max_pixels', 5000000))
-            if ds.width*ds.height > limit:
-                raise ValueError('Raster exceeds max_pixels memory guard')
-            # z, zero-filled copy, east/north gradients, slope/aspect/relief and a filter temporary.
-            check_raster(ds, arrays=10 if shade else 8)
+            guard_pixels(ds.width*ds.height, positive_integer(params.get('max_pixels', 5000000)), f'{source.name} ({ds.width} x {ds.height})', way_out='Warp to a coarser resolution or clip first')
+            # z, its copies, gradients, outputs and filter temporaries; measured 105-109 bytes per pixel, 113-117 with hillshade.
+            check_raster(ds, arrays=15 if shade else 14)
             dx, dy = t.a*metres_per_unit, -t.e*metres_per_unit
             scale = ground_scale_range(CRS(ds.crs), ds.bounds)
             band = positive_integer(params.get('band', 1))

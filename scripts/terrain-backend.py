@@ -16,7 +16,7 @@ import rasterio as rio
 from pyproj import CRS
 from _budget import check_raster
 from _delivery import bundle, digest, implementation_hashes, write_json
-from _grid import inspect, band_data, band_matches, planar_metres_per_unit, positive_integer
+from _grid import guard_pixels, inspect, band_data, band_matches, planar_metres_per_unit, positive_integer
 from terrain import summary
 
 
@@ -37,8 +37,8 @@ def validate(operation, p, ds):
     c=CRS(ds.crs); t=ds.transform
     if planar_metres_per_unit(c,ds.bounds)!=1: raise ValueError('Projected metre CRS required')
     if t.b or t.d or t.a<=0 or t.e>=0: raise ValueError('North-up grid required')
-    if ds.count!=1 or min(ds.shape)<3 or ds.width*ds.height>positive_integer(p.get('max_pixels',1000000)):
-        raise ValueError('Requires single-band bounded grid of at least 3x3')
+    if ds.count!=1 or min(ds.shape)<3: raise ValueError('Requires single-band grid of at least 3x3')
+    guard_pixels(ds.width*ds.height,positive_integer(p.get('max_pixels',1000000)),f'Grid ({ds.width} x {ds.height})',way_out='Warp to a coarser resolution or clip first')
     if ds.units[0] not in (None,'m','metre'): raise ValueError('Band unit conflicts with metre')
     # Input grid, read-back outputs, and for viewshed the stacked outputs plus the visible count.
     outputs=4 if operation=='hydrology' else len(p['observers']) if isinstance(p.get('observers'),list) else 0

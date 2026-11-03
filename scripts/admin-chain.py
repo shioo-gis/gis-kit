@@ -12,6 +12,7 @@ from datetime import datetime, timezone
 import json
 from pathlib import Path
 
+from _budget import check_vector
 from _delivery import bundle, digest, write_json
 
 VERSION = '0.1.0'
@@ -44,6 +45,7 @@ def load_site(args):
     if args.point:
         lon, lat = parse_point(args.point)
         return Point(lon, lat)
+    check_vector(args.site, args.site_layer)
     frame = gpd.read_file(args.site, layer=args.site_layer) if args.site_layer else gpd.read_file(args.site)
     if frame.crs is None:
         raise ValueError('Site file has no CRS')
@@ -94,7 +96,9 @@ def open_level(source, level, layer, name_field):
 def containing(level, site, probe):
     import pyogrio
     x, y = probe.x, probe.y
-    frame = pyogrio.read_dataframe(level.source, layer=level.layer, bbox=(x - 1e-7, y - 1e-7, x + 1e-7, y + 1e-7))
+    box = (x - 1e-7, y - 1e-7, x + 1e-7, y + 1e-7)
+    check_vector(level.source, level.layer, box)
+    frame = pyogrio.read_dataframe(level.source, layer=level.layer, bbox=box)
     if frame.crs is not None and frame.crs.to_epsg() != 4326:
         raise ValueError(f'{level.layer} must be EPSG:4326')
     hits = frame[frame.geometry.covers(probe)]
@@ -109,6 +113,7 @@ def children(level, parent, parent_gid, bounds):
     if field is None:
         return None
     escaped = parent_gid.replace("'", "''")
+    check_vector(level.source, level.layer, bounds)
     frame = pyogrio.read_dataframe(level.source, layer=level.layer, bbox=tuple(bounds), where=f"{field} = '{escaped}'")
     if len(frame) > MAX_CHILDREN:
         raise ValueError(f'{len(frame)} units of {level.layer} under {parent_gid} exceed {MAX_CHILDREN}')

@@ -22,7 +22,7 @@ from _peak_rss import peak_rss_bytes
 from _safe_io import iter_vector_chunks
 
 spec=importlib.util.spec_from_file_location('affine_georef',Path(__file__).with_name('raster-georef.py'));affine=importlib.util.module_from_spec(spec);spec.loader.exec_module(affine)
-from _budget import check_vector
+from _budget import check_image, check_vector
 
 
 def transformer(report):
@@ -103,7 +103,9 @@ def execute(image,gcps,p,output,backend=None,pixel_vectors=None,pixel_manifest=N
         affine.fit(gcps,stage/'affine.json');base=json.loads((stage/'affine.json').read_text(encoding='utf-8'));affine.verify_image(image,base);area=affine.region(base)
         if base['fit']['count']<6 or base['check']['count']<4:raise ValueError('TPS requires >=6 fit and >=4 frozen check points')
         pixels=np.array([x['pixel'] for x in base['points']]);worlds=np.array([x['target_world'] for x in base['points']]);checks=np.array([x['role']=='check' for x in base['points']])
-        with Image.open(image) as im:rgba=np.array(im.convert('RGBA'))
+        with Image.open(image) as im:
+            check_image(image,im.width,im.height,bytes_per_pixel=20)  # RGBA plus two int64 pixel-index grids
+            rgba=np.array(im.convert('RGBA'))
         height,width=rgba.shape[:2]
         if not box(-.5,-.5,width-.5,height-.5).covers(area):raise ValueError('Frame outside image')
         xmin,ymin,xmax,ymax=area.bounds;xs=np.arange(xmin,xmax,p['grid_step_px']);ys=np.arange(ymin,ymax,p['grid_step_px'])
