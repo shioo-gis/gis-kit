@@ -32,7 +32,7 @@ ARCGIS_PYTHON = os.environ.get('GIS_KIT_ARCGIS_PYTHON')
 def run(fixture, output, *extra, success=True):
     command = [sys.executable, str(SCRIPTS / 'package.py'), 'pack', str(fixture['style']), '--output', str(output), '--format', 'arcgis-pro',
                '--data-root', f'basemap={fixture["basemap"]}', *map(str, extra)]
-    result = subprocess.run(command, capture_output=True, text=True,
+    result = subprocess.run(command, capture_output=True, encoding='utf-8', errors='replace',
                             env={**os.environ, 'PYTHONDONTWRITEBYTECODE': '1', 'GIS_COMPOSER_CONFIG_DIR': str(output.parent / 'no-config')})
     assert (result.returncode == 0) == success, result.stdout + result.stderr
     return json.loads((output / 'package.json').read_text(encoding='utf-8')) if success else result.stderr
@@ -85,7 +85,7 @@ def test_unpack_reads_the_package_back(pro, tmp_path):
     """The package's own reader (package.py unpack) finds every dataset the layer file names, and nothing unused."""
     out = pro[1]
     result = subprocess.run([sys.executable, str(SCRIPTS / 'package.py'), 'unpack', str(out / 'demo-map.lpkx'), '--output', str(tmp_path / 'u')],
-                            capture_output=True, text=True, env={**os.environ, 'PYTHONDONTWRITEBYTECODE': '1'})
+                            capture_output=True, encoding='utf-8', errors='replace', env={**os.environ, 'PYTHONDONTWRITEBYTECODE': '1'})
     assert result.returncode == 0, result.stderr
     manifest = json.loads((tmp_path / 'u' / 'package.json').read_text(encoding='utf-8'))
     assert manifest['package']['type'] == 'Layer Package' and manifest['item']['title'] == 'Demo map'
@@ -333,7 +333,7 @@ def round_two(tmp_path_factory):
     root = tmp_path_factory.mktemp('round-two')
     fixture = pack_fixture.build_round_two(root / 'data')
     command = [sys.executable, str(SCRIPTS / 'package.py'), 'pack', str(fixture['style']), '--output', str(root / 'out'), '--format', 'arcgis-pro', '--lyrx']
-    result = subprocess.run(command, capture_output=True, text=True, env={**os.environ, 'PYTHONDONTWRITEBYTECODE': '1'})
+    result = subprocess.run(command, capture_output=True, encoding='utf-8', errors='replace', env={**os.environ, 'PYTHONDONTWRITEBYTECODE': '1'})
     assert result.returncode == 0, result.stdout + result.stderr
     document = json.loads((root / 'out' / 'round-two.lyrx').read_text(encoding='utf-8'))
     return root / 'out', json.loads((root / 'out' / 'package.json').read_text(encoding='utf-8')), {d['uRI']: d for d in document['layerDefinitions']}, document
@@ -463,7 +463,7 @@ def test_errors(tmp_path):
     fixture = pack_fixture.build(tmp_path / 'data', with_raster=False)
     command = [sys.executable, str(SCRIPTS / 'package.py'), 'pack', str(fixture['style']), '--output', str(tmp_path / 'o'), '--lyrx',
                '--data-root', f'basemap={fixture["basemap"]}']
-    result = subprocess.run(command, capture_output=True, text=True, env={**os.environ, 'PYTHONDONTWRITEBYTECODE': '1'})
+    result = subprocess.run(command, capture_output=True, encoding='utf-8', errors='replace', env={**os.environ, 'PYTHONDONTWRITEBYTECODE': '1'})
     assert result.returncode == 1 and '--lyrx belongs to --format arcgis-pro' in result.stderr
 
 

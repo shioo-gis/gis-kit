@@ -122,4 +122,7 @@ def main():
     a=p.parse_args()
     try:print(json.dumps(compare(a.before,a.after,a.output) if a.command=='compare' else package(a.specification,a.output)))
     except (ValueError,KeyError,TypeError,OSError) as e:p.exit(1,f'ERROR: {e}\n')
-if __name__=='__main__':main()
+if __name__=='__main__':
+    import _stdio
+    _stdio.utf8()
+    main()

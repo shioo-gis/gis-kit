@@ -96,7 +96,7 @@ def test_cli_convert_and_gpkg_copy_stream_large_layers(tmp_path):
     full = gpd.read_file(source, engine='pyogrio')
     converted = tmp_path/'converted.gpkg'
     run = subprocess.run([sys.executable, str(SCRIPTS/'convert.py'), str(source), '--output', str(converted), '--crs', 'EPSG:3857'],
-                         capture_output=True, text=True)
+                         capture_output=True, encoding='utf-8', errors='replace')
     assert run.returncode == 0, run.stderr
     assert 'Streamed 100050 features' in run.stdout
     back = gpd.read_file(converted, engine='pyogrio')
@@ -104,11 +104,11 @@ def test_cli_convert_and_gpkg_copy_stream_large_layers(tmp_path):
     assert back.geometry.geom_equals_exact(full.to_crs('EPSG:3857').geometry, 1e-6).all()
     thin = tmp_path/'thin.gpkg'
     run = subprocess.run([sys.executable, str(SCRIPTS/'convert.py'), str(source), '--output', str(thin), '--fields', 'note'],
-                         capture_output=True, text=True)
+                         capture_output=True, encoding='utf-8', errors='replace')
     assert run.returncode == 0 and 'Streamed 100050 features' in run.stdout, run.stderr
     pd.testing.assert_frame_equal(gpd.read_file(thin, engine='pyogrio'), full[['note', 'geometry']])
     copied = tmp_path/'copied.gpkg'
     run = subprocess.run([sys.executable, str(SCRIPTS/'gpkg.py'), 'copy', '--source', str(source), '--target', str(copied),
-                          '--target-layer', 'kept'], capture_output=True, text=True)
+                          '--target-layer', 'kept'], capture_output=True, encoding='utf-8', errors='replace')
     assert run.returncode == 0, run.stderr
     pd.testing.assert_frame_equal(gpd.read_file(copied, layer='kept', engine='pyogrio'), full)

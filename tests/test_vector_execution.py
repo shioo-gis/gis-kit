@@ -32,7 +32,7 @@ def command(*args: str, expected: int = 0) -> subprocess.CompletedProcess:
         cwd=ROOT,
         env=env,
         capture_output=True,
-        text=True,
+        encoding="utf-8", errors="replace",
     )
     assert result.returncode == expected, f"command failed: {args}\nstdout={result.stdout}\nstderr={result.stderr}"
     return result

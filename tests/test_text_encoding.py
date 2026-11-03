@@ -12,6 +12,7 @@ ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS = ROOT / 'scripts'
 PYTHON2_ONLY = {'make_base.py'}  # runs in ArcMap's Python 2.7, and is no Python 3 syntax
 ASCII_LOCALE = {'LC_ALL': 'C', 'LANG': 'C', 'PYTHONCOERCECLOCALE': '0', 'PYTHONUTF8': '0'}
+TEXT = '用地 m²'  # the first part is in cp936, the second is not, and neither is in ASCII
 
 
 def text_calls_without_encoding(tree):
@@ -40,6 +41,80 @@ def test_written_json_is_utf8_whatever_the_locale(tmp_path):
     run = subprocess.run([sys.executable, '-B', '-X', 'utf8=0', '-c', code], capture_output=True, env={**os.environ, **ASCII_LOCALE})
     assert run.returncode == 0, run.stderr
     assert json.loads(target.read_bytes().decode('utf-8'))['title'] == '用地分类'
+
+
+def test_public_scripts_set_up_their_streams_first():
+    # A new script that skips this crashes on `m²` when run directly with stdout redirected on a Chinese code page.
+    wrong = []
+    for path in sorted(SCRIPTS.glob('*.py')):
+        if path.name.startswith('_'):
+            continue
+        guards = [node for node in ast.parse(path.read_text(encoding='utf-8')).body
+                  if isinstance(node, ast.If) and ast.unparse(node.test) == "__name__ == '__main__'"]
+        if not guards or [ast.unparse(line) for line in guards[0].body[:2]] != ['import _stdio', '_stdio.utf8()']:
+            wrong.append(path.name)
+    assert not wrong, wrong
+
+
+def test_tests_read_tool_output_as_utf8():
+    # text=True decodes by the code page, and a tool's UTF-8 output then stops the suite. ArcGIS and QGIS interpreters keep their own locale.
+    found = []
+    for path in sorted((ROOT / 'tests').rglob('*.py')):
+        if path.name in PYTHON2_ONLY:
+            continue
+        for node in ast.walk(ast.parse(path.read_text(encoding='utf-8'))):
+            if not isinstance(node, ast.Call) or (node.args and '_PYTHON' in ast.unparse(node.args[0])):
+                continue
+            keywords = {k.arg for k in node.keywords}
+            if 'text' in keywords and 'encoding' not in keywords:
+                found.append(f'{path.relative_to(ROOT)}:{node.lineno}')
+    assert not found, found
+
+
+def run_stdio(extra_env, **kwargs):
+    code = (f"import sys; sys.path.insert(0, {str(SCRIPTS)!r}); import _stdio; _stdio.utf8(); "
+            f"print({ascii(TEXT)}); print({ascii(TEXT)}, file=sys.stderr)")
+    env = {k: v for k, v in os.environ.items() if k != 'PYTHONIOENCODING'}
+    return subprocess.run([sys.executable, '-B', '-X', 'utf8=0', '-c', code], env={**env, **ASCII_LOCALE, **extra_env}, **kwargs)
+
+
+def test_pipes_get_utf8_whatever_the_locale():
+    run = run_stdio({}, capture_output=True)
+    assert run.returncode == 0, run.stderr
+    assert run.stdout.decode('utf-8').strip() == TEXT
+    assert run.stderr.decode('utf-8').strip() == TEXT
+
+
+def test_pythonioencoding_is_kept_and_a_missing_character_is_escaped():
+    run = run_stdio({'PYTHONIOENCODING': 'gbk'}, capture_output=True)
+    assert run.returncode == 0, run.stderr
+    assert run.stdout.strip() == '用地 m\\xb2'.encode('gbk')
+
+
+@pytest.mark.skipif(os.name == 'nt', reason='no pty; a Windows console takes Unicode directly')
+def test_a_terminal_keeps_its_encoding_and_a_missing_character_is_escaped():
+    import pty
+    terminal, child = pty.openpty()
+    try:
+        run = run_stdio({}, stdout=child, stderr=subprocess.PIPE)
+        assert run.returncode == 0, run.stderr  # a child that printed nothing would leave the read below waiting
+        shown = os.read(terminal, 4096)  # before closing our end: macOS drops what is buffered with the last one
+    finally:
+        os.close(child)
+        os.close(terminal)
+    assert shown.strip() == b'\\u7528\\u5730 m\\xb2'
+
+
+def test_a_tool_run_directly_does_not_crash_on_a_square_metre(tmp_path):
+    # The real failure: topo.py reports areas in m², outside cp936 and outside ASCII alike, so this catches it on Linux CI too.
+    source = tmp_path / 'overlap.geojson'
+    source.write_text(json.dumps({'type': 'FeatureCollection', 'crs': {'type': 'name', 'properties': {'name': 'urn:ogc:def:crs:EPSG::3857'}},
+                                  'features': [{'type': 'Feature', 'properties': {}, 'geometry': {'type': 'Polygon', 'coordinates': [ring]}}
+                                               for ring in ([[0, 0], [10, 0], [10, 10], [0, 10], [0, 0]], [[5, 5], [15, 5], [15, 15], [5, 15], [5, 5]])]}), encoding='utf-8')
+    env = {k: v for k, v in os.environ.items() if k != 'PYTHONIOENCODING'}
+    run = subprocess.run([sys.executable, '-B', '-X', 'utf8=0', str(SCRIPTS / 'topo.py'), str(source)], capture_output=True, env={**env, **ASCII_LOCALE})
+    assert run.returncode == 0, run.stderr
+    assert 'm²' in run.stdout.decode('utf-8')
 
 
 @pytest.mark.skipif(os.name == 'nt', reason='the fake tool is a shell script')

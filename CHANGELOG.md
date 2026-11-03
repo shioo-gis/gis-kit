@@ -9,6 +9,7 @@
 - `package.py unpack` 清单的 `layers[].file`、`layer_versions`、`thumbnail` 在 Windows 上也用 `/` 分隔路径。
 - `buffer.py` 不再触发 geopandas 1.2 的 `resolution` 弃用警告，同时兼容之前的版本（它们不接受 `quad_segs`）。
 - 测试读写文本也明确用 UTF-8（静态检查范围扩到 `tests/`）：此前 `test_package_pack_arcmap.py` 在 Windows 中文代码页上读 `package.json` 就报错，ArcMap、ArcGIS Pro 真机用例跑不到。
+- 修复直接运行脚本且 stdout 被重定向时，在中文代码页或 ASCII 区域设置下因写不出 `m²` 这类字符而报 `UnicodeEncodeError`、退出非 0（如 `topo.py` 退出 2）。公开脚本在管道和文件上的 stdout、stderr 现在固定 UTF-8，与经 `gis.py` 运行一致；**这改变了重定向时的字节**：此前是系统代码页。终端保持原编码（Windows 控制台本来就正常显示中文），设了 `PYTHONIOENCODING` 就按它，写不出的字符转义而不崩溃。说明见 `references/runtime-environment.md`。新模块 `_stdio.py`，静态检查要求每个公开脚本先调用它；测试读子进程输出也改用 UTF-8。
 - `raster.py <操作> --help` 列出这个操作的 `--params`，内容直接取自 references，不再只有通用用法。
 - `buffer.py` 缓冲后范围跨 UTM 带时，报错说明可以用 `--analysis-crs` 和具体的 CRS。
 - `references/style-read.md` 写明读出的文档可能没有 `extent`、`pack` 要加 `--full`，以及 `--data` 可以写 `@根名/...`。

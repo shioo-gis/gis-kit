@@ -17,7 +17,7 @@ sys.path.insert(0, str(SCRIPTS))
 
 
 def cli(*args, success=True):
-    result = subprocess.run([sys.executable, str(SCRIPTS/'join.py'), *map(str, args)], capture_output=True, text=True,
+    result = subprocess.run([sys.executable, str(SCRIPTS/'join.py'), *map(str, args)], capture_output=True, encoding='utf-8', errors='replace',
                             env={**os.environ, 'PYTHONDONTWRITEBYTECODE': '1'})
     assert (result.returncode == 0) == success, result.stdout+result.stderr
     return result

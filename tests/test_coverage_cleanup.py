@@ -38,7 +38,7 @@ def cli(root, name, operation, source, parameters, right=None, success=True):
     dest = root / name
     command = [sys.executable, str(SCRIPTS / 'daily.py'), operation, str(source), '--params', str(spec), '--output', str(dest)]
     if right is not None: command += ['--right', str(right)]
-    proc = subprocess.run(command, capture_output=True, text=True, env={**os.environ, 'PYTHONDONTWRITEBYTECODE': '1'})
+    proc = subprocess.run(command, capture_output=True, encoding='utf-8', errors='replace', env={**os.environ, 'PYTHONDONTWRITEBYTECODE': '1'})
     if (proc.returncode == 0) != success: raise AssertionError(proc.stdout + proc.stderr)
     if not success:
         if dest.exists(): raise AssertionError('Failed operation published a bundle')

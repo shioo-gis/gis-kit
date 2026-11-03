@@ -29,7 +29,7 @@ def run_terrain(tmp_path, *budget):
     (tmp_path/'p.json').write_text(json.dumps(P), encoding='utf-8')
     return subprocess.run([sys.executable, str(SCRIPTS/'gis.py'), *budget, 'terrain', str(dem(tmp_path/'dem.tif')),
                            '--params', str(tmp_path/'p.json'), '--output', str(tmp_path/'out')],
-                          capture_output=True, text=True)
+                          capture_output=True, encoding='utf-8', errors='replace')
 
 
 @pytest.mark.parametrize('text,expected', [('1048576', 2**20), ('2GiB', 2*2**30), ('512 MB', 512*10**6),
@@ -118,7 +118,7 @@ def vectors(path, n=2000):
 
 def gis(*args, budget='64KiB'):
     return subprocess.run([sys.executable, str(SCRIPTS/'gis.py'), '--memory-budget', budget, *map(str, args)],
-                          capture_output=True, text=True)
+                          capture_output=True, encoding='utf-8', errors='replace')
 
 
 def budget_record(result):

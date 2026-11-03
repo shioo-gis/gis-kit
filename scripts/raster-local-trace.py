@@ -157,4 +157,7 @@ def main():
     try:print(json.dumps(run(args.image,args.output,args.bounds,args.preprocess,args.threshold,args.min_length,args.simplify,args.start,args.end,args.snap)))
     except (ValueError,OSError) as exc:p.exit(2,f'Error: {exc}\n')
 
-if __name__=='__main__':main()
+if __name__=='__main__':
+    import _stdio
+    _stdio.utf8()
+    main()

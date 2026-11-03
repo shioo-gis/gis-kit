@@ -30,7 +30,7 @@ spec.loader.exec_module(semantic)
 
 def cli(*args, cwd=None, site=True):
     return subprocess.run([sys.executable, *([] if site else ['-S']), str(SCRIPTS / 'gis.py'),
-                           *map(str, args)], cwd=cwd, text=True, capture_output=True,
+                           *map(str, args)], cwd=cwd, encoding='utf-8', errors='replace', capture_output=True,
                           env={**os.environ, 'PYTHONDONTWRITEBYTECODE': '1'})
 
 
@@ -59,7 +59,7 @@ def test_discovery_no_site_packages_and_help_passthrough():
     network = next(c for c in commands if c['name'] == 'network')
     assert 'references/network-access.md' in network['references']
     assert all(not c['name'].startswith('_') for c in gis.catalog())
-    native = subprocess.run([sys.executable, str(SCRIPTS / 'network.py'), '--help'], text=True, capture_output=True)
+    native = subprocess.run([sys.executable, str(SCRIPTS / 'network.py'), '--help'], encoding='utf-8', errors='replace', capture_output=True)
     forwarded = cli('network', '--help')
     assert forwarded.returncode == native.returncode == 0
     assert forwarded.stdout == native.stdout and forwarded.stderr == native.stderr
@@ -435,13 +435,13 @@ def test_trace_preparation_and_distillation_without_gis_imports(tmp_path, record
     # so passing -S to the wrapper alone would not prove this boundary.
     made = subprocess.run([sys.executable, '-S', str(SCRIPTS / 'recipe.py'),
         'from-trace', str(tmp_path / 'trace'), '--output', str(tmp_path / 'draft.json')],
-        text=True, capture_output=True)
+        encoding='utf-8', errors='replace', capture_output=True)
     assert made.returncode == 0, made.stderr
     args = ['grid', str(source), '--params', str(params), '--output', str(tmp_path / 'unused')]
     code = (f'import sys; sys.path.insert(0, {str(SCRIPTS)!r}); '
             f'import _execution_trace as t; t.prepare("daily", {args!r}); '
             'assert not {"geopandas", "numpy", "rasterio", "pyogrio", "shapely"} & set(sys.modules)')
-    prepared = subprocess.run([sys.executable, '-S', '-c', code], text=True, capture_output=True)
+    prepared = subprocess.run([sys.executable, '-S', '-c', code], encoding='utf-8', errors='replace', capture_output=True)
     assert prepared.returncode == 0, prepared.stderr
 
 

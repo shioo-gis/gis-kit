@@ -32,7 +32,7 @@ def main():
     parser=argparse.ArgumentParser(description=__doc__);parser.add_argument('run');parser.add_argument('output');parser.add_argument('--pysal-python',required=True);parser.add_argument('--pysal-site',required=True);parser.add_argument('--pysal-proj',required=True);parser.add_argument('--places',required=True,type=Path);parser.add_argument('--terrain-root',required=True,type=Path);v=parser.parse_args()
     root=Path(v.run);out=Path(v.output).resolve();out.mkdir(exist_ok=False,parents=True);inp=out/'inputs';inp.mkdir();times=[];started=time.perf_counter()
     def cli(script,argv,tag):
-        start=time.perf_counter();p=subprocess.run([sys.executable,str(S/script),*map(str,argv)],capture_output=True,text=True,env=dict(os.environ,PYTHONDONTWRITEBYTECODE='1'));(out/f'{tag}.log').write_text(p.stdout+p.stderr, encoding='utf-8');p.check_returncode();times.append(dict(task=tag,seconds=time.perf_counter()-start))
+        start=time.perf_counter();p=subprocess.run([sys.executable,str(S/script),*map(str,argv)],capture_output=True,encoding='utf-8', errors='replace',env=dict(os.environ,PYTHONDONTWRITEBYTECODE='1'));(out/f'{tag}.log').write_text(p.stdout+p.stderr, encoding='utf-8');p.check_returncode();times.append(dict(task=tag,seconds=time.perf_counter()-start))
     roads=json.loads((root/'osm-roads.json').read_text(encoding='utf-8'));nodes={e['id']:(e['lon'],e['lat']) for e in roads['elements'] if e['type']=='node'};rows=[];excluded=[]
     for e in roads['elements']:
         if e['type']!='way':continue

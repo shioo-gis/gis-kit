@@ -60,7 +60,7 @@ WITHOUT_EZDXF = ("import runpy, sys; sys.modules['ezdxf'] = None; sys.path.inser
 def inspect(source, out, *extra, success=True, ezdxf=True):
     command = [sys.executable, str(SCRIPTS/'cad.py')] if ezdxf else [sys.executable, '-c', WITHOUT_EZDXF, str(SCRIPTS)]
     result = subprocess.run([*command, 'inspect', str(source), '--output', str(out), *map(str, extra)],
-                            capture_output=True, text=True, env={**os.environ, 'PYTHONDONTWRITEBYTECODE': '1'})
+                            capture_output=True, encoding='utf-8', errors='replace', env={**os.environ, 'PYTHONDONTWRITEBYTECODE': '1'})
     assert (result.returncode == 0) == success, result.stdout+result.stderr
     return (json.loads((out/'cad.json').read_text(encoding='utf-8')) if success else result.stderr)
 
@@ -266,7 +266,7 @@ def test_reference_must_be_projected_in_metres(tmp_path):
 
 def assign(source, out, *extra, success=True):
     result = subprocess.run([sys.executable, str(SCRIPTS/'cad.py'), 'assign-crs', str(source), '--output', str(out), *map(str, extra)],
-                            capture_output=True, text=True, env={**os.environ, 'PYTHONDONTWRITEBYTECODE': '1'})
+                            capture_output=True, encoding='utf-8', errors='replace', env={**os.environ, 'PYTHONDONTWRITEBYTECODE': '1'})
     assert (result.returncode == 0) == success, result.stdout+result.stderr
     return json.loads((out/'manifest.json').read_text(encoding='utf-8')) if success else result.stderr
 
@@ -276,7 +276,7 @@ def converted(tmp_path, entities, name='drawing', **options):
     source = dxf(tmp_path/f'{name}.dxf', entities, **options)
     inspect(source, tmp_path/f'{name}-inspect')
     gpkg = tmp_path/f'{name}.gpkg'
-    run = subprocess.run([sys.executable, str(SCRIPTS/'convert.py'), str(source), '--output', str(gpkg)], capture_output=True, text=True)
+    run = subprocess.run([sys.executable, str(SCRIPTS/'convert.py'), str(source), '--output', str(gpkg)], capture_output=True, encoding='utf-8', errors='replace')
     assert run.returncode == 0, run.stdout+run.stderr
     return gpkg, tmp_path/f'{name}-inspect'
 
@@ -332,7 +332,7 @@ def test_assign_crs_refuses_a_candidate_that_needs_unit_scaling(tmp_path):
 def extract(source, out, *extra, success=True, ezdxf=True):
     command = [sys.executable, str(SCRIPTS/'cad.py')] if ezdxf else [sys.executable, '-c', WITHOUT_EZDXF, str(SCRIPTS)]
     result = subprocess.run([*command, 'extract', str(source), '--output', str(out), *map(str, extra)],
-                            capture_output=True, text=True, env={**os.environ, 'PYTHONDONTWRITEBYTECODE': '1'})
+                            capture_output=True, encoding='utf-8', errors='replace', env={**os.environ, 'PYTHONDONTWRITEBYTECODE': '1'})
     assert (result.returncode == 0) == success, result.stdout+result.stderr
     return json.loads((out/'manifest.json').read_text(encoding='utf-8')) if success else result.stderr
 
@@ -471,7 +471,7 @@ def rect(x, y, w, h, gap=0.0):
 def polygonize(source, out, *extra, success=True, snap=0.05, max_gap=0.5, min_area=10):
     result = subprocess.run([sys.executable, str(SCRIPTS/'cad.py'), 'polygonize', str(source), '--output', str(out),
                              '--snap', str(snap), '--max-gap', str(max_gap), '--min-area', str(min_area), *map(str, extra)],
-                            capture_output=True, text=True, env={**os.environ, 'PYTHONDONTWRITEBYTECODE': '1'})
+                            capture_output=True, encoding='utf-8', errors='replace', env={**os.environ, 'PYTHONDONTWRITEBYTECODE': '1'})
     assert (result.returncode == 0) == success, result.stdout+result.stderr
     return json.loads((out/'manifest.json').read_text(encoding='utf-8')) if success else result.stderr
 
@@ -622,7 +622,7 @@ def label_drawing(path):
 
 def run_label(faces, texts, rules, out, success=True):
     result = subprocess.run([sys.executable, str(SCRIPTS/'cad.py'), 'label', str(faces), '--texts', str(texts), '--rules', str(rules),
-                             '--output', str(out)], capture_output=True, text=True, env={**os.environ, 'PYTHONDONTWRITEBYTECODE': '1'})
+                             '--output', str(out)], capture_output=True, encoding='utf-8', errors='replace', env={**os.environ, 'PYTHONDONTWRITEBYTECODE': '1'})
     assert (result.returncode == 0) == success, result.stdout+result.stderr
     return json.loads((out/'manifest.json').read_text(encoding='utf-8')) if success else result.stderr
 
@@ -730,7 +730,7 @@ def fake_dwg2dxf(folder, body):
 def run_convert(source, out, *extra, path, oda='', success=True):
     """cad.py convert with only `path` on PATH and ODA left out (GIS_KIT_ODA empty) unless `oda` names a stand-in."""
     result = subprocess.run([sys.executable, str(SCRIPTS/'cad.py'), 'convert', str(source), '--output', str(out), *map(str, extra)],
-                            capture_output=True, text=True,
+                            capture_output=True, encoding='utf-8', errors='replace',
                             env={**os.environ, 'PATH': str(path), 'GIS_KIT_ODA': str(oda), 'PYTHONDONTWRITEBYTECODE': '1'})
     assert (result.returncode == 0) == success, result.stdout+result.stderr
     return json.loads((out/'manifest.json').read_text(encoding='utf-8')) if success else result.stderr
@@ -873,7 +873,7 @@ def xiangyuan_drawing(path):
 
 def xiangyuan(source, out, *extra, success=True):
     result = subprocess.run([sys.executable, str(SCRIPTS/'cad.py'), 'xiangyuan', str(source), '--output', str(out), *map(str, extra)],
-                            capture_output=True, text=True, env={**os.environ, 'PYTHONDONTWRITEBYTECODE': '1'})
+                            capture_output=True, encoding='utf-8', errors='replace', env={**os.environ, 'PYTHONDONTWRITEBYTECODE': '1'})
     assert (result.returncode == 0) == success, result.stdout+result.stderr
     return json.loads((out/'manifest.json').read_text(encoding='utf-8')) if success else result.stderr
 
@@ -1111,7 +1111,7 @@ def test_xiangyuan_lists_ole_frames_without_olefile(tmp_path):
     hide = ("import runpy, sys; sys.modules['olefile'] = None; sys.argv = sys.argv[1:]; "
             "sys.path.insert(0, sys.argv[0].rsplit('/', 1)[0]); runpy.run_path(sys.argv[0], run_name='__main__')")
     result = subprocess.run([sys.executable, '-c', hide, str(SCRIPTS/'cad.py'), 'xiangyuan', str(source), '--units', 'm',
-                             '--output', str(tmp_path/'out')], capture_output=True, text=True)
+                             '--output', str(tmp_path/'out')], capture_output=True, encoding='utf-8', errors='replace')
     assert result.returncode == 0, result.stderr
     manifest = json.loads((tmp_path/'out'/'manifest.json').read_text(encoding='utf-8'))
     assert any('2 OLE objects are listed without their contents: olefile is not installed' in w for w in manifest['warnings'])
@@ -1122,7 +1122,7 @@ def test_xiangyuan_lists_ole_frames_without_olefile(tmp_path):
 
 def overlay(source, out, *extra, success=True):
     result = subprocess.run([sys.executable, str(SCRIPTS/'cad.py'), 'overlay', str(source), '--output', str(out), *map(str, extra)],
-                            capture_output=True, text=True, env={**os.environ, 'PYTHONDONTWRITEBYTECODE': '1'})
+                            capture_output=True, encoding='utf-8', errors='replace', env={**os.environ, 'PYTHONDONTWRITEBYTECODE': '1'})
     assert (result.returncode == 0) == success, result.stdout+result.stderr
     return json.loads((out/'manifest.json').read_text(encoding='utf-8')) if success else result.stderr
 
@@ -1256,7 +1256,7 @@ def test_extract_hatches_fill_by_style_and_keep_pattern(tmp_path):
 
 def compare(faces, fills, out, *extra, success=True):
     result = subprocess.run([sys.executable, str(SCRIPTS/'cad.py'), 'compare-fills', str(faces), '--fills', str(fills),
-                             '--output', str(out), *map(str, extra)], capture_output=True, text=True)
+                             '--output', str(out), *map(str, extra)], capture_output=True, encoding='utf-8', errors='replace')
     assert (result.returncode == 0) == success, result.stdout+result.stderr
     return json.loads((out/'manifest.json').read_text(encoding='utf-8')) if success else result.stderr
 
@@ -1371,7 +1371,7 @@ def unprefixed(tmp_path):
     source = dxf(tmp_path/'bare-site.dxf', site(495_000, 2_490_000))
     inspect(source, tmp_path/'inspect', '--reference', reference(tmp_path/'range.gpkg', 'EPSG:4547', (494_000, 2_489_000, 497_000, 2_492_000)))
     gpkg = tmp_path/'bare-site.gpkg'
-    run = subprocess.run([sys.executable, str(SCRIPTS/'convert.py'), str(source), '--output', str(gpkg)], capture_output=True, text=True)
+    run = subprocess.run([sys.executable, str(SCRIPTS/'convert.py'), str(source), '--output', str(gpkg)], capture_output=True, encoding='utf-8', errors='replace')
     assert run.returncode == 0, run.stdout+run.stderr
     return gpkg, tmp_path/'inspect'
 

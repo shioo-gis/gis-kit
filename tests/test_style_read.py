@@ -27,7 +27,7 @@ import pack_fixture  # noqa: E402
 
 
 def run_cli(*args):
-    return subprocess.run([sys.executable, str(SCRIPTS / 'package.py'), *map(str, args)], capture_output=True, text=True,
+    return subprocess.run([sys.executable, str(SCRIPTS / 'package.py'), *map(str, args)], capture_output=True, encoding='utf-8', errors='replace',
                           env={**os.environ, 'PYTHONDONTWRITEBYTECODE': '1'})
 
 

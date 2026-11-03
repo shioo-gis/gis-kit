@@ -42,7 +42,7 @@ def main():
     hashes=[]; times=[]; records=[]
     for i in range(3):
         started=time.perf_counter()
-        result=subprocess.run([sys.executable,str(SCRIPTS/'terrain.py'),str(source),'--params',str(out/'params.json'),'--output',str(out/f'run{i}')],capture_output=True,text=True,env=dict(os.environ,PYTHONDONTWRITEBYTECODE='1'))
+        result=subprocess.run([sys.executable,str(SCRIPTS/'terrain.py'),str(source),'--params',str(out/'params.json'),'--output',str(out/f'run{i}')],capture_output=True,encoding='utf-8', errors='replace',env=dict(os.environ,PYTHONDONTWRITEBYTECODE='1'))
         (out/f'cli{i}.log').write_text(result.stdout+result.stderr, encoding='utf-8'); result.check_returncode(); times.append(time.perf_counter()-started)
         h={}; arrays={}
         for name, exp in expected.items():

@@ -20,7 +20,7 @@ needs_bsdtar = pytest.mark.skipif(shutil.which('bsdtar') is None, reason='bsdtar
 
 
 def cli(*args, success=True):
-    result = subprocess.run([sys.executable, str(SCRIPTS/'package.py'), *map(str, args)], capture_output=True, text=True,
+    result = subprocess.run([sys.executable, str(SCRIPTS/'package.py'), *map(str, args)], capture_output=True, encoding='utf-8', errors='replace',
                             env={**os.environ, 'PYTHONDONTWRITEBYTECODE': '1'})
     assert (result.returncode == 0) == success, result.stdout+result.stderr
     return json.loads((Path(args[args.index('--output') + 1])/'package.json').read_text(encoding='utf-8')) if success else result.stderr

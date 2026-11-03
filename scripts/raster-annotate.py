@@ -891,4 +891,6 @@ def main():
         parser.exit(2,f'Error: {exc}\n')
 
 if __name__=='__main__':
+    import _stdio
+    _stdio.utf8()
     main()

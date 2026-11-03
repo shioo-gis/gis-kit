@@ -89,7 +89,7 @@ def main(source, output):
         command=[sys.executable,str(S/'network.py'),str(output/'roads.gpkg'),'--origins',str(output/'demand.gpkg'),
                  '--facilities',str(output/'facilities.gpkg'),'--params',str(params),'--access-areas',str(output/'areas.gpkg'),
                  '--barriers',str(output/'barriers.gpkg'),'--output',str(dest)]
-        completed=subprocess.run(command,text=True,capture_output=True,env={**os.environ,'PYTHONDONTWRITEBYTECODE':'1'})
+        completed=subprocess.run(command,encoding='utf-8', errors='replace',capture_output=True,env={**os.environ,'PYTHONDONTWRITEBYTECODE':'1'})
         (output/f'cli-{budget}.json').write_text(json.dumps(dict(command=command,returncode=completed.returncode,
                                                               stdout=completed.stdout,stderr=completed.stderr),indent=2), encoding='utf-8')
         if completed.returncode:raise RuntimeError(completed.stderr)

@@ -99,6 +99,8 @@ def execute(source,p,output,backend):
 
 
 if __name__=='__main__':
+    import _stdio
+    _stdio.utf8()
     a=argparse.ArgumentParser(description=__doc__);a.add_argument('input');a.add_argument('--params',required=True);a.add_argument('--output',required=True);a.add_argument('--backend-python',default=sys.executable);a.add_argument('--backend-site-packages');a.add_argument('--backend-proj-data');v=a.parse_args()
     try:execute(v.input,json.loads(Path(v.params).read_text(encoding='utf-8')),v.output,dict(python=v.backend_python,site_packages=v.backend_site_packages,proj_data=v.backend_proj_data))
     except (ValueError,KeyError,TypeError,OSError) as e:a.exit(1,f'ERROR: {e}\n')

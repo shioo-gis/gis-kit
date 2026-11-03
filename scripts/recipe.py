@@ -190,4 +190,7 @@ def main():
         print(json.dumps(execute(a.recipe,a.output,a.cache,json.loads(Path(a.bindings).read_text(encoding='utf-8')) if a.bindings else None)))
     except (ValueError,OSError,KeyError,TypeError) as e:p.exit(1,f'ERROR: {e}\n')
 
-if __name__=='__main__':main()
+if __name__=='__main__':
+    import _stdio
+    _stdio.utf8()
+    main()

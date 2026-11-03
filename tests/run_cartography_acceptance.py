@@ -46,7 +46,7 @@ def execute(args):
             spec=root/(name+'.json');write_json(spec,p);dest=root/name
             cmd=[sys.executable,str(SCRIPTS/script)]+([op] if script=='daily.py' else [])+[str(source),'--params',str(spec),'--output',str(dest)]
             if right:cmd+=['--right',str(right)]
-            t=time.monotonic();result=subprocess.run(cmd,capture_output=True,text=True,env={**os.environ,'PYTHONDONTWRITEBYTECODE':'1'})
+            t=time.monotonic();result=subprocess.run(cmd,capture_output=True,encoding='utf-8', errors='replace',env={**os.environ,'PYTHONDONTWRITEBYTECODE':'1'})
             (root/(name+'.log')).write_text(result.stdout+result.stderr, encoding='utf-8')
             if result.returncode:raise RuntimeError(f'{name}: {result.stderr}')
             record=json.loads((dest/'record.json').read_text(encoding='utf-8'));artifact=dest/record.get('artifact',{}).get('name','objects.gpkg')

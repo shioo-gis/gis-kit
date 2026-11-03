@@ -82,4 +82,7 @@ def main():
         annotation.write(args.output,result)
         print(json.dumps({'output':args.output,'status':result['status']}))
     except (ValueError,KeyError,TypeError,OSError) as exc: p.exit(1,f'ERROR: {exc}\n')
-if __name__=='__main__': main()
+if __name__=='__main__':
+    import _stdio
+    _stdio.utf8()
+    main()

@@ -13,7 +13,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def run(*args: str) -> None:
-    subprocess.run([sys.executable, *args], cwd=ROOT, check=True, capture_output=True, text=True)
+    subprocess.run([sys.executable, *args], cwd=ROOT, check=True, capture_output=True, encoding='utf-8', errors='replace')
 
 
 def main() -> None:

@@ -65,7 +65,7 @@ def main():
                        "(1 if sys.platform=='darwin' else 1024)),file=sys.stderr)")
             cmd = [sys.executable, '-c', wrapper, *cmd[1:]]
         start = time.monotonic()
-        result = subprocess.run(cmd, capture_output=True, text=True, env=env)
+        result = subprocess.run(cmd, capture_output=True, encoding='utf-8', errors='replace', env=env)
         seconds = time.monotonic()-start
         item = dict(name=name, command=cmd, returncode=result.returncode, seconds=seconds,
                     stdout=result.stdout, stderr=result.stderr)
