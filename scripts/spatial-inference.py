@@ -8,7 +8,6 @@ import subprocess
 import sys
 import tempfile
 import time
-import resource
 import numpy as np
 import geopandas as gpd
 from scipy.spatial import cKDTree
@@ -19,6 +18,7 @@ from rasterio.transform import from_origin
 from _daily import stable,number
 from _metric import analysis_frame
 from _delivery import bundle,digest,write_json
+from _peak_rss import peak_rss_bytes
 from _safe_io import iter_vector_chunks, write_vector_atomic
 from raster import band_matches
 from daily import fingerprint,clean
@@ -93,7 +93,7 @@ def execute(source,p,output,backend):
     if p['operation'] not in ('infer','kde') or set(p)-(base|extra):raise ValueError('Unknown inference parameter')
     with bundle(output) as stage:
         details=infer(frame,xy,p,stage,backend) if p['operation']=='infer' else kde(frame,xy,factor,p,stage)
-        resources={k:resource.getrusage(who).ru_maxrss*(1 if sys.platform=='darwin' else 1024) for k,who in [('self_max_rss_bytes',resource.RUSAGE_SELF),('completed_child_max_rss_bytes',resource.RUSAGE_CHILDREN)]}
+        resources=dict(self_max_rss_bytes=peak_rss_bytes(),completed_child_max_rss_bytes=peak_rss_bytes(children=True))
         if before!=fingerprint(source):raise ValueError('Input changed')
         write_json(stage/'record.json',clean(dict(status='candidate',parameters=p,input_sha256=before,details=details,resources=resources,wall_seconds=time.perf_counter()-started,implementation={n:digest(Path(__file__).with_name(n)) for n in ('spatial-inference.py','_pysal_worker.py')},artifacts={f.name:digest(f) for f in stage.iterdir()})))
 

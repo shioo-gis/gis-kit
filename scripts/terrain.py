@@ -3,7 +3,6 @@
 import argparse
 import json
 from pathlib import Path
-import resource
 import sys
 import time
 
@@ -15,6 +14,7 @@ from scipy.ndimage import correlate, minimum_filter, maximum_filter
 
 from _budget import check_raster
 from _delivery import bundle, digest, write_json
+from _peak_rss import peak_rss_bytes
 from raster import inspect, band_data, positive_integer
 
 
@@ -127,7 +127,6 @@ def execute(source, params, output):
             artifacts[name] = {'file': path.name, 'sha256': digest(path), 'summary': summary(values), 'unit': unit}
         if digest(source) != identity or implementation != {n: digest(Path(__file__).with_name(n)) for n in implementation}:
             raise ValueError('Source or implementation changed during execution')
-        rss = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
         write_json(stage/'record.json', {'schema_version': 1, 'status': 'complete',
             'source': {'name': source.name, 'sha256': identity, 'grid': meta}, 'parameters': params,
             'method': 'Horn 3x3; downhill aspect clockwise from grid north; 3x3 max-minus-min relief'
@@ -139,7 +138,7 @@ def execute(source, params, output):
             'environment': {'python': sys.version, 'numpy': np.__version__, 'scipy': scipy.__version__,
                             'rasterio': rio.__version__, 'gdal': rio.__gdal_version__},
             'implementation': implementation, 'resources': {'wall_seconds': time.perf_counter()-started,
-            'max_rss_bytes': rss if sys.platform == 'darwin' else rss*1024,
+            'max_rss_bytes': peak_rss_bytes(),
             'rss_scope': 'process lifetime high-water mark; excludes child processes'}})
     return Path(output)
 

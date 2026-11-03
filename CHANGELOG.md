@@ -6,6 +6,7 @@
 - 修复 Windows 上的文件读写：工具读写文本（`--params`、`package.json`、`<id>.map-style.json` 等）都明确用 UTF-8，不再用系统代码页。此前 `package.py read` 遇到中文必然失败。`batch.py`、`recipe.py` 读子工具输出也固定 UTF-8。
 - `package.py` 的 7-Zip 列表在 Windows 上也用 `/` 分隔路径。
 - 修复 Windows 上 `batch.py` 的 `--command`、`--runner`、`--args` 和 `benchmark.py` 的 `--case` 吃掉路径里的反斜杠（`C:\Users\...` 变成 `C:Users...`）；`--dry-run` 显示的就是 Windows 实际运行的命令行。
+- 修复 Windows 上 `network`、`terrain`、`terrain-cost`、`terrain-detail`、`suitability`、`hydro-review`、`nonlinear-georef`、`spatial-inference` 和 GRASS 工作进程一启动就报 `No module named 'resource'`。`record.json` 和 `worker.json` 里的内存峰值字段（`max_rss_bytes` 等）在 Windows 上是 `null`，表示没有测到；其它平台的数值和单位不变。
 - `package.py unpack` 清单的 `layers[].file`、`layer_versions`、`thumbnail` 在 Windows 上也用 `/` 分隔路径。
 - `buffer.py` 不再触发 geopandas 1.2 的 `resolution` 弃用警告，同时兼容之前的版本（它们不接受 `quad_segs`）。
 - 测试读写文本也明确用 UTF-8（静态检查范围扩到 `tests/`）：此前 `test_package_pack_arcmap.py` 在 Windows 中文代码页上读 `package.json` 就报错，ArcMap、ArcGIS Pro 真机用例跑不到。

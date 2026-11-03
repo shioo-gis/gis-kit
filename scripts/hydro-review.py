@@ -2,8 +2,6 @@
 """Frozen-tolerance comparison of reference river lines and candidate stream pixels."""
 import argparse
 import json
-import resource
-import sys
 import time
 from pathlib import Path
 import numpy as np
@@ -12,6 +10,7 @@ import rasterio as rio
 from scipy.spatial import cKDTree
 from _daily import geometry,number
 from _delivery import bundle,digest,write_json
+from _peak_rss import peak_rss_bytes
 from _safe_io import write_vector_atomic
 from _metric import _horizontal_meters_per_unit
 from pyproj import CRS
@@ -59,7 +58,7 @@ def execute(rivers,streams,p,output):
     with bundle(output) as stage:
         write_vector_atomic(samples,stage/'samples.gpkg')
         if hashes!=[fingerprint(rivers),digest(streams)]:raise ValueError('Input changed')
-        write_json(stage/'record.json',dict(status='pass' if all(r['status']=='pass' for r in reports) else 'hold',policy=p,reaches=reports,input_hashes=hashes,scope='Sample-to-stream-cell-centre proximity only. Does not establish outlet identity, flow topology, historical river location or ground truth.',resources=dict(wall_seconds=time.perf_counter()-started,max_rss_bytes=resource.getrusage(resource.RUSAGE_SELF).ru_maxrss*(1 if sys.platform=='darwin' else 1024)),implementation=digest(__file__)))
+        write_json(stage/'record.json',dict(status='pass' if all(r['status']=='pass' for r in reports) else 'hold',policy=p,reaches=reports,input_hashes=hashes,scope='Sample-to-stream-cell-centre proximity only. Does not establish outlet identity, flow topology, historical river location or ground truth.',resources=dict(wall_seconds=time.perf_counter()-started,max_rss_bytes=peak_rss_bytes()),implementation=digest(__file__)))
 
 
 if __name__=='__main__':
