@@ -24,9 +24,10 @@ from rasterio.merge import merge
 from shapely.geometry import box, mapping
 from _budget import check_raster, check_vector, raster_bytes, require
 from _daily import stable
-from _core import clean, reproject as reproject_vector
+from _core import report_warnings, reproject as reproject_vector, write_record
+from _delivery import fact
 from _delivery import fingerprint, implementation_hashes
-from _grid import band_data, band_matches, check_band, clip_grid_to_world, guard_pixels, inspect, positive_integer, warp_can_stream, warp_output_type, windows
+from _grid import band_data, band_matches, check_band, clip_grid_to_world, grid_facts, guard_pixels, inspect, pole_outside_target, positive_integer, warp_can_stream, warp_output_type, windows
 import _raster_numeric as numeric
 import _raster_cleanup as cleanup
 
@@ -52,8 +53,8 @@ def warp_window(ds, bounds):
     return Window(col0,row0,col1-col0,row1-row0)
 
 
-def zonal(ds,zones,p):
-    stable(zones,p['id']); zones=reproject_vector(zones,ds.crs,purpose='align')
+def zonal(ds,zones,p,facts=None):
+    stable(zones,p['id']); zones=reproject_vector(zones,ds.crs,purpose='align',facts=facts)
     if not zones.geom_type.isin(['Polygon','MultiPolygon']).all() or not zones.geometry.is_valid.all(): raise ValueError('Valid polygon zones required')
     mode=p.get('method','center')
     if mode not in ('center','all_touched','fractional'): raise ValueError('Unknown pixel coverage method')
@@ -83,10 +84,12 @@ def zonal(ds,zones,p):
     return {'method':mode,'area_unit':'pixel fractions, not square metres','zones':records}
 
 
-def process(operation,paths,p,stage):
+def process(operation,paths,p,stage,facts=None):
+    facts=[] if facts is None else facts
     with ExitStack() as stack:
         datasets=[stack.enter_context(rio.open(path)) for path in paths]
         ds=datasets[0]; meta=inspect(ds)
+        for i,x in enumerate(datasets): facts.extend(grid_facts(x,p.get('band',1) if i==0 and isinstance(p.get('band',1),int) else 1,operation,p))
         if operation not in ('mosaic', *numeric.OPERATIONS, *cleanup.OPERATIONS) and len(datasets)!=1: raise ValueError('This operation accepts one raster')
         limit=positive_integer(p.get('max_pixels',50000000))
         window=warp_window(ds,p.get('bounds')) if operation=='warp' and p.get('bounds') is not None else None
@@ -108,8 +111,8 @@ def process(operation,paths,p,stage):
         if operation in ('zonal','sample'):
             check_vector(p['vector'],p.get('layer')); vectors=gpd.read_file(p['vector'],layer=p.get('layer')); stable(vectors,p['id'])
             if vectors.crs is None: raise ValueError('Vector requires CRS')
-            if operation=='zonal': return zonal(ds,vectors,p)
-            vectors=reproject_vector(vectors,ds.crs,purpose='align')
+            if operation=='zonal': return zonal(ds,vectors,p,facts)
+            vectors=reproject_vector(vectors,ds.crs,purpose='align',facts=facts)
             if not vectors.geom_type.eq('Point').all(): raise ValueError('Sampling requires points')
             rows=[]
             for ident,point in zip(vectors[p['id']],vectors.geometry):
@@ -158,6 +161,11 @@ def process(operation,paths,p,stage):
                 guard_pixels(src_width*src_height,limit,f'{Path(ds.name).name} ({src_width} x {src_height})',way_out='This raster has an internal mask or stray non-finite values, so warp reads it whole; set NoData explicitly, or use smaller bounds')
                 require(raster_bytes(src_width,src_height,arrays=WARP_ARRAY_COPIES)+size_of_output,basis='decoded_pixels',input=ds.name)
             profile.update(crs=crs,transform=transform,width=width,height=height,dtype=dtype,nodata=nodata)
+            if dtype!=ds.dtypes[band-1]: facts.append(fact('dtype_promoted','info',f'The result is {dtype}, not the source {ds.dtypes[band-1]}: '+('interpolated values need fractions.' if method in ('bilinear','cubic','average') else 'pixels outside the source need a NoData value and none is declared.'),source=ds.dtypes[band-1],result=dtype))
+            if world_clip is not None: facts.append(fact('target_grid_trimmed','warning',f'The target grid {[round(v,1) for v in world_clip]} was trimmed to the Web Mercator world square.',requested_bounds=world_clip))
+            target_bounds=rio.transform.array_bounds(height,width,transform)
+            cap=pole_outside_target(ds.crs,src_bounds,crs,target_bounds) if operation=='warp' else None
+            if cap is not None: facts.append(cap)
             output=np.full((height,width),nodata,dtype=dtype)
             if streamed:
                 # A bounded block cache keeps the peak independent of the source size.
@@ -205,7 +213,7 @@ def process(operation,paths,p,stage):
                 if operation=='clip':
                     check_vector(p['vector'],p.get('layer')); vector=gpd.read_file(p['vector'],layer=p.get('layer'))
                     if vector.crs is None or not vector.geometry.is_valid.all(): raise ValueError('Valid mask CRS/geometries required')
-                    geometries=[mapping(g) for g in reproject_vector(vector,ds.crs,purpose='align').geometry]
+                    geometries=[mapping(g) for g in reproject_vector(vector,ds.crs,purpose='align',facts=facts).geometry]
                 for win in windows(ds.width,ds.height,size):
                     values=band_data(ds,band,win); data=values.filled(np.nan)
                     if operation=='clip':
@@ -258,11 +266,11 @@ def execute(args):
     destination.parent.mkdir(parents=True,exist_ok=True)
     stage=Path(tempfile.mkdtemp(prefix='.raster-',dir=destination.parent))
     try:
-        result=process(args.operation,args.input,p,stage)
-        result.update(schema_version=1,operation=args.operation,parameters=p,inputs=[{'name':Path(x).name,'sha256':h} for x,h in zip(inputs,identities)],
-                      environment={'rasterio':rio.__version__,'gdal':rio.__gdal_version__,'numpy':np.__version__},implementation_sha256=implementation)
+        facts=[]
+        result=process(args.operation,args.input,p,stage,facts)
+        result.update(environment={'rasterio':rio.__version__,'gdal':rio.__gdal_version__,'numpy':np.__version__},implementation_sha256=implementation)
         if (stage/'result.tif').exists(): result['artifact_sha256']=fingerprint(stage/'result.tif')
-        (stage/'record.json').write_text(json.dumps(clean(result),ensure_ascii=False,indent=2,allow_nan=False)+'\n',encoding='utf-8')
+        write_record(stage,result,operation=args.operation,parameters=p,inputs=[{'name':Path(x).name,'sha256':h} for x,h in zip(inputs,identities)],facts=facts)
         for path in stage.glob('mosaic-input-*'): path.unlink()
         if implementation!=implementation_hashes(__file__): raise ValueError('Implementation changed during processing')
         if identities!=[fingerprint(x) for x in inputs]: raise ValueError('Inputs changed during processing')
@@ -272,6 +280,7 @@ def execute(args):
             os.rename(stage,destination)
         finally: lock.rmdir()
     finally: shutil.rmtree(stage,ignore_errors=True)
+    report_warnings(facts)
     print(json.dumps({'output':str(destination),'record':'record.json'}))
 
 

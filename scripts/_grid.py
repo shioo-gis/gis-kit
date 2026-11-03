@@ -3,10 +3,16 @@ import math
 
 import numpy as np
 from pyproj import CRS, Transformer
+from rasterio.enums import MaskFlags
 from rasterio.transform import Affine
 from rasterio.windows import Window
 
+from _delivery import fact
+
 WEB_MERCATOR_BOUND=20037508.342789244
+# These read or copy values without combining them, so an undeclared sentinel stays what it was.
+_NO_BLENDING=('inspect','copy','clip','sample','histogram','display')
+_LINEAR_RESAMPLING=('bilinear','cubic','average')
 
 
 def positive_integer(value):
@@ -55,6 +61,41 @@ def planar_metres_per_unit(crs, bounds):
     factor=_horizontal_meters_per_unit(crs)
     if not right_handed(crs,bounds): raise ValueError(f'{crs.name}: x and y form a left-handed system, so aspect and hillshade would be mirrored; warp explicitly to a CRS with x clockwise of y first')
     return factor
+
+
+def nodata_unset(ds,band=1):
+    """No NoData value and no mask: every value in the band counts as data."""
+    return ds.nodata is None and MaskFlags.all_valid in ds.mask_flag_enums[band-1]
+
+
+def grid_facts(ds,band=1,operation=None,params=None):
+    """What one source grid means for an operation, in one place, so each tool does not have to rediscover it."""
+    from _metric import _SCALE_TOLERANCE, ground_scale_range
+    params=params or {}; name=str(ds.name).replace('\\','/').rsplit('/',1)[-1]; found=[]
+    if 1<=band<=ds.count and nodata_unset(ds,band):
+        blends=operation not in _NO_BLENDING and (operation not in ('warp','align') or params.get('resampling') in _LINEAR_RESAMPLING)
+        message=f'{name} band {band} has no NoData and no mask, so every value counts as data'
+        found.append(fact('nodata_unset','warning' if blends else 'info',message+('; a missing-data marker such as -9999 would be blended into the result. If it has one, mark it first: raster transform with method invalidate, or set NoData' if blends else '.'),input=name,band=band))
+    crs=CRS.from_user_input(ds.crs) if ds.crs is not None else None
+    if crs is not None and crs.to_epsg()==3857 and any(abs(v)>WEB_MERCATOR_BOUND+1e-7 for v in ds.bounds):
+        found.append(fact('grid_exceeds_world','warning',f'{name} spans {[round(v,1) for v in ds.bounds]}, beyond the Web Mercator world square +/-{WEB_MERCATOR_BOUND:.1f}.',input=name,bounds=list(ds.bounds)))
+    if crs is not None and crs.is_projected:
+        scale=ground_scale_range(crs,ds.bounds)
+        if scale is not None:
+            excess=max(scale[1]-1,1-scale[0])>_SCALE_TOLERANCE
+            found.append(fact('ground_scale_range','warning' if excess else 'info',f'{name}: one metre on the ground is {scale[0]:.3f} to {scale[1]:.3f} grid metres in this extent'+('; distances, areas and slopes read from this grid are off by that factor.' if excess else '.'),input=name,min=scale[0],max=scale[1]))
+    return found
+
+
+def pole_outside_target(source_crs,source_bounds,target_crs,target_bounds):
+    """A geographic target whose default extent stops short of a pole the source grid covers, or None."""
+    target=CRS.from_user_input(target_crs)
+    if not target.is_geographic: return None
+    x,y=Transformer.from_crs(target.geodetic_crs,source_crs,always_xy=True).transform([0.,0.],[-90.,90.])
+    for latitude,a,b,reach in ((-90,x[0],y[0],target_bounds[1]),(90,x[1],y[1],target_bounds[3])):
+        if math.isfinite(a) and math.isfinite(b) and source_bounds[0]<=a<=source_bounds[2] and source_bounds[1]<=b<=source_bounds[3] and abs(reach-latitude)>1e-6:
+            return fact('polar_cap_outside_extent','warning',f'The source covers the {latitude} degree pole, but the target grid stops at latitude {reach:.3f}; the cap beyond it is missing from the result.',latitude=latitude,reached=reach)
+    return None
 
 
 def guard_pixels(count,limit,subject,*,param='max_pixels',bytes_per_pixel=8,way_out='Work on smaller bounds or a coarser resolution'):

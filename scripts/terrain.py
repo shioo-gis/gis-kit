@@ -15,7 +15,8 @@ from scipy.ndimage import correlate, minimum_filter, maximum_filter
 from _budget import check_raster
 from _delivery import bundle, digest, implementation_hashes, write_json
 from _peak_rss import peak_rss_bytes
-from _grid import guard_pixels, inspect, band_data, planar_metres_per_unit, positive_integer
+from _core import record_facts, report_warnings
+from _grid import grid_facts, guard_pixels, inspect, band_data, planar_metres_per_unit, positive_integer
 from _metric import ground_scale_range
 
 
@@ -95,6 +96,7 @@ def execute(source, params, output):
             check_raster(ds, arrays=15 if shade else 14)
             dx, dy = t.a*metres_per_unit, -t.e*metres_per_unit
             scale = ground_scale_range(CRS(ds.crs), ds.bounds)
+            facts = grid_facts(ds, positive_integer(params.get('band', 1)), 'terrain')
             band = positive_integer(params.get('band', 1))
             if ds.units[band-1] is not None and ds.units[band-1] not in (params['vertical_unit'], {'metre':'m','foot':'ft','us_survey_foot':'us_survey_foot'}[params['vertical_unit']]):
                 raise ValueError('Band unit conflicts with declared vertical unit')
@@ -122,7 +124,7 @@ def execute(source, params, output):
             artifacts[name] = {'file': path.name, 'sha256': digest(path), 'summary': summary(values), 'unit': unit}
         if digest(source) != identity or implementation != implementation_hashes(__file__):
             raise ValueError('Source or implementation changed during execution')
-        write_json(stage/'record.json', {'schema_version': 1, 'status': 'complete',
+        write_json(stage/'record.json', {'schema_version': 1, 'status': 'complete', **record_facts(facts),
             'source': {'name': source.name, 'sha256': identity, 'grid': meta}, 'parameters': params,
             'method': 'Horn 3x3; downhill aspect clockwise from grid north; 3x3 max-minus-min relief'
                       + ('; Lambertian hillshade 0..1 (light azimuth/altitude, z_factor scales gradients)' if shade else ''),
@@ -135,6 +137,7 @@ def execute(source, params, output):
             'implementation': implementation, 'resources': {'wall_seconds': time.perf_counter()-started,
             'max_rss_bytes': peak_rss_bytes(),
             'rss_scope': 'process lifetime high-water mark; excludes child processes'}})
+    report_warnings(facts)
     return Path(output)
 
 

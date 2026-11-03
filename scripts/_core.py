@@ -17,7 +17,7 @@ from pyproj import CRS, Transformer
 import shapely
 
 from _budget import check_vector
-from _delivery import fact
+from _delivery import fact, write_json
 
 
 def read(path, layer=None, encoding='utf-8', sheet=0):
@@ -209,6 +209,23 @@ def reproject(frame, target, *, purpose: str, facts: list | None = None):
         for note in notes:
             sys.stderr.write(f'{note["severity"].upper()}: {note["message"]}\n')
     return result
+
+
+def record_facts(facts) -> dict:
+    """Findings as record fields: warnings need the reader's attention, facts only state a property of the data."""
+    return {'warnings': [item for item in facts if item['severity'] != 'info'], 'facts': [item for item in facts if item['severity'] == 'info']}
+
+
+def report_warnings(facts) -> None:
+    for item in facts:
+        if item['severity'] != 'info':
+            sys.stderr.write(f'WARNING: {item["message"]}\n')
+
+
+def write_record(directory, fields: dict, *, operation: str, parameters: dict, inputs: list, facts=()) -> None:
+    """record.json with the fields every tool shares, around what the tool adds; recipes read the tool's status and artifact as they are."""
+    write_json(Path(directory)/'record.json', clean({**fields, 'schema_version': 1, 'operation': operation, 'parameters': parameters,
+                                                     'inputs': inputs, **record_facts(facts)}))
 
 
 def _with_geometry(frame, geometries, crs):

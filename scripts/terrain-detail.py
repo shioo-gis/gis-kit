@@ -16,7 +16,8 @@ from _budget import check_raster, check_vector
 from _delivery import bundle, digest, implementation_hashes, write_json
 from _peak_rss import peak_rss_bytes
 from _safe_io import iter_vector_chunks, write_vector_atomic
-from _grid import guard_pixels, inspect, band_data, positive_integer
+from _core import record_facts, report_warnings
+from _grid import grid_facts, guard_pixels, inspect, band_data, positive_integer
 
 
 def contours(z, transform, crs, levels, limit):
@@ -75,7 +76,7 @@ def execute(source,p,output):
         guard_pixels(ds.width*ds.height,positive_integer(p.get('max_pixels',5000000)),f'{source.name} ({ds.width} x {ds.height})',way_out='Warp to a coarser resolution or clip first')
         if ds.units[0] not in (None,'m','metre'):raise ValueError('Band unit conflicts with metre')
         check_raster(ds,arrays=7)  # decode, mask, filled z and contour tracing; measured 50 bytes per pixel
-        z=band_data(ds,1).filled(np.nan)
+        z=band_data(ds,1).filled(np.nan);facts=grid_facts(ds,1,'terrain-detail')
     with bundle(output) as stage:
         artifacts={}; reports={}
         if 'levels_m' in p:
@@ -95,11 +96,12 @@ def execute(source,p,output):
             if count!=len(points):raise ValueError('Profile status readback differs')
             artifacts['profile']={'file':'profile.gpkg','rows':len(points),'sha256':digest(stage/'profile.gpkg'),'status_counts':points['sample_status'].value_counts().to_dict()}
         if hashes!=[digest(f) for f in inputs] or code!=implementation_hashes(__file__):raise ValueError('Input or implementation changed')
-        write_json(stage/'record.json',dict(schema_version=1,status='candidate',source_grid=meta,inputs=[dict(name=f.name,sha256=h) for f,h in zip(inputs,hashes)],parameters=p,
+        write_json(stage/'record.json',dict(schema_version=1,status='candidate',**record_facts(facts),source_grid=meta,inputs=[dict(name=f.name,sha256=h) for f,h in zip(inputs,hashes)],parameters=p,
             implementation=code,environment={'contourpy':contourpy.__version__,'rasterio':rio.__version__},artifacts=artifacts,reports=reports,
             assumptions=['Contours interpolate pixel centres; masked corners exclude whole quad; no extrapolation to outer raster boundary',
                          'Profile uses existing along-line sampling and containing-pixel elevations; source part measures restart; missing samples remain explicit; not surveyed observations'],
             resources={'wall_seconds':time.perf_counter()-started,'max_rss_bytes':peak_rss_bytes(),'rss_scope':'process lifetime high-water mark'}))
+    report_warnings(facts)
     return Path(output)
 
 

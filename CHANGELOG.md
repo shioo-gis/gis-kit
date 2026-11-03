@@ -2,6 +2,7 @@
 
 ## 未发布
 
+- 栅格的发现有了去处：`raster`、`terrain`、`terrain-detail` 的 `record.json` 新增 `warnings` 和 `facts`，由 `_grid.grid_facts` 统一产生（NoData 未设、地面尺度、超出世界范围、极帽缺失、类型变化），警告同时写到 stderr。`raster` 记录走共用骨架 `_core.write_record`，现有字段不变。线性重采样遇到 NoData 未设只写警告，不拒绝。`describe` 不再把有内部掩膜的栅格报成 `nodata_unset`。
 - `raster.py warp`、`align` 由 GDAL 按块读源，峰值取决于目标格网，不再随源增长；有内部掩膜、alpha、声明之外的无穷大或 NaN、64 位整数时才退回整读。**行为变化：** 结果保留源类型（float32 仍是 float32，声明了 NoData 的整数在最近邻下不变，其余用能容纳结果的最小浮点），不再一律 float64；`max_pixels` 按目标格网计。
 - 目标是 EPSG:3857 时，warp 把格网裁进世界范围，不再发布南北越界到 ±2.4 亿米的结果；记录写 `target_grid_trimmed_to_world`。`display` 越界的报错写实际范围和允许范围。
 - `max_pixels`、`max_elements` 的报错共用一处，写明像元数、限额、约需内存和办法。

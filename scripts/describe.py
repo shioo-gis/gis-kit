@@ -98,6 +98,7 @@ def describe_vector(path: Path) -> tuple[dict, list[dict]]:
 def describe_raster(path: Path) -> tuple[dict, list[dict]]:
     import numpy as np
     import rasterio
+    from _grid import nodata_unset
     warnings = []
     with rasterio.open(path) as src:
         crs = crs_card(src.crs.to_wkt()) if src.crs else None
@@ -110,10 +111,11 @@ def describe_raster(path: Path) -> tuple[dict, list[dict]]:
                   'resolution': [float(src.res[0]), float(src.res[1])] if src.transform.is_rectilinear else None,
                   'extent': _extent(src.bounds)}
         driver = src.driver
+        undeclared = all(nodata_unset(src, band) for band in src.indexes)
     if crs is None:
         warnings.append({'code': 'crs_missing', 'message': '栅格没有 CRS'})
-    if all(v is None for v in nodata):
-        warnings.append({'code': 'nodata_unset', 'message': '所有波段都未设置 NoData'})
+    if undeclared:
+        warnings.append({'code': 'nodata_unset', 'message': '所有波段都未设置 NoData，也没有掩膜'})
     return {'driver': driver, 'raster': raster}, warnings
 
 
