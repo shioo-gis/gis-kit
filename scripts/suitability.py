@@ -4,12 +4,11 @@ import argparse
 import json
 from pathlib import Path
 import time
-import resource
-import sys
 import numpy as np
 import geopandas as gpd
 from _daily import stable, number
 from _delivery import bundle, digest, write_json
+from _peak_rss import peak_rss_bytes
 from _safe_io import iter_vector_chunks, write_vector_atomic
 from daily import fingerprint, clean
 from _budget import check_vector
@@ -96,8 +95,7 @@ def execute(source,p,output):
             count+=len(back)
         if count!=len(result):raise ValueError('Scenario readback mismatch')
         if hashes!=[fingerprint(x) for x in paths]:raise ValueError('Input changed')
-        rss=resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
-        write_json(stage/'record.json',clean(dict(status='candidate',parameters=p,inputs=[dict(name=x.name,sha256=h) for x,h in zip(paths,hashes)],details=details,artifact_sha256=digest(stage/'scores.gpkg'),resources={'wall_seconds':time.perf_counter()-start,'max_rss_bytes':rss if sys.platform=='darwin' else rss*1024},implementation=digest(__file__))))
+        write_json(stage/'record.json',clean(dict(status='candidate',parameters=p,inputs=[dict(name=x.name,sha256=h) for x,h in zip(paths,hashes)],details=details,artifact_sha256=digest(stage/'scores.gpkg'),resources={'wall_seconds':time.perf_counter()-start,'max_rss_bytes':peak_rss_bytes()},implementation=digest(__file__))))
 
 
 if __name__=='__main__':

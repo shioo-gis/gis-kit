@@ -3,8 +3,6 @@
 import argparse
 import json
 from pathlib import Path
-import resource
-import sys
 import time
 
 import contourpy
@@ -16,6 +14,7 @@ from shapely.geometry import LineString
 from _daily import geometry
 from _budget import check_raster, check_vector
 from _delivery import bundle, digest, write_json
+from _peak_rss import peak_rss_bytes
 from _safe_io import iter_vector_chunks, write_vector_atomic
 from raster import inspect, band_data, positive_integer
 
@@ -95,12 +94,11 @@ def execute(source,p,output):
             if count!=len(points):raise ValueError('Profile status readback differs')
             artifacts['profile']={'file':'profile.gpkg','rows':len(points),'sha256':digest(stage/'profile.gpkg'),'status_counts':points['sample_status'].value_counts().to_dict()}
         if hashes!=[digest(f) for f in inputs] or code!={n:digest(Path(__file__).with_name(n)) for n in code}:raise ValueError('Input or implementation changed')
-        rss=resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
         write_json(stage/'record.json',dict(schema_version=1,status='candidate',source_grid=meta,inputs=[dict(name=f.name,sha256=h) for f,h in zip(inputs,hashes)],parameters=p,
             implementation=code,environment={'contourpy':contourpy.__version__,'rasterio':rio.__version__},artifacts=artifacts,reports=reports,
             assumptions=['Contours interpolate pixel centres; masked corners exclude whole quad; no extrapolation to outer raster boundary',
                          'Profile uses existing along-line sampling and containing-pixel elevations; source part measures restart; missing samples remain explicit; not surveyed observations'],
-            resources={'wall_seconds':time.perf_counter()-started,'max_rss_bytes':rss if sys.platform=='darwin' else rss*1024,'rss_scope':'process lifetime high-water mark'}))
+            resources={'wall_seconds':time.perf_counter()-started,'max_rss_bytes':peak_rss_bytes(),'rss_scope':'process lifetime high-water mark'}))
     return Path(output)
 
 

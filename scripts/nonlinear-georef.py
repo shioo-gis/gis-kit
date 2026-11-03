@@ -8,8 +8,6 @@ import time
 import os
 import shutil
 import subprocess
-import resource
-import sys
 import numpy as np
 from PIL import Image,ImageDraw
 import rasterio as rio
@@ -20,6 +18,7 @@ from rasterio.enums import ColorInterp
 from shapely import intersects_xy,segmentize,transform as transform_geometry
 from shapely.geometry import box,Point
 from _delivery import bundle,digest,write_json
+from _peak_rss import peak_rss_bytes
 from _safe_io import iter_vector_chunks
 
 spec=importlib.util.spec_from_file_location('affine_georef',Path(__file__).with_name('raster-georef.py'));affine=importlib.util.module_from_spec(spec);spec.loader.exec_module(affine)
@@ -180,7 +179,7 @@ def execute(image,gcps,p,output,backend=None,pixel_vectors=None,pixel_manifest=N
         report['transform_record']='affine.json';report['transform_record_sha256']=digest(stage/'affine.json');report['affine_implementation_sha256']=digest(affine.__file__)
         if before!=[digest(image),digest(gcps)]:raise ValueError('Source or frozen control points changed')
         report['preferred_model_by_frozen_check_rmse']='affine' if base['check']['rmse']<=rmse else 'tps';report['automatic_promotion']=False
-        report['completed_child_max_rss_bytes']=resource.getrusage(resource.RUSAGE_CHILDREN).ru_maxrss*(1 if sys.platform=='darwin' else 1024);report['max_rss_bytes']=resource.getrusage(resource.RUSAGE_SELF).ru_maxrss*(1 if sys.platform=='darwin' else 1024);report['wall_seconds']=time.perf_counter()-started;report['implementation']=digest(__file__);write_json(stage/'record.json',report)
+        report['completed_child_max_rss_bytes']=peak_rss_bytes(children=True);report['max_rss_bytes']=peak_rss_bytes();report['wall_seconds']=time.perf_counter()-started;report['implementation']=digest(__file__);write_json(stage/'record.json',report)
     return report
 
 

@@ -3,7 +3,7 @@
 Inputs are prepared reference GPKGs; policy must be frozen before DEM processing.
 This evaluates cross-product consistency, never surveyed geographic truth.
 """
-import argparse, importlib.util, json, os, resource, subprocess, sys, time
+import argparse, importlib.util, json, os, subprocess, sys, time
 from collections import deque
 from pathlib import Path
 import geopandas as gpd
@@ -19,6 +19,7 @@ matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 S=Path(__file__).resolve().parents[1]/'scripts';sys.path.insert(0,str(S))
 from _delivery import digest,write_json
+from _peak_rss import peak_rss_bytes
 spec=importlib.util.spec_from_file_location('hydro',S/'hydro-review.py');h=importlib.util.module_from_spec(spec);spec.loader.exec_module(h)
 D={1:(-1,1),2:(-1,0),3:(-1,-1),4:(0,-1),5:(1,-1),6:(1,0),7:(1,1),8:(0,1)}
 
@@ -114,6 +115,6 @@ def main():
         report=dict(resolution_m=res,status='pass' if passed and all(q['status']=='pass' for q in reaches) else 'hold',basin_gate_status='pass' if passed else 'hold',basin=metrics,raw_unsnapped_basin=raw_metrics,outlet_boundary_identity_distance_m=identity_distance,outlet_identity_status='pass' if identity_pass else 'hold',outlet_reference=policy['outlet_reference'],outlet_snapped=snapxy,snap_m=float(dist[snap]),old_reaches=reaches,cli_seconds=elapsed,dem_sha256=digest(dem),independent_catchment_readback=True);write_json(root/'acceptance.json',report);reports.append(report)
     assert implementation_before==digest(__file__)
     assert inputs=={k:digest(getattr(a,k)) for k in inputs}
-    write_json(out/'acceptance.json',dict(status='pass' if all(q['status']=='pass' and all(r['status']=='pass' for r in q['old_reaches']) for q in reports) else 'hold',runs=reports,inputs=inputs,implementation=digest(__file__),wall_seconds=time.perf_counter()-started,max_rss_bytes=resource.getrusage(resource.RUSAGE_SELF).ru_maxrss,scope=policy['limits']))
+    write_json(out/'acceptance.json',dict(status='pass' if all(q['status']=='pass' and all(r['status']=='pass' for r in q['old_reaches']) for q in reports) else 'hold',runs=reports,inputs=inputs,implementation=digest(__file__),wall_seconds=time.perf_counter()-started,max_rss_bytes=peak_rss_bytes(),scope=policy['limits']))
 
 if __name__=='__main__':main()
