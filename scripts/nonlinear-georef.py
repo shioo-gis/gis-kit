@@ -184,6 +184,8 @@ def execute(image,gcps,p,output,backend=None,pixel_vectors=None,pixel_manifest=N
 
 
 if __name__=='__main__':
+    import _stdio
+    _stdio.utf8()
     a=argparse.ArgumentParser(description=__doc__);a.add_argument('image');a.add_argument('gcps');a.add_argument('--backend-gdalwarp');a.add_argument('--params',required=True);a.add_argument('--output',required=True);a.add_argument('--pixel-vectors');a.add_argument('--pixel-manifest');a.add_argument('--vector-step-px',type=float);v=a.parse_args()
     try:execute(v.image,v.gcps,json.loads(Path(v.params).read_text(encoding='utf-8')),v.output,v.backend_gdalwarp,v.pixel_vectors,v.pixel_manifest,v.vector_step_px)
     except (ValueError,KeyError,TypeError,OSError) as e:a.exit(1,f'ERROR: {e}\n')

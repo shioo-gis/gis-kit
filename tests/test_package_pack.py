@@ -33,7 +33,7 @@ QGIS_PYTHON = os.environ.get('GIS_KIT_QGIS_PYTHON') or next(
 def run(fixture, output, *extra, success=True, env=None):
     command = [sys.executable, str(SCRIPTS / 'package.py'), 'pack', str(fixture['style']), '--output', str(output),
                '--data-root', f'basemap={fixture["basemap"]}', *map(str, extra)]
-    result = subprocess.run(command, capture_output=True, text=True,
+    result = subprocess.run(command, capture_output=True, encoding='utf-8', errors='replace',
                             env={**os.environ, 'PYTHONDONTWRITEBYTECODE': '1', 'GIS_COMPOSER_CONFIG_DIR': str(output.parent / 'no-config'),
                                  **(env or {})})
     assert (result.returncode == 0) == success, result.stdout + result.stderr
@@ -306,7 +306,7 @@ def round_two(tmp_path_factory):
 
 def run_plain(fixture, output, *extra, success=True):
     command = [sys.executable, str(SCRIPTS / 'package.py'), 'pack', str(fixture['style']), '--output', str(output), *map(str, extra)]
-    result = subprocess.run(command, capture_output=True, text=True, env={**os.environ, 'PYTHONDONTWRITEBYTECODE': '1'})
+    result = subprocess.run(command, capture_output=True, encoding='utf-8', errors='replace', env={**os.environ, 'PYTHONDONTWRITEBYTECODE': '1'})
     assert (result.returncode == 0) == success, result.stdout + result.stderr
     return json.loads((output / 'package.json').read_text(encoding='utf-8')) if success else result.stderr
 
@@ -558,14 +558,14 @@ def test_errors_are_clear(tmp_path):
     output = tmp_path / 'out'
     command = [sys.executable, str(SCRIPTS / 'package.py'), 'pack', str(fixture['style']), '--output', str(output)]
     env = {**os.environ, 'PYTHONDONTWRITEBYTECODE': '1', 'GIS_COMPOSER_CONFIG_DIR': str(tmp_path / 'no-config')}
-    missing = subprocess.run(command, capture_output=True, text=True, env=env)
+    missing = subprocess.run(command, capture_output=True, encoding='utf-8', errors='replace', env=env)
     assert missing.returncode == 1 and 'Data root @basemap has no path on this device' in missing.stderr and 'roots.json' in missing.stderr
     config = tmp_path / 'config'
     config.mkdir()
     (config / 'roots.json').write_text(json.dumps({'roots': {'basemap': str(fixture['basemap'])}}), encoding='utf-8')
-    assert subprocess.run(command, capture_output=True, text=True, env={**env, 'GIS_COMPOSER_CONFIG_DIR': str(config)}).returncode == 0
+    assert subprocess.run(command, capture_output=True, encoding='utf-8', errors='replace', env={**env, 'GIS_COMPOSER_CONFIG_DIR': str(config)}).returncode == 0
     undeclared = subprocess.run(command[:-2] + ['--output', str(tmp_path / 'o2'), '--data-root', f'other={tmp_path}'],
-                                capture_output=True, text=True, env=env)
+                                capture_output=True, encoding='utf-8', errors='replace', env=env)
     assert 'not declared in gis-project.json' in undeclared.stderr
     document = json.loads(fixture['style'].read_text(encoding='utf-8'))
     document['layers'][1]['data']['sha256'] = '0' * 64

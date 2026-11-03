@@ -26,7 +26,7 @@ G=D.G
 
 
 def cli(script,*args,ok=True):
-    process=subprocess.run([sys.executable,str(SCRIPTS/script),*map(str,args)],env={**os.environ,'PYTHONDONTWRITEBYTECODE':'1'},text=True,capture_output=True)
+    process=subprocess.run([sys.executable,str(SCRIPTS/script),*map(str,args)],env={**os.environ,'PYTHONDONTWRITEBYTECODE':'1'},encoding='utf-8', errors='replace',capture_output=True)
     if ok: assert process.returncode==0,process.stdout+process.stderr
     else: assert process.returncode!=0
     return process

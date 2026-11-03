@@ -123,6 +123,6 @@ def main(argv: list[str] | None = None) -> int:
 
 
 if __name__ == '__main__':
-    if hasattr(sys.stdout, 'reconfigure'):
-        sys.stdout.reconfigure(encoding='utf-8', errors='backslashreplace')
+    import _stdio
+    _stdio.utf8()
     sys.exit(main())

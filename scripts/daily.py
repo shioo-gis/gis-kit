@@ -159,4 +159,7 @@ def main():
     except (ValueError,KeyError,TypeError,OSError) as error:
         print(f'ERROR: {error}',file=sys.stderr); raise SystemExit(1)
 
-if __name__=='__main__': main()
+if __name__=='__main__':
+    import _stdio
+    _stdio.utf8()
+    main()

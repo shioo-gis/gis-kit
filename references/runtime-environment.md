@@ -8,6 +8,14 @@
 
 通用分析的本次验证基线是 Python 3.10.14、Shapely 2.1.2 / GEOS 3.13.1；共享边简化最低要求 Python 3.10、Shapely 2.1 与 GEOS 3.12。Shapely 的二进制 wheel 自带对应 GEOS，无需另改系统 GEOS。不同 GDAL Python 包可以自带不同 GDAL，分别记录 Pyogrio 与 Rasterio 的运行版本，不按一个版本推断另一个包。
 
+## 输出编码
+
+工具的 stdout、stderr 写到管道和文件时固定 UTF-8，直接运行和经 `gis.py` 运行相同，不随系统代码页或区域设置变化。读取方按 UTF-8 解码，例如 Python 的 `subprocess.run(..., encoding='utf-8')`。
+
+- 终端不变：Windows 控制台正常显示中文，其它终端按自己的编码显示，写不出的字符转义成 `\xb2` 这样的形式。
+- Windows PowerShell 接管外部命令的输出（`|`、`>`、赋值给变量）时按 `[Console]::OutputEncoding` 解码，中文代码页上会显示成乱码。可以先设 `[Console]::OutputEncoding = [Text.UTF8Encoding]::new()`，或用工具的 `--output` 写文件。
+- 确实需要其它编码时设 `PYTHONIOENCODING`，例如 `gbk`；写不出的字符同样转义，不会崩溃。
+
 ## 按能力加载依赖
 
 | 能力 | 依赖与边界 |

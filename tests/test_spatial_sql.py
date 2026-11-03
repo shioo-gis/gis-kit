@@ -40,7 +40,7 @@ def cli(tmp_path, p, query=None, *extra, geom=True):
                'spatial-sql', str(script), '--input', str(p), '--output', str(tmp_path/'out'), '--id', 'id']
     if geom:
         command += ['--geometry', 'geom', '--crs', 'EPSG:4326', '--geometry-types', 'POINT']
-    result = subprocess.run(command + list(extra), capture_output=True, text=True,
+    result = subprocess.run(command + list(extra), capture_output=True, encoding='utf-8', errors='replace',
                             env={**os.environ, 'PYTHONDONTWRITEBYTECODE': '1'})
     return result
 

@@ -134,7 +134,7 @@ def main():
                     WHERE p.row_index <= {size} GROUP BY z.zone_id'''
                 (trial/'query.sql').write_text(query, encoding='utf-8')
                 result = subprocess.run([sys.executable, __file__, '_worker', mode, str(trial), str(size)],
-                             capture_output=True, text=True, env={**os.environ, 'PYTHONDONTWRITEBYTECODE':'1'})
+                             capture_output=True, encoding='utf-8', errors='replace', env={**os.environ, 'PYTHONDONTWRITEBYTECODE':'1'})
                 (trial/'stdout.txt').write_text(result.stdout, encoding='utf-8')
                 (trial/'stderr.txt').write_text(result.stderr, encoding='utf-8')
                 assert result.returncode == 0, result.stderr

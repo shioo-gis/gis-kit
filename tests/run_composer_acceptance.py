@@ -36,7 +36,7 @@ THEMES = ('research', 'atlas', 'presentation')
 
 
 def run(command, cwd, log, success=True):
-    result = subprocess.run(list(map(str, command)), cwd=cwd, capture_output=True, text=True)
+    result = subprocess.run(list(map(str, command)), cwd=cwd, capture_output=True, encoding='utf-8', errors='replace')
     write_json(log, {'command': list(map(str, command)), 'returncode': result.returncode, 'stdout': result.stdout, 'stderr': result.stderr})
     if success and result.returncode:
         raise RuntimeError(f'Command failed; see {log}: {result.stderr[-1200:]}')

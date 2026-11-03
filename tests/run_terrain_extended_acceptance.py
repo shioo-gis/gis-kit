@@ -30,7 +30,7 @@ def main():
     out=Path(args.output).resolve();out.mkdir(parents=True,exist_ok=False);assets=Path(args.assets).resolve()
     (out/'inputs').mkdir();run_times=[]
     def cli(script,argv,tag):
-        start=time.perf_counter();result=subprocess.run([sys.executable,str(SCRIPTS/script),*map(str,argv)],capture_output=True,text=True,env=dict(os.environ,PYTHONDONTWRITEBYTECODE='1'))
+        start=time.perf_counter();result=subprocess.run([sys.executable,str(SCRIPTS/script),*map(str,argv)],capture_output=True,encoding='utf-8', errors='replace',env=dict(os.environ,PYTHONDONTWRITEBYTECODE='1'))
         (out/f'{tag}.log').write_text(result.stdout+result.stderr, encoding='utf-8');result.check_returncode();run_times.append({'task':tag,'seconds':time.perf_counter()-start})
     src=assets/'datasets/terrain/gebco/2023/curated/gebco_2023_Global.tif'
     before=digest(src)

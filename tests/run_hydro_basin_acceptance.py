@@ -75,7 +75,7 @@ def main():
     if shared_boundary.is_empty:raise ValueError('Reference NEXT_DOWN basin has no shared boundary')
     reports=[]
     def cli(args):
-        start=time.perf_counter();p=subprocess.run([sys.executable,*map(str,args)],capture_output=True,text=True)
+        start=time.perf_counter();p=subprocess.run([sys.executable,*map(str,args)],capture_output=True,encoding='utf-8', errors='replace')
         if p.returncode:raise RuntimeError(p.stderr[-1500:])
         return time.perf_counter()-start
     for res in policy['resolutions_m']:

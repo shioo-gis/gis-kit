@@ -29,7 +29,7 @@ def _run(source: Path, *args: str) -> subprocess.CompletedProcess[str]:
         [sys.executable, str(SCRIPT), str(source), *args],
         cwd=ROOT,
         capture_output=True,
-        text=True,
+        encoding="utf-8", errors="replace",
     )
 
 

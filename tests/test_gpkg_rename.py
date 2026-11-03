@@ -20,7 +20,7 @@ import gpkg  # noqa: E402
 def _rename(path, old, new):
     return subprocess.run(
         [sys.executable, str(SCRIPTS / 'gpkg.py'), 'rename', '--input', str(path), '--layer', old, '--new-name', new],
-        text=True, capture_output=True, env={**os.environ, 'PYTHONDONTWRITEBYTECODE': '1'},
+        encoding='utf-8', errors='replace', capture_output=True, env={**os.environ, 'PYTHONDONTWRITEBYTECODE': '1'},
     )
 
 

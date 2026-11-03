@@ -19,7 +19,7 @@ GDB_WRITABLE = 'w' in (pyogrio.list_drivers().get('OpenFileGDB') or '')
 def _gpkg(*args):
     return subprocess.run(
         [sys.executable, str(SCRIPTS / 'gpkg.py'), *map(str, args)],
-        text=True, capture_output=True, env={**os.environ, 'PYTHONDONTWRITEBYTECODE': '1'},
+        encoding='utf-8', errors='replace', capture_output=True, env={**os.environ, 'PYTHONDONTWRITEBYTECODE': '1'},
     )
 
 

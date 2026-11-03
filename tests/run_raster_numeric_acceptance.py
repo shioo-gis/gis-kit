@@ -85,7 +85,7 @@ def main():
             spec.write_text(json.dumps(p), encoding='utf-8')
             command = [sys.executable, str(SCRIPTS/'raster.py'), op, *map(str, sources), '--params', str(spec), '--output', str(work/name)]
             started = time.perf_counter()
-            result = subprocess.run(command, capture_output=True, text=True, env=dict(os.environ, PYTHONDONTWRITEBYTECODE='1'))
+            result = subprocess.run(command, capture_output=True, encoding='utf-8', errors='replace', env=dict(os.environ, PYTHONDONTWRITEBYTECODE='1'))
             (work/(name+'.log')).write_text(result.stdout+result.stderr, encoding='utf-8')
             operations.append({'name': name, 'operation': op, 'seconds': time.perf_counter()-started, 'returncode': result.returncode})
             if not success:

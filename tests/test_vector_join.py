@@ -24,7 +24,7 @@ def _write(path: Path, frame: gpd.GeoDataFrame) -> Path:
 def _run(*args: str) -> subprocess.CompletedProcess[str]:
     env = os.environ.copy()
     env["PYTHONDONTWRITEBYTECODE"] = "1"
-    return subprocess.run([sys.executable, str(SCRIPT), *map(str, args)], cwd=ROOT, env=env, capture_output=True, text=True)
+    return subprocess.run([sys.executable, str(SCRIPT), *map(str, args)], cwd=ROOT, env=env, capture_output=True, encoding="utf-8", errors="replace")
 
 
 def _join(left: Path, right: Path, output: Path, *options: str) -> subprocess.CompletedProcess[str]:

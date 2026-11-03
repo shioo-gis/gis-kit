@@ -93,4 +93,7 @@ def main():
     p=argparse.ArgumentParser(description=__doc__);p.add_argument('run');p.add_argument('--confirmed',required=True);p.add_argument('--output',required=True);a=p.parse_args()
     try:print(json.dumps(execute(a.run,a.confirmed,a.output)))
     except (ValueError,KeyError,TypeError,OSError) as e:p.exit(1,f'ERROR: {e}\n')
-if __name__=='__main__':main()
+if __name__=='__main__':
+    import _stdio
+    _stdio.utf8()
+    main()

@@ -69,4 +69,6 @@ def main(argv=None):
 
 
 if __name__ == '__main__':
+    import _stdio
+    _stdio.utf8()
     sys.exit(main())

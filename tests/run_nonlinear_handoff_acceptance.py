@@ -35,7 +35,7 @@ def main(old,out,backend):
     hashes={x.name:digest(x) for x in src.iterdir()};records=[];commands=[]
     for i in range(2):
         command=[sys.executable,str(S/'nonlinear-georef.py'),str(src/'source.png'),str(src/'gcps.json'),'--params',str(src/'policy.json'),'--backend-gdalwarp',backend,'--pixel-vectors',str(src/'pixels.gpkg'),'--pixel-manifest',str(src/'pixels.json'),'--vector-step-px','1','--output',str(out/f'run{i}')]
-        start=time.perf_counter();r=subprocess.run(command,capture_output=True,text=True)
+        start=time.perf_counter();r=subprocess.run(command,capture_output=True,encoding='utf-8', errors='replace')
         (out/f'run{i}.log').write_text(r.stdout+r.stderr, encoding='utf-8')
         if r.returncode:raise RuntimeError(f'TPS CLI failed: run{i}.log')
         commands.append(dict(command=command,wall_seconds=time.perf_counter()-start));records.append(json.loads((out/f'run{i}/record.json').read_text(encoding='utf-8')))

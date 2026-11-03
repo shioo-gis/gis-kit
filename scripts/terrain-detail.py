@@ -109,4 +109,7 @@ def main():
     except (ValueError,KeyError,TypeError,OSError,rio.errors.RasterioError) as exc:parser.exit(1,f'ERROR: {exc}\n')
 
 
-if __name__=='__main__':main()
+if __name__=='__main__':
+    import _stdio
+    _stdio.utf8()
+    main()

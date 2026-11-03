@@ -40,7 +40,7 @@ SKELETON_FILES = sorted(arcmap.SKELETONS.glob('*.lyr'))
 
 def run(style, output, *extra, success=True):
     command = [sys.executable, str(SCRIPTS / 'package.py'), 'pack', str(style), '--output', str(output), '--format', 'arcmap', *map(str, extra)]
-    result = subprocess.run(command, capture_output=True, text=True,
+    result = subprocess.run(command, capture_output=True, encoding='utf-8', errors='replace',
                             env={**os.environ, 'PYTHONDONTWRITEBYTECODE': '1', 'GIS_COMPOSER_CONFIG_DIR': str(output.parent / 'no-config')})
     assert (result.returncode == 0) == success, result.stdout + result.stderr
     return json.loads((output / 'package.json').read_text(encoding='utf-8')) if success else result.stderr
@@ -175,7 +175,7 @@ def read_guarded(tmp_path, files):
     """read_layer_file on each of these files of one size, in a child process: (outcomes, peak bytes allocated)."""
     path = tmp_path / 'files.bin'
     path.write_bytes(b''.join(files))
-    result = subprocess.run([sys.executable, '-c', GUARDED_READ, str(SCRIPTS), str(path), str(len(files[0]))], capture_output=True, text=True,
+    result = subprocess.run([sys.executable, '-c', GUARDED_READ, str(SCRIPTS), str(path), str(len(files[0]))], capture_output=True, encoding='utf-8', errors='replace',
                             env={**os.environ, 'PYTHONDONTWRITEBYTECODE': '1'}, timeout=60)
     assert result.returncode == 0, result.stdout + result.stderr  # a timeout or a crash, or an error other than ValueError
     *outcomes, peak = result.stdout.split()
@@ -573,7 +573,7 @@ def test_field_table_survives_the_same_fields():
 def test_unpack_reads_the_package_back(demo, tmp_path):
     out = demo[1]
     result = subprocess.run([sys.executable, str(SCRIPTS / 'package.py'), 'unpack', str(out / 'demo-map.lpk'), '--output', str(tmp_path / 'u')],
-                            capture_output=True, text=True, env={**os.environ, 'PYTHONDONTWRITEBYTECODE': '1'})
+                            capture_output=True, encoding='utf-8', errors='replace', env={**os.environ, 'PYTHONDONTWRITEBYTECODE': '1'})
     assert result.returncode == 0, result.stderr
     manifest = json.loads((tmp_path / 'u' / 'package.json').read_text(encoding='utf-8'))
     assert manifest['package']['type'] == 'Layer Package' and manifest['item']['title'] == 'Demo map'
@@ -583,12 +583,12 @@ def test_unpack_reads_the_package_back(demo, tmp_path):
 def test_lyr_belongs_to_arcmap(demo, tmp_path):
     fixture = demo[0]
     command = [sys.executable, str(SCRIPTS / 'package.py'), 'pack', str(fixture['style']), '--output', str(tmp_path / 'x'), '--lyr', '--data-root', f'basemap={fixture["basemap"]}']
-    result = subprocess.run(command, capture_output=True, text=True, env={**os.environ, 'PYTHONDONTWRITEBYTECODE': '1'})
+    result = subprocess.run(command, capture_output=True, encoding='utf-8', errors='replace', env={**os.environ, 'PYTHONDONTWRITEBYTECODE': '1'})
     assert result.returncode == 1 and '--lyr belongs to --format arcmap' in result.stderr
 
 
 def test_capabilities_declares_the_manifest():
-    result = subprocess.run([sys.executable, str(SCRIPTS / 'gis.py'), 'capabilities', '--json'], capture_output=True, text=True, env={**os.environ, 'PYTHONDONTWRITEBYTECODE': '1'})
+    result = subprocess.run([sys.executable, str(SCRIPTS / 'gis.py'), 'capabilities', '--json'], capture_output=True, encoding='utf-8', errors='replace', env={**os.environ, 'PYTHONDONTWRITEBYTECODE': '1'})
     assert result.returncode == 0, result.stderr
     assert 'arcmap-package' in result.stdout
 

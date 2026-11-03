@@ -27,7 +27,7 @@ def levels(tmp_path):
 
 
 def run(*args):
-    return subprocess.run([sys.executable, str(SCRIPT), *map(str, args)], capture_output=True, text=True)
+    return subprocess.run([sys.executable, str(SCRIPT), *map(str, args)], capture_output=True, encoding='utf-8', errors='replace')
 
 
 def read(directory, name):

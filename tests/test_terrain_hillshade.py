@@ -27,7 +27,7 @@ def run(tmp_path, dem, **params):
     (tmp_path/'p.json').write_text(json.dumps({**P, **params}), encoding='utf-8')
     out = tmp_path/'out'
     result = subprocess.run([sys.executable, str(SCRIPTS/'terrain.py'), str(dem), '--params', str(tmp_path/'p.json'), '--output', str(out)],
-                            capture_output=True, text=True)
+                            capture_output=True, encoding='utf-8', errors='replace')
     return result, out
 
 

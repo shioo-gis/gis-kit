@@ -291,4 +291,7 @@ def main():
         print(json.dumps(result,ensure_ascii=False))
     except (ValueError,KeyError,TypeError,OSError) as exc:parser.exit(2,f'Error: {exc}\n')
 
-if __name__=='__main__':main()
+if __name__=='__main__':
+    import _stdio
+    _stdio.utf8()
+    main()

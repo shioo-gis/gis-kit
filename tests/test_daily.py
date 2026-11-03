@@ -25,7 +25,7 @@ def frame(geoms, **attrs):
 
 
 def cli(script,*args,success=True):
-    result=subprocess.run([sys.executable,str(SCRIPTS/script),*map(str,args)],capture_output=True,text=True,env={**os.environ,'PYTHONDONTWRITEBYTECODE':'1'})
+    result=subprocess.run([sys.executable,str(SCRIPTS/script),*map(str,args)],capture_output=True,encoding='utf-8', errors='replace',env={**os.environ,'PYTHONDONTWRITEBYTECODE':'1'})
     assert (result.returncode==0)==success,result.stdout+result.stderr
     return result
 

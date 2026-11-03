@@ -16,7 +16,7 @@ def main() -> None:
             [sys.executable, str(BENCHMARK), "--case", f"ok={sys.executable} -c 'pass'", "--gate", "ok", "--report", str(report)],
             cwd=ROOT,
             capture_output=True,
-            text=True,
+            encoding="utf-8", errors="replace",
         )
         assert passed.returncode == 0, passed.stderr
         assert json.loads(report.read_text(encoding="utf-8"))["decision"] == "TIER0_SUFFICIENT"
@@ -25,7 +25,7 @@ def main() -> None:
             [sys.executable, str(BENCHMARK), "--case", f"slow={sys.executable} -c 'import time; time.sleep(1)'", "--gate", "slow", "--max-seconds", "0.1"],
             cwd=ROOT,
             capture_output=True,
-            text=True,
+            encoding="utf-8", errors="replace",
         )
         assert timed_out.returncode == 2
         assert json.loads(timed_out.stdout)["decision"] == "RUST_CANDIDATE"

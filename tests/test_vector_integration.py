@@ -19,7 +19,7 @@ def test_vector_cli_chain(tmp_path):
 
     def run(script, *args):
         command = [sys.executable, str(SCRIPTS / script), *map(str, args)]
-        result = subprocess.run(command, text=True, capture_output=True,
+        result = subprocess.run(command, encoding='utf-8', errors='replace', capture_output=True,
                                 env={**os.environ, 'PYTHONDONTWRITEBYTECODE': '1'})
         commands.append({'script': script, 'arguments': list(map(str, args)),
                          'returncode': result.returncode, 'stdout': result.stdout,
@@ -76,7 +76,7 @@ def test_vector_cli_chain(tmp_path):
 def test_legacy_main_regression(script):
     """These historical checks expose main(), so pytest alone would skip them."""
     result = subprocess.run([sys.executable, str(Path(__file__).with_name(script))],
-                            capture_output=True, text=True,
+                            capture_output=True, encoding='utf-8', errors='replace',
                             env={**os.environ, 'PYTHONDONTWRITEBYTECODE': '1'})
     assert result.returncode == 0, result.stderr
 
@@ -100,7 +100,7 @@ def test_chunked_merge_then_global_aggregation(tmp_path, chunk_size):
 
     def call(script, *arguments):
         result = subprocess.run([sys.executable, str(SCRIPTS/script), *map(str, arguments)],
-                                capture_output=True, text=True,
+                                capture_output=True, encoding='utf-8', errors='replace',
                                 env={**os.environ, 'PYTHONDONTWRITEBYTECODE': '1'})
         assert result.returncode == 0, result.stderr
 

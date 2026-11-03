@@ -56,7 +56,7 @@ def main():
     recipe=dict(schema_version=1,inputs=roles,steps=steps);write_json(root/'recipe.json',recipe);runs=[]
     for index in (0,1):
         start_time=time.perf_counter()
-        proc=subprocess.run([sys.executable,str(SCRIPTS/'recipe.py'),str(root/'recipe.json'),'--output',str(root/f'run{index}'),'--cache',str(root/'cache')],capture_output=True,text=True,env={**os.environ,'PYTHONDONTWRITEBYTECODE':'1'})
+        proc=subprocess.run([sys.executable,str(SCRIPTS/'recipe.py'),str(root/'recipe.json'),'--output',str(root/f'run{index}'),'--cache',str(root/'cache')],capture_output=True,encoding='utf-8', errors='replace',env={**os.environ,'PYTHONDONTWRITEBYTECODE':'1'})
         (root/f'run{index}.log').write_text(proc.stdout+proc.stderr, encoding='utf-8')
         if proc.returncode:raise RuntimeError(proc.stderr)
         result=json.loads(proc.stdout);runs.append(dict(seconds=time.perf_counter()-start_time,**result))

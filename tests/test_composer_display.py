@@ -99,7 +99,7 @@ def test_machine_inspection_and_stats_cli(tmp_path):
     gpd.GeoDataFrame({'value': [0., None], 'status': ['candidate','hold']}, geometry=[box(0,0,1,1),box(1,0,2,1)], crs=3857).to_file(data, layer='wanted')
     gpd.GeoDataFrame({'other': [99]}, geometry=[box(0,0,3,3)], crs=3857).to_file(data, layer='other')
     def call(script, args):
-        return subprocess.run([sys.executable,str(SCRIPTS/script),*map(str,args)],capture_output=True,text=True)
+        return subprocess.run([sys.executable,str(SCRIPTS/script),*map(str,args)],capture_output=True,encoding='utf-8', errors='replace')
     r = call('inspect-data.py',[data,'--layer','wanted','summary','--json']); assert r.returncode == 0, r.stderr
     v = json.loads(r.stdout); assert v['features'] == 2 and v['numeric']['value']['count'] == 1
     r = call('inspect-data.py',[data,'layers','--json']); assert r.returncode == 0, r.stderr
@@ -180,7 +180,7 @@ def test_vector_scheme_cli_methods_counts_and_nodata(tmp_path):
     def run(field, p, name):
         settings = tmp_path / f'{name}.json'; settings.write_text(json.dumps(p), encoding='utf-8')
         result = subprocess.run([sys.executable, SCRIPTS / 'scheme.py', data, '--layer', 'z', '--field', field, '--params', settings, '--output', tmp_path / name],
-                                capture_output=True, text=True)
+                                capture_output=True, encoding='utf-8', errors='replace')
         return result, (json.loads((tmp_path / name / 'scheme.json').read_text(encoding='utf-8')) if result.returncode == 0 else None)
     _, quantile = run('v', {'unit': '人', 'status': 'candidate', 'method': 'quantile', 'classes': 2}, 'q')
     assert quantile['method'] == 'quantile' and quantile['breaks'] == [2.5] and quantile['counts'] == [2, 2]

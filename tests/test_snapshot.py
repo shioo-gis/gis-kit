@@ -50,7 +50,7 @@ def server(tmp_path):
 def run(tmp_path, registry, params, *extra):
     (tmp_path/'p.json').write_text(json.dumps(params), encoding='utf-8')
     return subprocess.run([sys.executable, str(SCRIPTS/'snapshot.py'), '--params', str(tmp_path/'p.json'), '--output', str(tmp_path/'snap'), *extra],
-                          capture_output=True, text=True, env={**os.environ, S.REGISTRY_ENV: str(registry)})
+                          capture_output=True, encoding='utf-8', errors='replace', env={**os.environ, S.REGISTRY_ENV: str(registry)})
 
 
 def test_tile_ranges_cover_bounds():

@@ -75,7 +75,7 @@ def main():
     hashes={f.name:digest(f) for f in inputs.iterdir()};runs=[];signatures=[]
     def run(name,recipe,cache):
         spec=root/(name+'.json');write_json(spec,recipe);start=time.perf_counter()
-        result=subprocess.run([sys.executable,str(SCRIPTS/'recipe.py'),str(spec),'--output',str(root/name),'--cache',str(root/cache)],capture_output=True,text=True,env={**os.environ,'PYTHONDONTWRITEBYTECODE':'1'})
+        result=subprocess.run([sys.executable,str(SCRIPTS/'recipe.py'),str(spec),'--output',str(root/name),'--cache',str(root/cache)],capture_output=True,encoding='utf-8', errors='replace',env={**os.environ,'PYTHONDONTWRITEBYTECODE':'1'})
         (root/(name+'.log')).write_text(result.stdout+result.stderr, encoding='utf-8')
         if result.returncode:raise RuntimeError(result.stderr)
         answer=json.loads(result.stdout);runs.append(dict(name=name,seconds=time.perf_counter()-start,**answer));return root/name/'default'

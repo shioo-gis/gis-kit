@@ -97,10 +97,10 @@ def test_batch_runs_this_interpreter_through_a_template(tmp_path):
     command = [sys.executable, str(SCRIPTS / 'batch.py'), '--input-dir', str(inputs), '--output-dir', str(outputs), '--pattern', '*.txt', '--workers', '1',
                '--command', f'"{sys.executable}" "{tool}" {{input}} {{output}}', '--report', str(report)]
     env = {**os.environ, 'PYTHONDONTWRITEBYTECODE': '1'}
-    dry = subprocess.run([*command, '--dry-run'], capture_output=True, text=True, env=env)
+    dry = subprocess.run([*command, '--dry-run'], capture_output=True, encoding='utf-8', errors='replace', env=env)
     assert dry.returncode == 0, dry.stderr
     assert str(tool) in dry.stdout
-    result = subprocess.run(command, capture_output=True, text=True, env=env)
+    result = subprocess.run(command, capture_output=True, encoding='utf-8', errors='replace', env=env)
     assert result.returncode == 0, result.stdout + result.stderr
     assert json.loads(report.read_text(encoding='utf-8'))['results'][0]['status'] == 'succeeded'
     assert (outputs / 'a.txt').read_text(encoding='utf-8') == 'payload'
