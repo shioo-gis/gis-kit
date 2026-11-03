@@ -2,6 +2,13 @@
 
 ## 未发布
 
+- 工具不再报假事实、不再悄悄改坏数据：
+  - `split.py`：字段为空的行写进 `<前缀>_NULL.<格式>`，不再丢掉。几个值会写进同一个文件时（如 `a/b` 和 `a_b`，或只差大小写，这在 macOS 默认卷上是同一个文件）在写出前拒绝并列出这些值，此前后写的覆盖先写的，还多报文件数。结尾报告读回的要素数（`4 of 4 features`）。GPKG 和 GeoJSON 走原子写出。**行为变化：** 已有输出默认拒绝，新增 `--overwrite`；输出不会替换输入。
+  - `gpkg.py import`、`copy`、`sql --output`：**行为变化：** 目标图层已存在时拒绝，文件不变；此前静默追加，跑两次 4 行变 8 行。没有新增追加开关，因为追加不校验 CRS 和字段：实测 3857 的坐标追加进 4326 图层不报错，多出的字段被丢掉。要合并用 `merge.py`。
+  - `gpkg.py drop`：删除图层时一并删除空间索引和 `gpkg_data_columns`、`gpkg_metadata_reference`、`gpkgext_relations`、`layer_styles` 里的记录，全部在一个事务里；此前留下 `rtree_<层>_<几何列>*` 四张孤表。
+  - `field.py cast --type bool`：按值的含义转换，接受 `true/false`、`t/f`、`yes/no`、`y/n`、`1/0`（不分大小写）和数值 0、1，空值保持为空。此前 `'false'` 变 True、空值变 False。**行为变化：** 其他值（如 `maybe`、`2`）报错并列出，不写输出。
+  - `fix.py --fix-encoding`：按字段判断。字段里所有非 ASCII 值都能解码，且至少一个值带有乱码特征（Latin-1 符号或控制字符与另一个高位字符相邻，如 `µÀÂ·`）时才修复；否则原样保留，并在报告里写明可能的结果和不改的原因。此前 `ÄÖ` 变 `闹`、`Müller` 变 `M黮ler`，还报告为修复。**行为变化：** 全部值都没有乱码特征的字段（如只有 `ÊÐ`）不再修复，由报告说明。
+  - `vector-georef.py apply`：保留 Z 值，只变换 X、Y；Z 不随比例缩放。清单和标准输出新增 `z_features`。此前 Z 被静默丢掉。M 值仍在读取时丢弃，`pyogrio` 在 stderr 警告，`record.json` 写明。
 - 栅格的发现有了去处：`raster`、`terrain`、`terrain-detail` 的 `record.json` 新增 `warnings` 和 `facts`，由 `_grid.grid_facts` 统一产生（NoData 未设、地面尺度、超出世界范围、极帽缺失、类型变化），警告同时写到 stderr。`raster` 记录走共用骨架 `_core.write_record`，现有字段不变。线性重采样遇到 NoData 未设只写警告，不拒绝。`describe` 不再把有内部掩膜的栅格报成 `nodata_unset`。
 - `raster.py warp`、`align` 由 GDAL 按块读源，峰值取决于目标格网，不再随源增长；有内部掩膜、alpha、声明之外的无穷大或 NaN、64 位整数时才退回整读。**行为变化：** 结果保留源类型（float32 仍是 float32，声明了 NoData 的整数在最近邻下不变，其余用能容纳结果的最小浮点），不再一律 float64；`max_pixels` 按目标格网计。
 - 目标是 EPSG:3857 时，warp 把格网裁进世界范围，不再发布南北越界到 ±2.4 亿米的结果；记录写 `target_grid_trimmed_to_world`。`display` 越界的报错写实际范围和允许范围。

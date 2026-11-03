@@ -4,6 +4,8 @@
 
 - `gpkg.py sql --query` 接收完整 SQL，例如 `SELECT * FROM parcels WHERE area > 1000`；GDB 优先 OGR SQL，不将 query 当作 where 条件。
 - File GDB 使用 GDAL OpenFileGDB 驱动；写入需 GDAL ≥ 3.6，受限功能先输出 GPKG，不冒充写入成功。
+- `gpkg.py import`、`copy`、`sql --output` 不向已有图层追加，也不替换它：目标图层已存在时（名称不分大小写）拒绝，文件不变。换一个图层名（`--target-layer`、`--output-layer`），先 `gpkg.py drop`，或用 `merge.py` 合并。
+- `gpkg.py drop` 在一个事务里删除要素表、它的空间索引和注册信息（`gpkg_*`、`layer_styles`），同名图层可以再写入。
 - `gpkg.py` 只读 File GDB：`import`、`copy`、`export`、`sql --output` 写到 `.gdb` 以及对 `.gdb` 的 `drop`、`rename` 都会拒绝，报错写明运行时 GDAL 的 File GDB 能力和改用 `.gpkg` 的做法。gis-kit 写出的 GDB 经 ArcGIS 验收之前不放开。
 
 ## File GDB 兼容性实测

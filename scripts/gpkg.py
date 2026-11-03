@@ -62,6 +62,17 @@ def copy_layer(source: Path, source_layer: str, target: Path, driver: str, *, la
     return count
 
 
+def refuse_existing_layer(target: Path, layer: str, name_option: str) -> None:
+    """Writing into an existing layer would add its rows a second time, so that is never done quietly."""
+    if not target.exists():
+        return
+    existing = {name.lower(): name for name, _ in pyogrio.list_layers(target)}  # SQLite table names ignore case
+    if layer.lower() in existing:
+        sys.exit(f"Error: layer '{existing[layer.lower()]}' already exists in {target}; nothing was written. "
+                 f"gpkg.py does not append to or replace a layer: use {name_option} for a new name, "
+                 "remove the old layer with gpkg.py drop, or combine the data with merge.py.")
+
+
 def looks_like_sql(query: str) -> bool:
     return query.lstrip().upper().startswith(("SELECT", "WITH"))
 
@@ -112,6 +123,7 @@ def cmd_import(args: argparse.Namespace) -> None:
     target_layer = args.target_layer or source_layer
 
     try:
+        refuse_existing_layer(target, target_layer, "--target-layer")
         count = copy_layer(source, source_layer, target, "GPKG", layer=target_layer, mode="a" if target.exists() else "w")
     except Exception as e:
         sys.exit(f"Error importing layer '{source_layer}': {e}")
@@ -178,22 +190,7 @@ def cmd_drop(args: argparse.Namespace) -> None:
         sys.exit("Error: cannot drop the only layer in the file. Delete the file instead.")
 
     try:
-        import sqlite3
-        conn = sqlite3.connect(str(input_path))
-        cursor = conn.cursor()
-        cursor.execute(f"DROP TABLE IF EXISTS \"{layer}\"")
-        cursor.execute(f"DELETE FROM gpkg_contents WHERE table_name = ?", (layer,))
-        cursor.execute(f"DELETE FROM gpkg_geometry_columns WHERE table_name = ?", (layer,))
-        try:
-            cursor.execute(f"DELETE FROM gpkg_extensions WHERE table_name = ?", (layer,))
-        except Exception:
-            pass
-        try:
-            cursor.execute(f"DELETE FROM gpkg_ogr_contents WHERE table_name = ?", (layer,))
-        except Exception:
-            pass
-        conn.commit()
-        conn.close()
+        _drop_gpkg_layer(input_path, layer)
     except Exception as e:
         sys.exit(f"Error dropping layer: {e}")
 
@@ -372,6 +369,43 @@ def _rename_gpkg_layer(path: Path, old_name: str, new_name: str) -> None:
         conn.close()
 
 
+def _drop_gpkg_layer(path: Path, layer: str) -> None:
+    """Remove a GPKG table with its spatial index and registry rows in one transaction."""
+    import sqlite3
+
+    conn = sqlite3.connect(str(path), isolation_level=None)
+    try:
+        cursor = conn.cursor()
+        cursor.execute("BEGIN IMMEDIATE")
+        try:
+            row = cursor.execute(
+                "SELECT column_name FROM gpkg_geometry_columns WHERE table_name = ?", (layer,)
+            ).fetchone()
+            cursor.execute(f"DROP TABLE {quote_ident(layer)}")
+            if row and _table_exists(cursor, f"rtree_{layer}_{row[0]}"):
+                cursor.execute(f"DROP TABLE {quote_ident(f'rtree_{layer}_{row[0]}')}")
+            for table, columns in (
+                ("gpkg_geometry_columns", ("table_name",)),
+                ("gpkg_extensions", ("table_name",)),
+                ("gpkg_ogr_contents", ("table_name",)),
+                ("gpkg_data_columns", ("table_name",)),
+                ("gpkg_metadata_reference", ("table_name",)),
+                ("gpkgext_relations", ("base_table_name", "related_table_name", "mapping_table_name")),
+                ("layer_styles", ("f_table_name",)),
+                ("gpkg_contents", ("table_name",)),
+            ):
+                if not _table_exists(cursor, table):
+                    continue
+                for column in columns:
+                    cursor.execute(f"DELETE FROM {table} WHERE {column} = ?", (layer,))
+            cursor.execute("COMMIT")
+        except BaseException:
+            cursor.execute("ROLLBACK")
+            raise
+    finally:
+        conn.close()
+
+
 def cmd_rename(args: argparse.Namespace) -> None:
     input_path = resolve_path(args.input)
     guard_gdb_write(input_path, "layer rename in", "Copy the layer into a .gpkg under the new name (gpkg.py copy --source in.gdb --source-layer OLD --target out.gpkg --target-layer NEW), or rename it in ArcGIS.")
@@ -413,6 +447,7 @@ def cmd_copy(args: argparse.Namespace) -> None:
     target_layer = args.target_layer or source_layer
 
     try:
+        refuse_existing_layer(target, target_layer, "--target-layer")
         count = copy_layer(source, source_layer, target, "GPKG", layer=target_layer, mode="a" if target.exists() else "w")
     except Exception as e:
         sys.exit(f"Error copying layer '{source_layer}': {e}")
@@ -440,6 +475,7 @@ def cmd_sql(args: argparse.Namespace) -> None:
         driver = "GPKG" if output_path.suffix.lower() == ".gpkg" else None
         try:
             if driver:
+                refuse_existing_layer(output_path, output_layer, "--output-layer")
                 gdf.to_file(output_path, layer=output_layer, driver=driver, engine="pyogrio", mode=mode)
             else:
                 gdf.to_file(output_path, engine="pyogrio")

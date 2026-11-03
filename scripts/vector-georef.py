@@ -112,6 +112,13 @@ def apply_matrix(matrix, xy):
     return xy @ matrix[:, :2].T + matrix[:, 2]
 
 
+def move_xy(matrix, coordinates):
+    """Nx2 or Nx3 coordinates; the transform is planar, so a Z stays as it was."""
+    moved = coordinates.copy()
+    moved[:, :2] = apply_matrix(matrix, coordinates[:, :2])
+    return moved
+
+
 def residuals(matrix, points, src, dst):
     errors = np.linalg.norm(apply_matrix(matrix, src) - dst, axis=1)
     rows = [{**p, 'src': s.tolist(), 'dst': d.tolist(), 'predicted': apply_matrix(matrix, s[None])[0].tolist(),
@@ -260,7 +267,7 @@ def apply(args):
     hull = shapely.geometry.shape(report['fit_hull']) if report.get('fit_hull') else None
     expected = CRS.from_user_input(report['source_crs']) if report.get('source_crs') else None
     target = CRS.from_user_input(report['target_crs'])
-    frames, extrapolated = {}, {}
+    frames, extrapolated, z_features = {}, {}, {}
     for name in names:
         check_vector(source, name)
         frame = gpd.read_file(source, layer=name, engine='pyogrio')
@@ -273,10 +280,10 @@ def apply(args):
         if 'extrapolated' in frame.columns:
             raise ValueError(f'Layer {name} already has an "extrapolated" field')
         outside = (~shapely.covers(hull, geometry)) & ~shapely.is_empty(geometry) if hull is not None else np.zeros(len(frame), bool)
-        moved = shapely.transform(geometry, lambda xy: apply_matrix(matrix, xy))
+        moved = shapely.transform(geometry, lambda coordinates: move_xy(matrix, coordinates), include_z=None)
         out = gpd.GeoDataFrame(frame.drop(columns=frame.geometry.name), geometry=gpd.GeoSeries(moved), crs=target)
         out['extrapolated'] = outside if hull is not None else None
-        frames[name], extrapolated[name] = out, int(outside.sum())
+        frames[name], extrapolated[name], z_features[name] = out, int(outside.sum()), int(shapely.has_z(moved).sum())
     with bundle(args.output) as stage:
         target_path = stage / f'{source.stem}.gpkg'
         with python_warnings.catch_warnings():
@@ -292,7 +299,7 @@ def apply(args):
                     'transform': {'path': str(Path(args.transform).absolute()), 'sha256': digest(args.transform),
                                   'model': report['model'], 'origin': report['origin'], 'status': status,
                                   'check': report.get('check')},
-                    'target_crs': report['target_crs'], 'layers': counts, 'extrapolated': extrapolated,
+                    'target_crs': report['target_crs'], 'layers': counts, 'extrapolated': extrapolated, 'z_features': z_features,
                     'allow_hold': bool(args.allow_hold and status != 'pass'),
                     'output': {'path': target_path.name, 'sha256': digest(target_path)}}
         write_json(stage / 'manifest.json', manifest)
@@ -300,7 +307,7 @@ def apply(args):
                                             'parameters': {k: v for k, v in vars(args).items() if k not in ('output', 'command')},
                                             'files': {'manifest.json': digest(stage / 'manifest.json'), target_path.name: manifest['output']['sha256']},
                                             'finished_at': datetime.now(timezone.utc).isoformat(timespec='seconds'),
-                                            'assumptions': ['Every coordinate is moved by one 2D transform; Z is not supported',
+                                            'assumptions': ['X and Y are moved by one 2D transform; Z values are kept as they were, not scaled or shifted; M values are not read',
                                                             'Features not covered by the fit points\' hull are marked extrapolated']})
     return manifest
 
@@ -339,7 +346,7 @@ def main():
     try:
         result = {'fit': fit, 'define': define, 'apply': apply}[args.command](args)
         if args.command == 'apply':
-            summary = {'layers': result['layers'], 'extrapolated': result['extrapolated'], 'transform_status': result['transform']['status']}
+            summary = {'layers': result['layers'], 'extrapolated': result['extrapolated'], 'z_features': result['z_features'], 'transform_status': result['transform']['status']}
         else:
             summary = {'model': result['model'], 'origin': result['origin'], 'parameters': result['parameters'],
                        'check': result['check'], 'acceptance': result['acceptance']['status']}
