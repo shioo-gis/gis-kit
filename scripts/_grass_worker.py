@@ -1,10 +1,10 @@
 """Internal GRASS session worker. Fixed operations only; no arbitrary command input."""
 import json
 from pathlib import Path
-import resource
 import subprocess
 import sys
 import time
+from _peak_rss import peak_rss_bytes
 
 
 def main():
@@ -39,9 +39,8 @@ def main():
     for name in names:
         run('r.out.gdal', f'input={name}', f'output={work/name}.tif', 'format=GTiff',
             'type=Float64', 'nodata=-999999999', 'createopt=COMPRESS=DEFLATE')
-    rss = resource.getrusage(resource.RUSAGE_CHILDREN).ru_maxrss
     (work/'worker.json').write_text(json.dumps({'calls': calls, 'wall_seconds': time.perf_counter()-started,
-        'child_max_rss_bytes': rss if sys.platform == 'darwin' else rss*1024,
+        'child_max_rss_bytes': peak_rss_bytes(children=True),
         'rss_scope': 'maximum of completed module children; not a concurrent process-tree peak'}), encoding='utf-8')
 
 

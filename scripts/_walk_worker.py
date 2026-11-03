@@ -1,10 +1,10 @@
 """Internal fixed GRASS r.walk worker; reverse cost uses transposed edge elevations."""
 import json
 from pathlib import Path
-import resource
 import subprocess
 import sys
 import time
+from _peak_rss import peak_rss_bytes
 
 
 def main():
@@ -25,8 +25,7 @@ def main():
             f"slope_factor={p['slope_factor']}", f"lambda={p['friction_lambda']}", 'memory=256')
     for name in ('from_start', 'to_end', 'back_direction'):
         run('r.out.gdal', f'input={name}', f'output={work/name}.tif', 'format=GTiff', 'type=Float64', 'nodata=-999999999', 'createopt=COMPRESS=DEFLATE')
-    rss = resource.getrusage(resource.RUSAGE_CHILDREN).ru_maxrss*(1 if sys.platform == 'darwin' else 1024)
-    (work/'worker.json').write_text(json.dumps(dict(calls=calls, wall_seconds=time.perf_counter()-started, completed_child_max_rss_bytes=rss, scope='maximum completed module child, not concurrent process tree')), encoding='utf-8')
+    (work/'worker.json').write_text(json.dumps(dict(calls=calls, wall_seconds=time.perf_counter()-started, completed_child_max_rss_bytes=peak_rss_bytes(children=True), scope='maximum completed module child, not concurrent process tree')), encoding='utf-8')
 
 
 if __name__ == '__main__': main()

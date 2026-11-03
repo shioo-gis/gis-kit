@@ -3,8 +3,6 @@
 import argparse
 import json
 from pathlib import Path
-import resource
-import sys
 import time
 import geopandas as gpd
 import numpy as np
@@ -14,6 +12,7 @@ from shapely.ops import substring
 from _daily import stable, number
 from _metric import analysis_frame
 from _delivery import bundle, digest, write_json
+from _peak_rss import peak_rss_bytes
 from _safe_io import iter_vector_chunks, write_vector_atomic
 from daily import fingerprint, clean
 from _budget import check_vector
@@ -133,8 +132,7 @@ def execute(source,p,origins,facilities,output,access_areas=None,barriers=None):
                 count+=len(actual)
             if count!=len(expected):raise ValueError('Network geometry readback mismatch')
         if hashes!=[fingerprint(x) for x in paths]:raise ValueError('Input changed')
-        rss=resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
-        write_json(stage/'record.json',clean(dict(status='candidate',parameters=p,details=details,input_hashes=hashes,input_files=[str(x) for x in paths],implementation=digest(__file__),access_implementation=digest(Path(__file__).with_name('_network_access.py')) if extras else None,networkx=nx.__version__,resources={'wall_seconds':time.perf_counter()-started,'max_rss_bytes':rss if sys.platform=='darwin' else rss*1024})))
+        write_json(stage/'record.json',clean(dict(status='candidate',parameters=p,details=details,input_hashes=hashes,input_files=[str(x) for x in paths],implementation=digest(__file__),access_implementation=digest(Path(__file__).with_name('_network_access.py')) if extras else None,networkx=nx.__version__,resources={'wall_seconds':time.perf_counter()-started,'max_rss_bytes':peak_rss_bytes()})))
 
 
 if __name__=='__main__':
