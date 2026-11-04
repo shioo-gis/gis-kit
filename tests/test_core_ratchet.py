@@ -15,7 +15,7 @@ ALLOWED = {
     '.to_crs(': {'_core.py': 2},
     'gpd.read_file(': {
         '_core.py': 1, '_raster_numeric.py': 1, '_recipe_operations.py': 1,
-        'atlas.py': 1, 'cad.py': 8, 'cartographic-map.py': 1, 'edit.py': 1,
+        'atlas.py': 1, 'cad.py': 8, 'cartographic-map.py': 1,
         'georef-delivery.py': 2, 'gpkg.py': 2, 'hydro-review.py': 1, 'indicators.py': 1,
         'join.py': 1, 'nonlinear-georef.py': 1, 'plot-chart.py': 1,
         'plot.py': 1, 'raster-georef.py': 1, 'raster.py': 2, 'scheme.py': 1, 'spatial-inference.py': 1,
@@ -23,7 +23,7 @@ ALLOWED = {
         'vector-georef.py': 1,
     },
     '.to_file(': {
-        'atlas.py': 1, 'cartographic-map.py': 1, 'geocode.py': 1, 'gpkg.py': 4, 'indicators.py': 1,
+        'atlas.py': 1, 'cartographic-map.py': 1, 'gpkg.py': 4, 'indicators.py': 1,
         'nonlinear-georef.py': 1, 'raster-annotate.py': 1, 'raster-georef.py': 1, 'split.py': 1,
         'topo.py': 1,
     },

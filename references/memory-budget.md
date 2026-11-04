@@ -45,7 +45,7 @@ GIS_KIT_MEMORY_BUDGET=2GiB "$PY" "$GIS_SKILL/scripts/terrain.py" ...
 
 **图像**：`nonlinear-georef`、`oriented-crop`、`raster-local-trace`、`raster-annotate` 的视图和 `raster-georef` 的预览。
 
-**矢量**：读入整个图层的公开工具都在读之前检查，`package`、`admin-chain`、`display-vector` 按 bbox 内的要素数估算，包括 buffer、clip、dissolve、edit、field、fix、join、split、stats、indicators、topo、plot、plot-chart、inspect-data、export-table、daily、network、suitability、spatial-inference、cartographic-map、atlas，以及 raster 的矢量掩膜、扫描图配准的像素矢量。
+**矢量**：读入整个图层的公开工具都在读之前检查，`package`、`admin-chain`、`display-vector` 按 bbox 内的要素数估算，包括 buffer、clip、dissolve、field、fix、join、split、stats、indicators、topo、plot、plot-chart、inspect-data、export-table、daily、network、suitability、spatial-inference、cartographic-map、atlas，以及 raster 的矢量掩膜、扫描图配准的像素矢量。
 
 - 有多个输入的工具（join、network、suitability、topo 等）对每个输入分别检查，**不累加**；几份输入加起来超出预算时可能放行。
 - 只读一部分数据时不检查：`clip` 带 `--bbox` 或 `--where`、`inspect-data head`、`dissolve --no-global-merge`（本来就按块处理）。

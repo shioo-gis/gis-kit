@@ -6,7 +6,7 @@ import tempfile
 
 
 ROOT = Path(__file__).resolve().parents[1]
-BENCHMARK = ROOT / "scripts/benchmark.py"
+BENCHMARK = ROOT / "tests/benchmark.py"
 
 
 def main() -> None:
