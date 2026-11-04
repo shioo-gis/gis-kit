@@ -18,7 +18,7 @@ from pathlib import Path
 import geopandas as gpd
 import pandas as pd
 from _metric import analysis_frame
-from _core import read_vector
+from _core import read_vector, reproject
 
 
 def read_layer(path: Path, layer: str | None) -> gpd.GeoDataFrame:
@@ -28,7 +28,7 @@ def read_layer(path: Path, layer: str | None) -> gpd.GeoDataFrame:
 def add_coords(gdf: gpd.GeoDataFrame, analysis_crs=None) -> pd.DataFrame:
     df = pd.DataFrame(gdf)
     work, _ = analysis_frame(gdf, analysis_crs)
-    centroids = work.geometry.centroid.to_crs(gdf.crs)
+    centroids = reproject(work.geometry.centroid, gdf.crs, purpose='return')
     df.insert(0, "Y", centroids.y)
     df.insert(0, "X", centroids.x)
     return df

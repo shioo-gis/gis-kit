@@ -35,7 +35,7 @@ JOIN_STYLES = {"round": "round", "mitre": "mitre", "bevel": "bevel"}
 
 
 def _estimate_utm_crs(gdf: gpd.GeoDataFrame) -> str:
-    geographic = gdf.to_crs("EPSG:4326")
+    geographic = reproject(gdf, "EPSG:4326", purpose="measure")
     minx, miny, maxx, maxy = geographic.total_bounds
     if not all(math.isfinite(value) for value in (minx, miny, maxx, maxy)):
         raise ValueError("Geographic extent is empty or non-finite; cannot select a local UTM CRS")

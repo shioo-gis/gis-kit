@@ -294,7 +294,7 @@ def _coverage_union(
         raise ValueError(f"{name} layer contains invalid geometry at row position(s): {', '.join(bad)}")
     if any(g.geom_type not in {"Polygon", "MultiPolygon"} for g in layer.geometry):
         raise ValueError(f"{name} layer must contain only polygon geometries")
-    projected = layer.to_crs(target_crs)
+    projected = reproject(layer, target_crs, purpose='measure')
     return shapely.union_all(projected.geometry.array)
 
 

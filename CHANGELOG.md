@@ -2,6 +2,9 @@
 
 ## 未发布
 
+- `field.py cast --type str`：空值保持为空，不再写成字符串 `nan`、`None`；带空值的整数字段保留原有数字，不再把 `1001` 写成 `1001.0`。
+- 所有矢量重投影都经过 `_core.reproject`，`.to_crs(` 只留在 `_core.py`。`field add-centroid`、`export-table` 的坐标回写，`buffer` 和量算选 UTM 时的范围判断，`topo` 的覆盖面，`network` 的起讫点和通达图层，`admin-chain` 的场地，`package` 的标注，现在遇到含极点、跨接缝或投影结果无效的要素都会明确报错，不再静默翻转或得到错误范围。
+- `field.py`、`fix.py`、`split.py`、`network.py`、`admin-chain.py` 改用共用读入口：输入是无几何的表格时给出可操作的报错，不再报 `AttributeError`。
 - 工具不再报假事实、不再悄悄改坏数据：
   - `split.py`：字段为空的行写进 `<前缀>_NULL.<格式>`，不再丢掉。几个值会写进同一个文件时（如 `a/b` 和 `a_b`，或只差大小写，这在 macOS 默认卷上是同一个文件）在写出前拒绝并列出这些值，此前后写的覆盖先写的，还多报文件数。结尾报告读回的要素数（`4 of 4 features`）。GPKG 和 GeoJSON 走原子写出。**行为变化：** 已有输出默认拒绝，新增 `--overwrite`；输出不会替换输入。
   - `gpkg.py import`、`copy`、`sql --output`：**行为变化：** 目标图层已存在时拒绝，文件不变；此前静默追加，跑两次 4 行变 8 行。没有新增追加开关，因为追加不校验 CRS 和字段：实测 3857 的坐标追加进 4326 图层不报错，多出的字段被丢掉。要合并用 `merge.py`。

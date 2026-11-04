@@ -8,6 +8,7 @@ import subprocess
 import sys
 
 import geopandas as gpd
+import pandas as pd
 import pyogrio
 import pytest
 from shapely.geometry import Point
@@ -173,6 +174,35 @@ def test_cast_bool_keeps_nulls_null(tmp_path):
 def test_cast_bool_refuses_anything_else_and_writes_nothing(tmp_path, values, named):
     run, out = cast(tmp_path, values, success=False)
     assert 'not booleans' in run.stderr and named in run.stderr and not out.exists()
+
+
+# field cast str
+
+def cast_text(tmp_path, frame):
+    source, out = tmp_path/'src.gpkg', tmp_path/'out.gpkg'
+    frame.to_file(source)
+    cli('field.py', 'cast', source, '--field', 'f', '--type', 'str', '--output', out)
+    return stored(out)
+
+
+@pytest.mark.parametrize('values,expected', [(['a', None, 'c'], ['a', None, 'c']), ([1.5, None], ['1.5', None]), ([1.0, None], ['1.0', None]), ([7, 8], ['7', '8'])])
+def test_cast_str_keeps_nulls_null(tmp_path, values, expected):
+    assert cast_text(tmp_path, points(len(values), f=values)) == expected
+
+
+def test_cast_str_keeps_the_digits_of_an_integer_field_with_nulls(tmp_path):
+    assert cast_text(tmp_path, points(3, f=pd.array([1001, None, 1003], dtype='Int64'))) == ['1001', None, '1003']
+
+
+# tables
+
+@pytest.mark.parametrize('tool,args', [('field.py', ['list', '{table}']), ('field.py', ['drop', '{table}', '--fields', 'kind', '--output', '{out}']),
+                                       ('fix.py', ['{table}', '--output', '{out}']), ('split.py', ['{table}', '--by', 'kind', '--output-dir', '{dir}'])])
+def test_a_table_without_geometry_is_refused_with_a_way_out(tmp_path, tool, args):
+    table = tmp_path/'table.csv'
+    table.write_text('id,kind\n1,a\n', encoding='utf-8')
+    run = cli(tool, *(a.format(table=table, out=tmp_path/'out.gpkg', dir=tmp_path/'parts') for a in args), success=False)
+    assert 'no geometry' in run.stderr and 'daily normalize' in run.stderr and not (tmp_path/'out.gpkg').exists()
 
 
 # fix --fix-encoding
