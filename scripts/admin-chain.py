@@ -40,16 +40,15 @@ def parse_levels(text):
 
 
 def load_site(args):
-    import geopandas as gpd
     from shapely.geometry import Point
+    from _core import read_vector, reproject
     if args.point:
         lon, lat = parse_point(args.point)
         return Point(lon, lat)
-    check_vector(args.site, args.site_layer)
-    frame = gpd.read_file(args.site, layer=args.site_layer) if args.site_layer else gpd.read_file(args.site)
+    frame = read_vector(args.site, args.site_layer)
     if frame.crs is None:
         raise ValueError('Site file has no CRS')
-    geometry = frame.to_crs('EPSG:4326').geometry.union_all()
+    geometry = reproject(frame, 'EPSG:4326', purpose='locate').geometry.union_all()
     if geometry.is_empty:
         raise ValueError('Site file has no geometry')
     return geometry

@@ -14,9 +14,8 @@ from _metric import analysis_frame
 from _delivery import bundle, digest, write_json
 from _peak_rss import peak_rss_bytes
 from _safe_io import iter_vector_chunks, write_vector_atomic
-from _core import clean
+from _core import clean, read_vector, reproject
 from _delivery import fingerprint
-from _budget import check_vector
 
 
 def build(edges,p):
@@ -55,7 +54,7 @@ def LineStringReverse(g):
 def snap(points,key,coordinates,crs,factor,limit):
     stable(points,key)
     if points.crs is None or not points.geom_type.eq('Point').all() or points.geometry.is_empty.any() or not points.geometry.is_valid.all() or points.geometry.has_z.any():raise ValueError('Georeferenced points required')
-    points=points.to_crs(crs);nodes=sorted(coordinates);xy=np.array([coordinates[n] for n in nodes]);rows=[]
+    points=reproject(points,crs,purpose='measure');nodes=sorted(coordinates);xy=np.array([coordinates[n] for n in nodes]);rows=[]
     if len(points)*len(nodes)>10000000:raise ValueError('Node-snap comparison guard exceeded')
     for _,r in points.assign(_key=points[key].astype(str)).sort_values('_key').iterrows():
         d=np.hypot(xy[:,0]-r.geometry.x,xy[:,1]-r.geometry.y)*factor;i=int(np.argmin(d))
@@ -114,12 +113,10 @@ def execute(source,p,origins,facilities,output,access_areas=None,barriers=None):
         if access_areas is None or barriers is None:raise ValueError('Explicit access areas and barriers layers required (empty permitted)')
         from _network_access import analyze as accessible
         paths.extend([Path(access_areas),Path(barriers)]);hashes=[fingerprint(x) for x in paths]
-        for x in paths:check_vector(x)
-        routes,segments,details,extras=accessible(*(gpd.read_file(x) for x in paths[:3]),p,*(gpd.read_file(x) for x in paths[3:]))
+        routes,segments,details,extras=accessible(*(read_vector(x) for x in paths[:3]),p,*(read_vector(x) for x in paths[3:]))
     else:
         if access_areas is not None or barriers is not None:raise ValueError('Access layers require source_vertices topology')
-        for x in paths:check_vector(x)
-        routes,segments,details=analyze(*(gpd.read_file(x) for x in paths),p)
+        routes,segments,details=analyze(*(read_vector(x) for x in paths),p)
     with bundle(output) as stage:
         write_vector_atomic(routes,stage/'routes.gpkg');write_vector_atomic(segments,stage/'service.gpkg')
         for name,extra in extras.items():write_vector_atomic(extra,stage/(name+'.gpkg'))

@@ -82,6 +82,7 @@ _REPROJECT_HINTS = {
     'align': 'Convert the other input to this CRS first (gis.py convert IN --crs CRS --output OUT), so the comparison happens where these features stay whole',
     'measure': 'Choose an analysis CRS that has no seam there, such as a polar or local projection',
     'return': 'Convert the input to the analysis CRS first (gis.py convert IN --crs CRS --output OUT) and run the tool there, so the result never has to cross the seam',
+    'locate': 'Pass a point inside the site with --point instead',
 }
 
 
@@ -185,7 +186,7 @@ def reproject(frame, target, *, purpose: str, facts: list | None = None):
 
     Features that hold a pole or cross the target's seam are refused (no splitting). Long edges of geographic
     sources are densified where the target bends them. Non-finite results are refused. ``purpose`` is one of
-    publish, align, measure, return and selects the way out named in the error. Geometry changes are appended to
+    publish, align, measure, return, locate and selects the way out named in the error. Geometry changes are appended to
     ``facts``, or written to stderr by tools that keep no record.
     """
     if frame.crs is None:

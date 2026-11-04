@@ -1,4 +1,6 @@
 """Reprojection's silent failures: flipped features, collapsed sparse edges, non-finite coordinates."""
+import argparse
+import importlib.util
 import json
 from pathlib import Path
 import subprocess
@@ -48,6 +50,27 @@ def test_pole_and_seam_are_refused_in_source_coordinates():
     result = reproject(frame([BESIDE_SEAM]), 'EPSG:4326', purpose='publish')
     assert result.crs.to_epsg() == 4326 and result.geometry.is_valid.all()
     assert result.total_bounds[2]-result.total_bounds[0] < 90
+
+
+def test_measuring_tools_refuse_instead_of_taking_bounds_from_a_flip():
+    import _metric
+    import _network_access
+    import topo
+    with pytest.raises(ValueError, match='cross the 180 degree'):
+        _metric._local_utm_crs(frame([ACROSS_SEAM]))
+    with pytest.raises(ValueError, match='touch a pole'):
+        _network_access.projected(frame([AROUND_POLE]), 'EPSG:4326', ['Polygon'])
+    with pytest.raises(ValueError, match='cross the 180 degree'):
+        topo._coverage_union(frame([ACROSS_SEAM]), target_crs='EPSG:4326', name='Expected coverage')
+
+
+def test_a_site_across_the_seam_is_refused_and_the_error_names_the_point_option(tmp_path):
+    spec = importlib.util.spec_from_file_location('admin_chain', SCRIPTS/'admin-chain.py')
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    site = layer(tmp_path/'site.gpkg', [ACROSS_SEAM])
+    with pytest.raises(ValueError, match='--point'):
+        module.load_site(argparse.Namespace(point=None, site=site, site_layer=None))
 
 
 def test_valid_looking_flip_is_what_the_refusal_prevents():

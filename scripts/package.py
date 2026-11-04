@@ -734,6 +734,7 @@ def placement_tables(document, gpkg, fonts, driver='GPKG', extra=None, crs=None)
     import geopandas as gpd
     import pyogrio
     from shapely.geometry import LineString, Point
+    from _core import reproject
     panels = {layer['id']: layer.get('panel') for layer in document['layers']}
     labels, leaders, styles, strokes = [], [], [], []
 
@@ -765,7 +766,7 @@ def placement_tables(document, gpkg, fonts, driver='GPKG', extra=None, crs=None)
             frame = gpd.GeoDataFrame(rows, crs='EPSG:4326')
             frame = frame.astype({c: 'int32' for c in ('label_id', 'style_id', 'stroke_id') if c in frame})  # a geodatabase has no int64 before Pro 3.2
             if crs is not None:
-                frame = frame.to_crs(crs)
+                frame = reproject(frame, crs, purpose='publish')
             pyogrio.write_dataframe(frame, gpkg, layer=table, driver=driver, **options)
             written = pyogrio.read_info(gpkg, layer=table)['fields']
             renames.update({a: b for a, b in zip([c for c in frame.columns if c != 'geometry'], written) if a != b})

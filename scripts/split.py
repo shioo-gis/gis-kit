@@ -16,7 +16,7 @@ from pathlib import Path
 import geopandas as gpd
 import pandas as pd
 import pyogrio
-from _budget import check_vector
+from _core import read_vector
 from _safe_io import write_vector_atomic
 
 
@@ -78,12 +78,10 @@ def main():
 
     prefix = args.prefix or input_path.stem
 
-    read_kwargs = {"engine": "pyogrio"}
-    if args.layer:
-        read_kwargs["layer"] = args.layer
-
-    check_vector(input_path, args.layer)
-    gdf = gpd.read_file(input_path, **read_kwargs)
+    try:
+        gdf = read_vector(input_path, args.layer)
+    except ValueError as exc:
+        sys.exit(f"Error: {exc}")
 
     if args.by not in gdf.columns:
         sys.exit(f"Field '{args.by}' not found. Available: {', '.join(gdf.columns)}")

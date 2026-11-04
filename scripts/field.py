@@ -13,9 +13,10 @@ import sys
 from pathlib import Path
 
 import geopandas as gpd
+import pyogrio
+from _core import read_vector, reproject
 from _metric import analysis_frame
 from _safe_io import write_vector_atomic
-from _budget import check_vector
 
 
 BOOL_WORDS = {"true": True, "t": True, "yes": True, "y": True, "1": True,
@@ -42,12 +43,17 @@ def cast_bool(series):
     return known.reindex(series.index).astype("boolean")
 
 
+def cast_str(series, declared=None):
+    """Text of each value; nulls stay null, and an integer column read as float because of them keeps its digits."""
+    present = series.dropna()
+    if str(declared).startswith(("int", "uint")) and present.dtype.kind == "f":
+        present = present.astype("int64")
+    text = present.astype(str).reindex(series.index).astype(object)
+    return text.where(text.notna(), None)
+
+
 def read_input(args) -> gpd.GeoDataFrame:
-    kwargs = {"engine": "pyogrio"}
-    if hasattr(args, "layer") and args.layer:
-        kwargs["layer"] = args.layer
-    check_vector(args.input, kwargs.get("layer"))
-    return gpd.read_file(args.input, **kwargs)
+    return read_vector(args.input, getattr(args, "layer", None) or None)
 
 
 def write_output(gdf: gpd.GeoDataFrame, args) -> None:
@@ -136,7 +142,13 @@ def cmd_cast(args):
         print(f"Unknown type '{args.type}'. Use: int, float, str, bool", file=sys.stderr)
         sys.exit(1)
     try:
-        gdf[args.field] = cast_bool(gdf[args.field]) if args.type == "bool" else gdf[args.field].astype(target)
+        if args.type == "bool":
+            gdf[args.field] = cast_bool(gdf[args.field])
+        elif args.type == "str":
+            info = pyogrio.read_info(args.input, layer=args.layer or None)
+            gdf[args.field] = cast_str(gdf[args.field], dict(zip(info["fields"], info["dtypes"])).get(args.field))
+        else:
+            gdf[args.field] = gdf[args.field].astype(target)
     except (ValueError, TypeError) as e:
         print(f"Cast failed: {e}", file=sys.stderr)
         sys.exit(1)
@@ -170,7 +182,7 @@ def cmd_add_centroid(args):
     if x_name == y_name or x_name in gdf.columns or y_name in gdf.columns:
         raise ValueError("Centroid field collision")
     work, _ = analysis_frame(gdf, args.crs)
-    centroids = work.geometry.centroid.to_crs(gdf.crs)
+    centroids = reproject(work.geometry.centroid, gdf.crs, purpose='return')
     gdf[x_name] = centroids.x
     gdf[y_name] = centroids.y
     write_output(gdf, args)
@@ -232,7 +244,10 @@ def main():
         "add-length": cmd_add_length,
         "add-centroid": cmd_add_centroid,
     }
-    dispatch[args.command](args)
+    try:
+        dispatch[args.command](args)
+    except ValueError as exc:
+        sys.exit(f"ERROR: {exc}")
 
 
 if __name__ == "__main__":

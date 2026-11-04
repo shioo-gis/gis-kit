@@ -79,7 +79,7 @@ def _local_utm_instead(source: CRS, gdf: gpd.GeoDataFrame, scale: tuple[float, f
 
 def _local_utm_crs(gdf: gpd.GeoDataFrame) -> CRS:
     """Choose UTM only when the complete geographic bounds fit one safe zone."""
-    geographic = gdf.to_crs("EPSG:4326")
+    geographic = reproject(gdf, "EPSG:4326", purpose="measure")
     bounds = geographic.total_bounds
     if len(bounds) != 4 or not all(math.isfinite(float(value)) for value in bounds):
         raise ValueError("Geographic extent is empty or non-finite; cannot select local UTM")
@@ -179,7 +179,7 @@ def analysis_frames(
         all_geographic = []
         for layer in layers:
             validate_measurement_geometries(layer)
-            all_geographic.extend(layer.to_crs("EPSG:4326").geometry.tolist())
+            all_geographic.extend(reproject(layer, "EPSG:4326", purpose="measure").geometry.tolist())
         combined = gpd.GeoDataFrame(geometry=all_geographic, crs="EPSG:4326")
         combined_projected, _ = analysis_frame(combined)
         target = CRS.from_user_input(combined_projected.crs)

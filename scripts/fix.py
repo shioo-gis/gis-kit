@@ -15,8 +15,8 @@ from pathlib import Path
 import geopandas as gpd
 import pandas as pd
 import shapely
+from _core import read_vector
 from _safe_io import write_vector_atomic
-from _budget import check_vector
 
 
 def fix_geometries(gdf: gpd.GeoDataFrame) -> tuple[gpd.GeoDataFrame, int]:
@@ -132,11 +132,10 @@ def main() -> None:
 
     output_path = Path(args.output) if args.output else input_path.with_name(f"{input_path.stem}_fixed.gpkg")
 
-    read_kwargs: dict = {"engine": "pyogrio"}
-    if args.layer:
-        read_kwargs["layer"] = args.layer
-    check_vector(input_path, args.layer)
-    gdf = gpd.read_file(input_path, **read_kwargs)
+    try:
+        gdf = read_vector(input_path, args.layer)
+    except ValueError as exc:
+        sys.exit(f"ERROR: {exc}")
 
     total = len(gdf)
     report: list[str] = [f"Input: {input_path} ({total} features)"]

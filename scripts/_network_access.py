@@ -12,6 +12,7 @@ import pandas as pd
 from shapely.geometry import LineString, MultiLineString, Point
 from shapely.ops import substring, unary_union
 
+from _core import reproject
 from _daily import stable, number
 from _metric import analysis_frame, validate_measurement_geometries
 
@@ -43,7 +44,7 @@ def projected(layer, crs, types):
         validate_measurement_geometries(layer)
         if layer.geometry.has_z.any() or not layer.geom_type.isin(types).all():
             raise ValueError('Unsupported access geometry')
-    result = layer.to_crs(crs)
+    result = reproject(layer, crs, purpose='measure')
     if not result.empty:
         validate_measurement_geometries(result)
         if not all(math.isfinite(float(v)) for v in result.total_bounds):
