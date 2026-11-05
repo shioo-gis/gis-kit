@@ -42,19 +42,9 @@ clip、merge、dissolve 使用 `gis-kit/scripts/_safe_io.py`。输出先写入�
 
 可复用接口：`write_vector_atomic(frame, path, overwrite=False, protected_paths=())` 用于完整 GeoDataFrame；`AtomicVectorOutput(path, ...)` 的 `write(frame, append=False)` / `commit(expected_features=..., required_fields=..., expected_crs=...)` 用于分块写入；`validate_vector_file(path, ...)` 可独立回读检查。省略 `expected_crs` 表示不检查；传入 `None` 表示必须无 CRS。
 
-## Batch 与 benchmark
+## 批量运行
 
-```bash
-python3 gis-kit/scripts/batch.py --input-dir sources --script gis-kit/scripts/clip.py \
-  --args "--where \"status == 'active'\"" --workers 2 --report batch.json
-
-python3 gis-kit/scripts/benchmark.py \
-  --case profile="python3 profile.py" --gate profile --repeat 3 --report benchmark.json
-```
-
-`batch.py` 保留 legacy `--script` 与通用 `--command` 模板，仍逐输入分发，不引入新的调度框架。每项报告输入/输出路径、状态、return code、耗时、产物状态、大小及可读向量的要素数。进程 return code 为 0 仍须确认目标存在、非空且向量可完整回读；已有产物若运行后未更新也会失败。报告不保存子进程 stdout/stderr，避免把任意命令输出误写入结构日志。`--command`、`--runner`、`--args` 字符串按 shell 规则拆分：Windows 上反斜杠是路径的一部分，不算转义，含空格的路径加引号。`--overwrite` 只会在 legacy `--script` 模式追加同名参数。
-
-`benchmark.py` 默认每案例运行 3 次，报告中位耗时、最小/最大耗时、各次结果和峰值 RSS。RSS 由 `ps` 采样，仅代表直接子进程；过短任务可能未采到，RSS 字段为 null 时表示不可得，不应按零内存理解。`--max-seconds` / `--max-rss-mb` 继续只对 gate 案例决定是否报告 `RUST_CANDIDATE`。
+多个输入逐个调用工具即可，不需要专门的批处理入口。退出码 0 不等于成果可用：确认目标存在、运行后确实更新过，再用 `describe` 回读。
 
 ## 回归验证
 

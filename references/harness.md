@@ -31,7 +31,7 @@
 
 `gis.py --memory-budget SIZE TOOL ...` 为该次调用设置可选的读前内存预算；超限时退出码 3，stderr 最后一行是 `GIS_KIT_ERROR ` 加机读 JSON。契约见 [内存预算](memory-budget.md)。
 
-`daily.py` 与 `recipe.py` 共用现有 `_recipe_operations.py` 中的操作集合，避免可执行操作在 recipe 中漏列；network 适配沿用源拓扑接口的 `--access-areas` / `--barriers`。`batch.py` 的独立文件并行与 recipe 的有依赖顺序缓存继续分开，未为入口形式合并。
+`daily.py` 与 `recipe.py` 共用现有 `_recipe_operations.py` 中的操作集合，避免可执行操作在 recipe 中漏列；network 适配沿用源拓扑接口的 `--access-areas` / `--barriers`。
 
 ## 显式 execution trace
 

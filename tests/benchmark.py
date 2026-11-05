@@ -1,19 +1,41 @@
 # /// script
 # requires-python = ">=3.11"
 # ///
-"""Run bounded GIS benchmark cases and report whether a gated case needs a faster stack."""
+"""Run bounded GIS benchmark cases and report whether a gated case needs a faster stack.
+
+A development check, not a user tool: gate the slowest operation that must keep exact semantics.
+Each case runs 3 times by default; the report gives median, min, max and peak RSS of the direct child,
+and a null RSS means unavailable, not zero. Exceeding --max-seconds or --max-rss-mb on the gate reports
+RUST_CANDIDATE; an ordinary failure or unsampled RSS reports INCONCLUSIVE.
+
+    python3 tests/benchmark.py --max-seconds 900 --max-rss-mb 12288 \\
+      --case "clip=python3 scripts/clip.py data.shp --bbox=10,50,20,60 --output /tmp/clip.gpkg" \\
+      --gate clip --report /tmp/benchmark.json
+"""
 
 from __future__ import annotations
 
 import argparse
 import json
+import os
 from pathlib import Path
+import shlex
 import statistics
 import subprocess
 import sys
 import time
 
-from _command import split_command
+WINDOWS = os.name == "nt"
+
+
+def split_command(command: str) -> list[str]:
+    """shlex.split, except that on Windows a backslash is part of a path, not an escape."""
+    lexer = shlex.shlex(command, posix=True)
+    lexer.whitespace_split = True
+    lexer.commenters = ""
+    if WINDOWS:
+        lexer.escape = ""
+    return list(lexer)
 
 
 def parse_case(value: str) -> tuple[str, list[str]]:
@@ -27,7 +49,7 @@ def rss_mb(pid: int) -> float | None:
     if sys.platform == "win32":
         return None
     try:
-        result = subprocess.run(["ps", "-o", "rss=", "-p", str(pid)], capture_output=True, text=True)
+        result = subprocess.run(["ps", "-o", "rss=", "-p", str(pid)], capture_output=True, encoding="utf-8", errors="replace")
     except OSError:
         return None
     try:
@@ -37,7 +59,7 @@ def rss_mb(pid: int) -> float | None:
         return None
 
 
-def stop(process: subprocess.Popen[str]) -> None:
+def stop(process: subprocess.Popen) -> None:
     process.terminate()
     try:
         process.wait(timeout=5)
@@ -48,7 +70,7 @@ def stop(process: subprocess.Popen[str]) -> None:
 
 def run_once(name: str, command: list[str], max_seconds: float, max_rss_mb: float | None, poll_seconds: float) -> dict:
     started = time.perf_counter()
-    process = subprocess.Popen(command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, text=True)
+    process = subprocess.Popen(command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     peak_rss_mb = 0.0
     rss_observed = False
     status = "passed"
@@ -156,6 +178,7 @@ def main() -> None:
 
 
 if __name__ == "__main__":
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
     import _stdio
     _stdio.utf8()
     main()

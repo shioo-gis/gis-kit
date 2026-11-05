@@ -1,4 +1,4 @@
-"""CLI regression tests for vector filtering, batching, and transactional output."""
+"""CLI regression tests for vector filtering and transactional output."""
 
 from __future__ import annotations
 
@@ -239,51 +239,10 @@ def test_merge_atomic_failure_and_output_protection(work: Path) -> None:
     assert "must not replace an input" in same_input.stderr
 
 
-def test_batch_structured_artifact_report(work: Path) -> None:
-    inputs = work / "inputs"
-    outputs = work / "outputs"
-    inputs.mkdir()
-    source = inputs / "source.gpkg"
-    gpd.GeoDataFrame({"id": [1]}, geometry=[box(0, 0, 1, 1)], crs="EPSG:4326").to_file(source, engine="pyogrio")
-
-    report = work / "batch-report.json"
-    template = f'{sys.executable} -c "import shutil,sys; shutil.copyfile(sys.argv[1],sys.argv[2])" {{input}} {{output}}'
-    command(
-        "scripts/batch.py", "--input-dir", str(inputs), "--output-dir", str(outputs),
-        "--command", template, "--workers", "1", "--report", str(report),
-    )
-    report_data = json.loads(report.read_text(encoding="utf-8"))
-    assert report_data["succeeded"] == 1
-    item = report_data["results"][0]
-    assert item["status"] == "succeeded"
-    assert item["artifact_status"] == "verified"
-    assert item["artifact_features"] == 1
-
-    stale_report = work / "stale-report.json"
-    no_op_template = f'{sys.executable} -c "pass"'
-    command(
-        "scripts/batch.py", "--input-dir", str(inputs), "--output-dir", str(outputs),
-        "--command", no_op_template, "--workers", "1", "--report", str(stale_report), expected=1,
-    )
-    stale_item = json.loads(stale_report.read_text(encoding="utf-8"))["results"][0]
-    assert stale_item["status"] == "artifact_failed"
-    assert stale_item["artifact_status"] == "output artifact was not updated"
-
-    missing_output = work / "missing-output"
-    missing_report = work / "missing-report.json"
-    command(
-        "scripts/batch.py", "--input-dir", str(inputs), "--output-dir", str(missing_output),
-        "--command", no_op_template, "--workers", "1", "--report", str(missing_report), expected=1,
-    )
-    missing_item = json.loads(missing_report.read_text(encoding="utf-8"))["results"][0]
-    assert missing_item["status"] == "artifact_failed"
-    assert missing_item["artifact_status"] == "output artifact is missing"
-
-
 def test_benchmark_repeats_and_rss_reporting(work: Path) -> None:
     report = work / "benchmark-report.json"
     command(
-        "scripts/benchmark.py",
+        "tests/benchmark.py",
         "--case", f"ok={sys.executable} -c 'pass'",
         "--gate", "ok", "--report", str(report), "--repeat", "3",
     )
@@ -297,39 +256,13 @@ def test_benchmark_repeats_and_rss_reporting(work: Path) -> None:
     assert "rss_observed" in case and "peak_rss_mb" in case
 
 
-def test_batch_rejects_unchanged_gdb_directory(work: Path) -> None:
-    """A readable pre-existing FileGDB is not evidence that a child produced it."""
-    import shutil
-    inputs, outputs = work / "inputs", work / "outputs"
-    inputs.mkdir()
-    outputs.mkdir()
-    source = inputs / "data.gdb"
-    frame = gpd.GeoDataFrame({"id": [1]}, geometry=[box(0, 0, 1, 1)], crs=4326)
-    pyogrio.write_dataframe(frame, source, driver="OpenFileGDB", layer="data")
-    target = outputs / source.name
-    shutil.copytree(source, target)
-    before = {str(p.relative_to(target)): p.read_bytes() for p in target.rglob("*") if p.is_file()}
-    report = work / "batch.json"
-    command("scripts/batch.py", "--input-dir", str(inputs), "--output-dir", str(outputs),
-            "--pattern", "*.gdb", "--command", f'{sys.executable} -c "pass"',
-            "--workers", "1", "--report", str(report), expected=1)
-    result = json.loads(report.read_text(encoding="utf-8"))
-    assert result["failed"] == 1 and result["succeeded"] == 0
-    assert result["results"][0]["artifact_status"] == "output artifact was not updated"
-    assert before == {str(p.relative_to(target)): p.read_bytes() for p in target.rglob("*") if p.is_file()}
-
-
 def main() -> None:
     with tempfile.TemporaryDirectory(prefix="gis-vector-execution-") as directory:
         work = Path(directory)
         test_clip_crs_fields_and_filters(work)
         test_dissolve_groups_and_limits(work)
         test_merge_atomic_failure_and_output_protection(work)
-        test_batch_structured_artifact_report(work)
         test_benchmark_repeats_and_rss_reporting(work)
-        gdb_work = work / "gdb-check"
-        gdb_work.mkdir()
-        test_batch_rejects_unchanged_gdb_directory(gdb_work)
 
 
 if __name__ == "__main__":

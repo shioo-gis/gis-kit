@@ -22,7 +22,6 @@
 - 存放 Python `date` 对象的 object 列写成 String，要先转成 `datetime64` 才是 Date 字段；GDAL 读回时日期带 UTC 时区。
 - 同一图层里 Polygon 和 MultiPolygon 混在一起会被拒绝（`Unsupported geometry type`），要用 `promote_to_multi=True` 统一成多部件。
 - 文本字段不给宽度时，ArcGIS 里读出来的长度是 65536，不是 ArcGIS 默认的 255；有模板时按模板设定宽度。
-- `batch.py --script` 用于简单单输入、`--output` 形式的脚本；带子命令或多参数布局使用 `--command` 及 `{input}` / `{output}`。必要时用 `--runner` 选择已有解释器，不假设所有脚本兼容简单模式。
 - 大文件优先选脚本已提供的数据裁剪或分块能力：`clip.py` 的普通 bbox 裁剪可下推；`merge.py --chunk-size` 顺序读写。分块本身不保证全局运算等价。
 
 ## 缓冲距离
@@ -34,20 +33,6 @@
 ```bash
 python3 gis-kit/scripts/buffer.py stations.geojson --distances 400,800,1200 --output inputs/walk/rings.geojson
 ```
-
-## 大数据基准
-
-先小数据回归，再把必须保持精确语义的最慢操作设为 `--gate`。时间与 RSS 达标时不引入 Rust；超过门槛为 `RUST_CANDIDATE`，普通非零退出或 RSS 不可采样为 `INCONCLUSIVE`，先解决环境/命令问题。
-
-```bash
-python3 gis-kit/scripts/benchmark.py \
-  --max-seconds 900 --max-rss-mb 12288 \
-  --case "clip=python3 gis-kit/scripts/clip.py /path/data.shp --bbox=10,50,20,60 --output /tmp/clip.gpkg" \
-  --case "dissolve=python3 gis-kit/scripts/dissolve.py /path/data.shp --output /tmp/dissolved.gpkg" \
-  --gate dissolve --report /tmp/gis-benchmark.json
-```
-
-报告不写原始命令或子进程日志；macOS/Linux RSS 为脚本主进程采样值。输出放临时目录。
 
 `dissolve.py --method coverage` 仅用于有效且无面积重叠的面，脚本检查几何有效性和坐标平面面积守恒，失败则拒绝写出；它仍需全量载入。`--no-global-merge` 可降低分块结果内存开销，但同组可能重复，不能作为全局精确 dissolve 的替代基准。
 

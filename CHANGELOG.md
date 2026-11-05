@@ -2,6 +2,7 @@
 
 ## 未发布
 
+- **下线 `batch.py`、`edit.py`、`geocode.py`。** `batch.py` 和所有 `bundle` 工具不兼容，多个输入逐个调用工具即可；`edit.py` 靠 `eval` 执行表达式，帮助和实际行为不符；`geocode.py` 的依赖没写进 requirements，还可能把 GCJ-02 坐标标成 EPSG:4326。`benchmark.py` 移到 `tests/`，不再是公开工具，`gis.py list` 不再列出这四个。
 - `field.py cast --type str`：空值保持为空，不再写成字符串 `nan`、`None`；带空值的整数字段保留原有数字，不再把 `1001` 写成 `1001.0`。
 - 所有矢量重投影都经过 `_core.reproject`，`.to_crs(` 只留在 `_core.py`。`field add-centroid`、`export-table` 的坐标回写，`buffer` 和量算选 UTM 时的范围判断，`topo` 的覆盖面，`network` 的起讫点和通达图层，`admin-chain` 的场地，`package` 的标注，现在遇到含极点、跨接缝或投影结果无效的要素都会明确报错，不再静默翻转或得到错误范围。
 - `field.py`、`fix.py`、`split.py`、`network.py`、`admin-chain.py` 改用共用读入口：输入是无几何的表格时给出可操作的报错，不再报 `AttributeError`。
