@@ -8,7 +8,7 @@ A skill for Claude Code, Codex and other agents.
 
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.10%2B-3776AB.svg?logo=python&logoColor=white)](requirements-tested.txt)
-[![Tests](https://github.com/shio-vinyl/gis-kit/actions/workflows/tests.yml/badge.svg)](https://github.com/shio-vinyl/gis-kit/actions/workflows/tests.yml)
+[![Tests](https://github.com/shioo-gis/gis-kit/actions/workflows/tests.yml/badge.svg)](https://github.com/shioo-gis/gis-kit/actions/workflows/tests.yml)
 [![Agent Skill](https://img.shields.io/badge/Agent%20Skill-SKILL.md-8A2BE2.svg)](SKILL.md)
 
 [中文](README.md) · English
@@ -19,122 +19,86 @@ A skill for Claude Code, Codex and other agents.
 
 ## About
 
-This is the GIS toolbox I use myself. I have written more than 50 scripts for operations I find useful in everyday work.
-
-A single entry point lets an agent list and search the tools, read their parameters through `--help`, and combine them for a task.
+This is the GIS data-processing toolbox I use myself. I have written the operations I find useful as scripts, close to 50 of them now, behind a single entry point that an agent can use to discover and combine them.
 
 ```bash
-python scripts/gis.py list                # tool catalogue (standard library only)
-python scripts/gis.py list --search raster
-python scripts/gis.py raster --help       # parameter reference
+python scripts/gis.py list                         # tool catalogue (standard library only)
+python scripts/gis.py list --search cad
+python scripts/gis.py cad --help                   # parameter reference
+python scripts/gis.py capabilities --json          # capability and contract probe (standard library only)
+python scripts/gis.py describe parcels.gpkg --json # read-only header metadata; no features or pixels are read
 ```
 
-[SKILL.md](SKILL.md) records basic requirements for handling data: check CRS, units and NoData, and preserve states such as `candidate` / `hold`. The agent decides which tools to use and how to connect them.
+[SKILL.md](SKILL.md) records the basic judgements for handling spatial data, and the scripts add guards where things tend to go wrong silently:
 
-I use it for ordinary-sized tasks. For larger datasets or higher performance requirements, an agent can call GIS backends such as QGIS or GRASS. Large tables can also use the optional DuckDB spatial SQL tools.
+- **Staging, read-back and atomic publishing**: output is written to a temporary file or staging directory, read back to check feature counts, fields, CRS, geometry or pixels, and only then published atomically. `record.json` and `manifest.json` record the SHA-256 of the inputs, the script implementation and the products. Existing outputs are refused by default; `gpkg.py` import and copy refuse a layer name that already exists instead of appending silently; `split.py` keeps rows with null values and refuses up front when several values would map to the same file name.
+- **Reprojection and measurement fail loudly on distortion**: vector reprojection checks for poles, projection seams and invalid coordinates in one place, and reports an error with the row number instead of flipping or returning empty results; Web Mercator raster reprojection is trimmed to the world extent. Area and distance measurement checks axis units and ground scale, switches to a local UTM zone when a projection such as Web Mercator is too far off scale, and when the data spans zones it stops and asks for an explicit `--analysis-crs`.
+- **No invented facts; uncertain items stay under review**: a CAD coordinate without a zone number is not guessed into an EPSG code, text matched to several values or lying on a shared edge is listed as a conflict, field casts keep nulls (no `"nan"` strings, no wrongly converted booleans), encoding repair leaves non-ASCII text without mojibake signs alone, and no population coverage rate is reported without demand weights. Results that are not confirmed keep a `candidate` or `hold` status.
+- **Read-time memory budget and the same behaviour across platforms**: by default a read is checked against 80% of the memory available (`--memory-budget`, see [memory budget](references/memory-budget.md)), and large table conversions and raster resampling run by chunk or by window. Parameters, manifests and piped output are UTF-8 on macOS, Linux and Windows.
 
-I will keep adding tools as I need them, including some research-oriented features.
+I use it for ordinary-sized tasks. For larger data or specialised algorithms, an agent can use the optional DuckDB spatial SQL or call back ends such as QGIS, GRASS and PySAL.
 
 ## Tools
 
-1. Vector tools cover clipping, dissolving, merging, spatial joins and buffers, along with field and topology checks and repairs, area calculations and urban metrics. Everyday results can be saved as versioned bundles. Indicator tables (Excel or CSV) can be joined to parcels by parcel number, with differences in character width, dashes and leading zeros evened out.
-2. CAD planning drawings can be turned into GIS parcels:
-   - DWG goes to DXF through an installed LibreDWG or ODA converter.
-   - An inventory lists layers, units and stray title blocks, with candidate CRS from coordinate magnitude or a reference layer.
-   - General drawings are extracted, closed into faces with explicit tolerances, and labelled from their texts; hatches become faces and are compared with them.
-   - 湘源控规 (Xiangyuan) statutory plans are read straight from the parcels' XDATA attributes, along with the Excel indicator tables embedded in the drawing and its CAD tables.
-   - A confirmed CRS is assigned, or local grids are moved to a national grid by control points.
-   - The parcels are overlaid on reference layers such as supplied land or renewal areas in a check plot, with the intersections measured.
+### 1. Vectors, table joins and indicators
 
-   ArcGIS layer and map packages (.lpk, .mpk) are unpacked safely, with an inventory of their data and layers. The other way round, a map's `map-style` (exported by gis-composer) is packed with its data into one GeoPackage: data selected, clipped or kept whole by the map extent, styles as QML, label positions as a point layer, and an embedded QGIS project in drawing order, so a colleague opening it in QGIS sees the finished map; or into an ArcGIS Pro layer package (.lpkx), with the data in a file geodatabase and the styles as a CIM layer file; or into an ArcMap layer package (.lpk), whose binary layer file is assembled from skeletons ArcObjects wrote, with colours that draw back byte for byte.
-3. Raster and terrain tools support zonal statistics, reprojection and COG output, with windowed processing for large rasters. DEM tools calculate slope, aspect, contours and profiles; hydrology, viewsheds and terrain cost can use the optional GRASS backend.
-4. Network tools handle directed road networks, OD and facility coverage scenarios, including demand-weighted coverage. They do not report population coverage without demand weights.
-5. Semantic raster vectorization uses a model to read an image and draw points, lines and polygons. Scripts handle coordinate conversion, version records, geometry checks and export. I mainly use historical maps for this research and currently recommend GPT-6 Astra and GPT-6.1; the workflow and tests are described below.
-6. For repeated tasks, `--trace` records the steps actually run. These can be turned into a recipe for the next batch of data. `semantic-check` checks whether specified semantic fields were lost or changed between steps.
+- **Everyday vector work, joins and indicators**: clipping, dissolving, merging, buffers (including concentric service rings), field handling and versioned result bundles ([basic workflows](references/vector-workflows.md), [daily vector](references/daily-vector.md)). Besides spatial joins, `join.py` attaches Excel or CSV indicator tables to parcels by normalised parcel number (full-width and half-width characters, dashes and leading zeros in each segment are evened out) and lists unmatched, duplicate and colliding keys on both sides ([measurement and joins](references/vector-metrics.md)); `topo.py` checks gaps, overlaps and slivers ([topology diagnostics](references/vector-topology.md)); `indicators.py` computes building area, floor area ratio and building density.
 
-## Semantic raster vectorization
+### 2. Package and style conversion
 
-gis-kit has a workflow in which a multimodal model reads a raster image and draws points, lines and polygons on it. The model identifies targets, chooses line paths and defines polygon boundaries. Scripts crop the image, convert coordinates, record versions, check geometry, produce comparison overlays and export files.
+- **Unpacking and reading styles** (`package.py`): `unpack` checks archive paths and unpacked size, then safely opens ArcGIS layer and map packages (`.lpk`, `.lpkx`, `.mpk`, `.mpkx`), inventories the datasets and matches them to layer definitions ([ArcGIS package inventory](references/esri-package.md)). `read` reads QGIS `.qml`, ArcGIS Pro `.lyrx` and `.stylx` symbol libraries into a platform-neutral `map-style` document and records each symbol that is approximated or cannot be converted ([reading platform styles](references/style-read.md)).
+- **Packing a map** (`package.py pack`): turns a `map-style` map and its data (selected by sheet, clipped, or kept whole) into a package for the target platform: a QGIS GeoPackage with the layer order, QML styles and preset label points embedded ([QGIS packing](references/qgis-package.md)); an ArcGIS Pro layer package `.lpkx` with a file geodatabase and CIM layer files ([ArcGIS Pro packing](references/arcgis-pro-package.md)); or an ArcMap layer package `.lpk` whose binary `.lyr` files are assembled from ArcObjects skeletons ([ArcMap packing](references/arcmap-package.md)).
 
-The model's coordinates are written in the original image's pixel coordinate system. It draws both polylines and cubic Bézier curves, and I preserve its control points unchanged. If a curve comes from programmatically smoothing a polyline, I label it separately and do not count it as model-drawn.
+### 3. Rasters, DEM terrain and road-network coverage
 
-So far, I have mainly used historical maps for research and testing.
+- **Rasters and terrain** (`raster.py`, `terrain.py`, `terrain-detail.py`): reprojection, grid alignment, zonal statistics, rasterisation, windowed local computation, patch clean-up, mass-preserving allocation by zone and COG output ([numeric rasters](references/raster-numeric.md), [raster clean-up](references/raster-cleanup.md)). From a DEM they compute slope, aspect, relief, analytical hillshade, contours and profiles; hydrology, visibility and anisotropic walking cost can use a GRASS back end ([terrain diagnostics](references/terrain-analysis.md), [professional analysis](references/professional-analysis.md)).
+- **Network coverage and spatial statistics** (`network.py`, `suitability.py`, `spatial-inference.py`): builds a directed network from source-node topology, distinguishes levels, one-way segments, permitted access areas and barriers, and computes OD, reachable segments and facility coverage scenarios, with covered, uncovered and unknown reported separately ([network and demand coverage](references/network-access.md)). It also offers multi-scenario suitability scoring, Gaussian kernel density and optional PySAL spatial autocorrelation tests.
 
-### Background
+### 4. Spatial SQL for large tables, and repeated runs
 
-Converting raster maps into vectors used to rely largely on manual tracing, with limited help from models. GPT-6 Astra brought a noticeable improvement in the GPT series' image reading and annotation, which prompted me to take this seriously.
+- **Large tables** (`spatial-sql.py`): runs a single native DuckDB Spatial `SELECT` and writes read-back-verified GeoParquet directly, without loading the detail rows into GeoPandas ([Spatial SQL](references/spatial-sql.md)).
+- **Traces and recipes** (`gis.py --trace`, `recipe.py`, `semantic-check.py`): record the steps actually run and file fingerprints, and turn them into a sequential recipe with content caches for the next batch of data. `semantic-check` checks whether named semantic fields or JSON pointers lose protected states such as `unknown`, `candidate` or `hold` between steps ([harness](references/harness.md), [repeated delivery](references/repeated-delivery.md)).
 
-The test material comes from four sources: two 850×800 crops from Tan Qixiang's *The Historical Atlas of China*, a 1926 map of northwestern France from Stanford's digital map collection, a 1789 map of Hessen, and an 1829 map of Rhode Island.
+### 5. Display derivatives and the hand-off to gis-composer
 
-The tests suggest that models can do this work, but **cost is the main obstacle** to using the workflow at scale.
+gis-composer is another project of mine, dedicated to producing maps: it renders map PNGs mainly with MapLibre, renders map videos from a Storyboard deterministically, and can use Blender for DEM terrain maps and videos. It is still in private development; I intend to make it public once it is in good shape, with no date yet.
 
-I currently use and recommend GPT-6 Astra and GPT-6.1. The earlier 5.6 series performed poorly, Luna remains unreliable, and I could not make 6.0 Sol work for my purposes. By “can do this work,” I mean producing a vector draft worth reviewing and refining. I have not measured accuracy, and every result needs review.
+gis-kit does spatial computation and diagnostic check plots, and leaves finished maps, Scene / Storyboard and map video to gis-composer. The two exchange only files and JSON contracts and never import each other's code. Without gis-composer, `plot.py`, `cartographic-map.py`, `atlas.py` and `plot-chart.py` still produce fallback maps, object atlases and statistical charts. With gis-composer, gis-kit publishes colour-free class schemes (`scheme.py`), numerically coded display rasters (`raster.py display`), display vectors generalised on shared edges for the map's view ([display-vector](references/display-vector.md)), a site's administrative chain ([admin-chain](references/admin-chain.md)) and allow-listed tile snapshots ([tile-snapshot](references/tile-snapshot.md)) atomically into the project workspace's `inputs/`; see [Composer display delivery](references/composer-display.md).
 
-Since 6.1 Sol was released, I have found that it completes the workflow fairly consistently and costs much less than Astra. I have not tested this systematically yet; this is an observation from use, which I plan to follow up.
+### 6. Semantic vectorisation and georeferencing of scanned maps (experimental)
 
-![Direct tracing by Astra and the GPT-5.6 series on the same map crop](assets/vectorization/astra-vs-5.6.png)
+A multimodal model reads the image and draws points, polylines and Bézier curves directly in the original pixel space. `raster-annotate.py` handles local cropping, coordinate conversion, incremental versions, geometry checks, overlay review packs and export; unclosed or invalid polygons are never closed automatically. Every product is a candidate that needs human review. Drawing and georeferencing are separate steps: an ungeoreferenced result stays in a pixel project space with no geographic CRS and is never published with invented latitude and longitude; when geographic coordinates are needed, `raster-georef.py` fits control points and accepts the result against independent check points, and the existing drawing can be carried over without redrawing. See the [annotation workflow](references/raster-annotation.md), the [object and record contract](references/raster-schema.md) and [map georeferencing](references/raster-georeferencing.md).
 
-*Early model comparison: one run per condition on the same crop, with uncorrected predictions. Point and line counts are not accuracy measures. Open the image to inspect it at full size.*
+### 7. Xiangyuan control-plan drawings to parcels (a specific adaptation)
 
-### Findings from the tests
+This part is fairly niche. It was built specifically for drawings from **Xiangyuan (湘源) control detailed plans** (`cad.py`, see [CAD intake](references/cad-intake.md)); it is not a general CAD-to-GIS tool. Drawings from other software can only use the generic extraction and polygonising path below, must be checked drawing by drawing, and are not guaranteed to work out of the box.
 
-1. Settlement points usually correspond to the map symbols, but boundary paths have consistently been a weakness.
-2. Showing the model its vectors overlaid on the source image and asking for one revision corrects some obvious detours. I did not see closer alignment when switching from polylines to Bézier curves.
-3. Geometry checks only detect geometric errors. A line taking a large detour can still pass a self-intersection check.
-4. Shared nodes keep adjacent tiles connected, but the connection's location still needs human review. I have seen two tiles reference the same node and both connect at the wrong location.
-5. Full map sheets remain difficult. Missing features, wrong connections, complex coastlines, insets and polygon coverage need individual checks. I paused further tracing after one full-sheet result failed an independent review.
-6. I compared six reasoning-effort settings on two crops, for twelve single-turn extractions. Lower effort worked for rough geometry; higher effort did better at distinguishing historical from modern features and covering the targets. Beyond that, no setting was consistently better.
-7. To reduce cost, I replaced edge-by-edge submissions with batches grouped by junction. Initial submissions fell from 39 to 24, but model requests rose from 55 to 63, and token use increased too.
+- **Xiangyuan plan sheets**: `xiangyuan` reads the land-use code and other attributes from the extended data on the parcel polylines, and also extracts the Excel indicator tables (OLE) and CAD tables embedded in the drawing.
+- **Generic DXF path**: converts DWG to DXF with an ODA File Converter or LibreDWG already installed on the machine; inspects layers, units and outlier frames and compares candidate CRSs; after removing drawing frames and legends it extracts entities with explicit tolerances, polygonises them, attaches text by YAML rules, and compares hatch fills with `compare-fills`.
+- **Coordinates and checks**: once the coordinate system is confirmed, `assign-crs` assigns the CRS (coordinates without a zone number must first pass a check against a reference boundary or known points); local city coordinates are converted with a four-parameter or affine transform by `vector-georef.py` ([vector georeferencing](references/vector-georeferencing.md)); finally `overlay` overlays reference layers such as already-supplied land, measures the intersection areas and draws a check plot.
 
-![Source image, model draft and local result after one overlay review](assets/vectorization/local-revision.png)
+## Companion: gis-plugin
 
-*Astra / low: source image, draft and result after one revision, from left to right. The obvious detour was corrected, but local deviations remain. The result is still a candidate for review.*
+gis-kit only handles data processing and does not touch the agent's runtime environment. The cross-tool and cross-engine work lives in another project, gis-plugin: a very thin shell that contains no code that reads or writes GIS data and calls the command lines of gis-kit and other engines whenever it needs data. So far it provides:
 
-### Workflow
+- **Hooks**: when the agent reads GIS data, a metadata card and field semantics are injected automatically; registered source data is protected from being overwritten or rewritten by commands; when a project has a style convention, the hook says where it is; and freshly written SVG, PPTX and HTML are checked for defensive, explanatory or disclaimer wording. Hooks inject facts, not lists of rules, use only the Python standard library, and work in both Claude Code and Codex.
+- **Contracts and diagnostics**: the file formats the engines exchange, and `gis-doctor`, which checks whether the engines are installed and compatible.
+- **Evaluation**: comparing how well an agent completes GIS tasks with and without the shell.
 
-The model reads and submits one local area at a time. Each area is saved as a separate patch, so an error can be revisited locally.
-
-Lines are split at actual junctions and share nodes. Directed shared edges form polygon outer rings and holes. Shape changes and connectivity changes are handled separately, and a revision can affect only a small part of the drawing.
-
-Scripts check self-intersections, overlaps, out-of-bounds geometry and polygon validity. They cannot detect semantic omissions. Review packs use numbered regions, and human feedback is recorded as accepted, rejected or pending.
-
-Exports include annotation JSON, SVG preserving native curves, and GeoPackage point, line and polygon layers. Unclosed or invalid polygons are listed as omissions; the scripts do not fill them in automatically.
-
-Tracing and georeferencing are separate steps. Unreferenced results stay in pixel engineering space without a geographic CRS. **I do not attach longitude and latitude labels to unreferenced data and publish it as geographic data.** When geographic coordinates are needed, control-point georeferencing records independent check-point errors, acceptance status and a handoff manifest.
-
-Passing georeferencing only means meeting the geometric criteria declared in advance. The correctness of an object's location and historical affiliation needs a separate assessment. Existing tracing can be reused after georeferencing without redrawing it.
-
-### Usage notes
-
-1. I do not recommend high reasoning effort by default for drawing. When a closer judgment is needed, review is a more useful place to apply it. I have not run a controlled comparison of higher-effort review; this is workflow experience.
-2. Review should not become an endless loop of self-review and revisions. I treat four cases as blockers: an entire missing edge, a connection to the wrong object, a missing important area, or a disconnected seam. I record other issues and prioritize corrections that affect use.
-3. Most tests are small-sample, single-run experiments. They support discussion of usability, alignment, coverage and wrong connections, but are not enough to establish accuracy.
-
-<details>
-<summary>GPT-6.1 comparison across six reasoning-effort settings (Fujian crop)</summary>
-
-![Tracing at six GPT-6.1 reasoning-effort settings, with an earlier Sol 6.0 result](assets/vectorization/gpt-6.1-all-efforts.png)
-
-*2026-09-30: one independent, single-turn extraction per setting on the same 850×800 crop, without repairs. The figure also includes a Sol 6.0 / high result from September 28. Duration includes factors such as queueing, and output tokens include reasoning tokens. This small comparison provides neither accuracy measurements nor a controlled speed ranking. Open the image for the full-size version. Figure headings and annotations are in Chinese.*
-
-</details>
-
-Automatic tiling and seam merging have not been implemented. Treat every output as a candidate for review, not a finished product.
-
-See the [annotation workflow](references/raster-annotation.md), [object and record contract](references/raster-schema.md), and [georeferencing workflow](references/raster-georeferencing.md). These reference documents are in Chinese.
+gis-plugin is still in private development. I intend to keep refining it and make it public once it is in good shape; there is no date yet. gis-kit does not depend on it and is fully usable on its own.
 
 ## Quick start
 
-**1. Install** by cloning into your agent's skills directory. Keep the directory name `gis-kit`.
+**1. Install**: clone into the agent's skills directory and keep the directory name `gis-kit`.
 
 ```bash
 # Claude Code
-git clone https://github.com/shio-vinyl/gis-kit.git ~/.claude/skills/gis-kit
+git clone https://github.com/shioo-gis/gis-kit.git ~/.claude/skills/gis-kit
 # Codex
-git clone https://github.com/shio-vinyl/gis-kit.git ~/.codex/skills/gis-kit
+git clone https://github.com/shioo-gis/gis-kit.git ~/.codex/skills/gis-kit
 ```
 
-**2. Set up Python** (Python ≥ 3.10).
+**2. Set up the Python environment** (Python ≥ 3.10)
 
 ```bash
 python3.10 -m venv ~/.venvs/gis-kit
@@ -142,34 +106,30 @@ python3.10 -m venv ~/.venvs/gis-kit
 ~/.venvs/gis-kit/bin/python ~/.claude/skills/gis-kit/scripts/daily.py environment
 ```
 
-**3. Ask the agent** to carry out a task.
+**3. Just tell the agent**
 
-> Dissolve `parcels.gpkg` by land-use type, compute areas in a CGCS2000 projection, and produce a QA plot.
+> Attach `indicators.xlsx` to `parcels.gpkg` by parcel number, list the numbers that did not match on either side, then check the parcels for overlaps and gaps.
 >
-> Compute slope and aspect from this DEM and report mean slope for each district.
+> Unpack this `.lpkx` and list the layers and data inside; then pack `example.map-style.json` into a QGIS package and an ArcGIS Pro package.
 >
-> Calculate 15-minute drive-time coverage for these hospitals and list the neighbourhoods left uncovered.
+> Compute slope and aspect for this DEM and give the mean slope of each administrative district.
 >
-> Trace the roads on this scanned historical map and georeference it using my control points.
+> Compute 15-minute drive coverage for these hospitals, summarise coverage by neighbourhood population weights, and list the neighbourhoods that are uncovered or unknown.
 
-The agent reads [SKILL.md](SKILL.md), consults the relevant `references/` documents as needed, and selects tools and parameters.
+The agent reads [SKILL.md](SKILL.md), consults the reference documents in `references/` as needed, chooses the tools and parameters itself, and reads the results back.
 
 ## Environment and dependencies
 
-1. `requirements-core.txt` contains the core dependencies for vector and raster processing and QA plots.
-2. `requirements-full.txt` adds networks, statistics, image enhancement and test tools.
-3. `requirements-tested.txt` records the exact versions used when the full suite passed on Python 3.10.
-4. `requirements-spatial-sql.txt` provides the optional DuckDB spatial SQL dependencies.
+1. `requirements-core.txt`: core dependencies for vector, raster, measurement and check plots.
+2. `requirements-full.txt`: adds CAD drawings (`ezdxf`, `olefile`), Excel tables (`openpyxl`), networks, statistics, image enhancement and test tools on top of the core set.
+3. `requirements-tested.txt`: the exact versions with which the full regression tests pass under Python 3.10.
+4. `requirements-spatial-sql.txt`: optional DuckDB spatial SQL dependency.
 
-If installing GDAL-related packages with pip is difficult, use `environment.yml` to create a conda-forge environment.
+If installing the GDAL-related packages with pip is difficult, use `environment.yml` to create a conda-forge environment. Within one task the agent should always use the same Python interpreter; see [runtime environment](references/runtime-environment.md).
 
-The agent should use the same Python interpreter throughout a task; see [Runtime environment](references/runtime-environment.md). QGIS, GRASS and PySAL are optional backends and need separate installation.
+External programs and professional back ends are installed separately as needed: DWG to DXF uses a local ODA File Converter (set its path with `GIS_KIT_ODA`) or LibreDWG `dwg2dxf`; reading and writing 7z layer packages uses the system `bsdtar` or 7-Zip; QGIS, GRASS and PySAL are optional back ends. If gis-composer is installed, point to it with `GIS_COMPOSER_HOME`.
 
-Chinese map labels use the first installed font in the order listed in `config/user.yaml`, with Noto Sans CJK SC as the default. If none is installed, the fallback is DejaVu Sans, which cannot display Chinese text correctly.
-
-Finished maps, Scene / Storyboard and map videos are handled by my other project, gis-composer. It is not public yet; I want to spend more time on it before release.
-
-gis-kit does not depend on gis-composer and can produce diagnostic and QA plots on its own. If gis-composer is installed, use `GIS_COMPOSER_HOME` to specify its location.
+Chinese map text uses the first installed font in the order listed in `config/user.yaml`, Noto Sans CJK SC by default. If none of the listed fonts is installed it falls back to DejaVu Sans, and Chinese will not display correctly.
 
 ## Tests
 
@@ -179,16 +139,16 @@ PYTHONDONTWRITEBYTECODE=1 python -m pytest -q -p no:cacheprovider tests
 
 `tests/test_*.py` are self-contained regression tests using synthetic or hand-computed data.
 
-`tests/run_*_acceptance.py` check complete processing chains with real files. Supply external data such as OSM, Natural Earth or a DEM, and keep output directories outside the repository. Each script lists its required inputs at the top.
+`tests/run_*_acceptance.py` check complete processing chains with real files. External data such as OSM, Natural Earth or a DEM must be prepared first, and the output directory should be outside the repository. The inputs each script needs are listed at its top.
 
 ## Data and privacy
 
-The scripts run locally, but content read by the agent may enter a remote model's context. `--trace` records include file paths and task parameters; check them before sharing.
+The scripts run locally, but what the agent reads may enter the context of a remote model. `--trace` records contain file paths and task parameters; check them before sharing.
 
-The repository does not include complete third-party datasets. Test figures use crops from Tan Qixiang's *The Historical Atlas of China*. The underlying maps remain the property of their rights holders and are not covered by this repository's code license. Follow the applicable license and attribution requirements when using OSM (ODbL), Natural Earth (public domain) or other data.
+The repository does not ship complete third-party datasets. The test images in the repository use a cropped part of Tan Qixiang's *Historical Atlas of China*; the base map is copyrighted by its original rights holders and is not covered by this repository's code licence. When using OSM (ODbL), Natural Earth (public domain) and online tile services, follow their licences, caching terms and attribution requirements.
 
-## License
+## Licence
 
 [Apache License 2.0](LICENSE)
 
-<sub>Keywords: GIS · geospatial · AI agent · Claude Code skill · Codex skill · Agent Skills · LLM tools · GeoPandas · Rasterio · GDAL · Shapely · DuckDB · DEM · terrain analysis · network analysis · accessibility · georeferencing · map digitization · spatial analysis</sub>
+<sub>Keywords: GIS · geospatial · AI agent · Claude Code skill · Codex skill · Agent Skills · LLM · CAD · DXF · land use · QGIS · ArcGIS · GeoPackage · GeoPandas · Rasterio · GDAL · Shapely · DuckDB · DEM · terrain analysis · network analysis · georeferencing · 空间分析 · 城乡规划 · 地理信息 · 地图配准</sub>
