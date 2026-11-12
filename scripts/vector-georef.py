@@ -22,7 +22,7 @@ import numpy as np
 from _budget import check_vector
 from _delivery import bundle, digest, write_json
 
-VERSION = '0.1.0'
+from _version import VERSION
 MODELS = {'helmert4': 3, 'affine6': 4}  # model -> fewest fit points, one more than the unknowns need
 COLUMNS = ('id', 'role', 'src_x', 'src_y', 'dst_x', 'dst_y')
 

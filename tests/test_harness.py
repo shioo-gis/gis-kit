@@ -1,5 +1,6 @@
 """Thin discovery, real invocation -> recipe replay, and semantic boundary checks."""
 import importlib.util
+import ast
 import json
 import os
 import re
@@ -82,6 +83,22 @@ def test_capabilities_no_site_packages_and_version():
                                 **{name: {'write': [1]} for name in manifests},
                                 'memory-budget': {'env': 'GIS_KIT_MEMORY_BUDGET', 'exit_code': 3, 'error': [1]}}
     assert 'describe' in doc['commands']
+
+
+def test_tool_versions_share_the_release_version():
+    # A missed producer would label new outputs (or cache entries) with an old release.
+    for path in SCRIPTS.glob('*.py'):
+        if path.name == '_version.py':
+            continue
+        tree = ast.parse(path.read_text(encoding='utf-8'))
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Assign):
+                assert not any(isinstance(target, ast.Name) and target.id == 'VERSION'
+                               for target in node.targets), path.name
+        if any(isinstance(node, ast.Name) and node.id == 'VERSION' for node in ast.walk(tree)):
+            assert any(isinstance(node, ast.ImportFrom) and node.module == '_version'
+                       and any(alias.name == 'VERSION' for alias in node.names)
+                       for node in tree.body), path.name
 
 
 def test_describe_reads_headers_only(tmp_path):

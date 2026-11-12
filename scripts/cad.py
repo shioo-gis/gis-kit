@@ -60,7 +60,7 @@ from _budget import check_vector
 from _core import reproject
 from _delivery import bundle, digest, write_json
 
-VERSION = '0.1.0'
+from _version import VERSION
 VERSIONS = {'AC1009': 'R12', 'AC1012': 'R13', 'AC1014': 'R14', 'AC1015': 'R2000', 'AC1018': 'R2004',
             'AC1021': 'R2007', 'AC1024': 'R2010', 'AC1027': 'R2013', 'AC1032': 'R2018'}
 # $INSUNITS code -> (name, metres per drawing unit); codes not listed are reported without a scale.

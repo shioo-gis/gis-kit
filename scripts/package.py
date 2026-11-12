@@ -48,7 +48,7 @@ from _delivery import bundle, digest, write_json
 import _map_style
 import _style_read
 
-VERSION = '0.1.0'
+from _version import VERSION
 SUFFIXES = {'.lpk', '.lpkx', '.mpk', '.mpkx'}
 RASTER_SUFFIXES = {'.tif', '.tiff', '.img', '.jp2', '.sid', '.ecw', '.dem', '.asc'}
 DEFAULT_MAX_BYTES = 20 * 2**30
