@@ -33,7 +33,7 @@ from _arcgis_style import CROSS, PATHS, RINGS, turned
 from _delivery import bundle, digest, write_json
 import _map_style
 
-VERSION = '0.1.0'
+from _version import VERSION
 READERS = {'.qml': ('_qgis_read', 'read'), '.lyrx': ('_arcgis_read', 'read_lyrx'), '.stylx': ('_arcgis_read', 'read_stylx')}
 PX_PER_PT = 96 / 72
 PX_PER_MM = 96 / 25.4

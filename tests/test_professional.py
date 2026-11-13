@@ -1,6 +1,8 @@
 import importlib.util
 import json
 import os
+import shutil
+import subprocess
 from pathlib import Path
 import sys
 import geopandas as gpd
@@ -98,14 +100,29 @@ def gcp_fixture(tmp_path):
 
 
 def test_tps_frozen_checks_mask_and_source(tmp_path):
-    if not os.environ.get('GIS_GDALWARP') and not __import__('shutil').which('gdalwarp'):pytest.skip('Explicit existing gdalwarp required')
+    backend=os.environ.get('GIS_GDALWARP') or shutil.which('gdalwarp')
+    if not backend:pytest.skip('Explicit existing gdalwarp required')
     image,gcps,p=gcp_fixture(tmp_path);report=G.execute(image,gcps,p,tmp_path/'out');assert report['status']=='pass'
     with rio.open(tmp_path/'out/warped.tif') as d:
         a=d.read();assert d.count==4 and np.any(a[3]==0) and np.any(a[3]>0)
         # Independent nearest-pixel check using GDAL inverse and stored target pixel centres.
         rr,cc=np.where(a[3]>0);rr,cc=rr[::20],cc[::20];xx,yy=rio.transform.xy(d.transform,rr,cc)
         base=json.loads((tmp_path/'out/affine.json').read_text(encoding='utf-8'))
-        with G.transformer(base) as tr:pixel=G.inverse(tr,np.column_stack((xx,yy)))
+        # Rasterio wheels can bundle a different GDAL from gdalwarp. TPS implementations
+        # differ slightly near source-pixel boundaries; use the warp backend's inverse
+        # when its companion CLI exists, keeping the nearest-pixel comparison exact.
+        transform_cli=Path(shutil.which(backend) or backend).with_name('gdaltransform')
+        if transform_cli.is_file():
+            command=[str(transform_cli),'-i','-tps']
+            for point in base['points']:
+                if point['role']=='fit':
+                    command.extend(['-gcp',str(point['pixel'][0]+.5),str(point['pixel'][1]+.5),
+                                    str(point['target_world'][0]),str(point['target_world'][1])])
+            run=subprocess.run(command,input=''.join(f'{x:.17g} {y:.17g}\n' for x,y in zip(xx,yy)),
+                               capture_output=True,encoding='utf-8',check=True)
+            pixel=np.array([[float(value) for value in line.split()[:2]] for line in run.stdout.splitlines()])-.5
+        else:
+            with G.transformer(base) as tr:pixel=G.inverse(tr,np.column_stack((xx,yy)))
         keep=(np.abs(pixel+.5-np.round(pixel+.5)).min(axis=1)>1e-6);assert keep.sum()>20
         pixel=pixel[keep];rr=rr[keep];cc=cc[keep]
         expected=np.array(Image.open(image));rc=np.floor(pixel+.5).astype(int)

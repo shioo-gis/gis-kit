@@ -13,9 +13,9 @@ import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))  # python3 -I leaves the script directory off the path
 import _budget
+from _version import VERSION
 
 SCRIPTS = Path(__file__).resolve().parent
-VERSION = '0.1.0'
 # Importability probes only (find_spec, no import); see references/runtime-environment.md.
 FEATURES = {
     'vector': ('geopandas', 'shapely', 'pyogrio', 'pyproj', 'pandas', 'numpy'),

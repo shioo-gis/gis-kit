@@ -19,7 +19,14 @@ jobs:
           cache: pip
           cache-dependency-path: requirements-tested.txt
       - name: Install fonts
-        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends fonts-noto-cjk
+        # Usually seconds. A slow mirror once took 42 minutes over this download and used up the job's timeout.
+        timeout-minutes: 10
+        run: |
+          sudo apt-get update
+          for attempt in 1 2 3; do
+            sudo timeout 150 apt-get install -y --download-only --no-install-recommends fonts-noto-cjk && break
+          done
+          sudo apt-get install -y --no-install-recommends fonts-noto-cjk
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip

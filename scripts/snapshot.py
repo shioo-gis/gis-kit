@@ -20,10 +20,10 @@ import urllib.error
 import urllib.request
 
 from _delivery import bundle, digest, write_json
+from _version import VERSION
 
 REGISTRY = Path(__file__).resolve().parents[1] / 'references' / 'snapshot-providers.json'
 REGISTRY_ENV = 'GIS_KIT_SNAPSHOT_PROVIDERS'  # alternative registry file, e.g. a local test server
-VERSION = '0.1.0'
 MERCATOR_LAT = 85.0511287798066
 
 

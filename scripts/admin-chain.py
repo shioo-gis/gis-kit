@@ -15,7 +15,7 @@ from pathlib import Path
 from _budget import check_vector
 from _delivery import bundle, digest, write_json
 
-VERSION = '0.1.0'
+from _version import VERSION
 MAX_CHILDREN = 5000
 
 

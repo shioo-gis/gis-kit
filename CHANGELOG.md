@@ -1,6 +1,19 @@
 # Changelog
 
-## 未发布
+## v0.2.0 — 2026-11-12
+
+本版汇总 v0.1.0 之后的 CAD 规划图纸处理、平台样式与图层包转换、Composer 文件交接，以及数据安全和跨平台修复。
+
+### 升级注意
+
+- `batch.py`、`edit.py`、`geocode.py` 已下线；`benchmark.py` 移到 `tests/`。多个输入请逐个调用具体工具，用 `gis.py list` 查看现有入口。
+- 内存预算默认开启，上限为可用内存的 80%；需要关闭时显式传 `--memory-budget off`。
+- `split.py` 默认拒绝覆盖，需显式传 `--overwrite`；`gpkg.py import` / `copy` / `sql --output` 遇到同名目标图层直接拒绝，合并数据请用 `merge.py`。
+- `field.py cast --type bool` 拒绝无法解释的值；字符串转换保留空值。重定向的 stdout / stderr 默认按 UTF-8 写出。
+- 各工具的版本号改为共用 `_version.py`，能力探测、运行记录、样式产出与快照请求保持一致。
+- CI 字体安装步骤限时 10 分钟，下载最多尝试三次，避免慢镜像耗尽整个测试任务的时间。
+
+### 详细变更
 
 - **下线 `batch.py`、`edit.py`、`geocode.py`。** `batch.py` 和所有 `bundle` 工具不兼容，多个输入逐个调用工具即可；`edit.py` 靠 `eval` 执行表达式，帮助和实际行为不符；`geocode.py` 的依赖没写进 requirements，还可能把 GCJ-02 坐标标成 EPSG:4326。`benchmark.py` 移到 `tests/`，不再是公开工具，`gis.py list` 不再列出这四个。
 - `field.py cast --type str`：空值保持为空，不再写成字符串 `nan`、`None`；带空值的整数字段保留原有数字，不再把 `1001` 写成 `1001.0`。

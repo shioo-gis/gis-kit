@@ -22,7 +22,7 @@ import shutil
 from _budget import check_vector
 from _delivery import bundle, digest, write_json
 
-VERSION = '0.1.0'
+from _version import VERSION
 R = 6378137.0
 MAX_LAT = 85.05112878
 FILES = ('areas', 'boundaries', 'coast')
